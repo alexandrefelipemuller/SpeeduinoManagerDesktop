@@ -49,6 +49,8 @@ compose.desktop {
             }
             windows {
                 iconFile.set(project.file("../assets/icon.ico"))
+                menuGroup = "SpeeduinoManagerDesktop"
+                shortcut = true
             }
             macOS {
                 iconFile.set(project.file("../assets/icon.icns"))
