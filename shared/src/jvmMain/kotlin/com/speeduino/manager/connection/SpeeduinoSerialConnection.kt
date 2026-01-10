@@ -1,7 +1,9 @@
 package com.speeduino.manager.connection
 
 import com.fazecast.jSerialComm.SerialPort
+import com.speeduino.manager.shared.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
@@ -9,8 +11,15 @@ import java.io.OutputStream
 class SpeeduinoSerialConnection(
     private val portDescriptor: String,
     private val baudRate: Int = 115200,
-    private val timeoutMs: Int = 1000
+    private val timeoutMs: Int = 1000,
+    private val enableModernProtocol: Boolean = true
 ) : ISpeeduinoConnection {
+
+    companion object {
+        private const val TAG = "SpeeduinoSerial"
+
+        fun listPorts(): List<String> = SerialPort.getCommPorts().map { it.systemPortName }.toList()
+    }
 
     private var port: SerialPort? = null
     private var inputStream: InputStream? = null
@@ -27,9 +36,10 @@ class SpeeduinoSerialConnection(
             selected.numDataBits = 8
             selected.numStopBits = SerialPort.ONE_STOP_BIT
             selected.parity = SerialPort.NO_PARITY
+            selected.setFlowControl(SerialPort.FLOW_CONTROL_DISABLED)
             selected.setComPortTimeouts(
-                SerialPort.TIMEOUT_READ_BLOCKING,
-                timeoutMs,
+                SerialPort.TIMEOUT_NONBLOCKING,
+                0,
                 timeoutMs
             )
 
@@ -37,11 +47,22 @@ class SpeeduinoSerialConnection(
                 throw Exception("Nao foi possivel abrir a porta serial $portDescriptor")
             }
 
+            selected.flushIOBuffers()
+            val dtrCleared = selected.clearDTR()
+            val rtsCleared = selected.clearRTS()
+            Logger.d(TAG, "DTR/RTS cleared: dtr=$dtrCleared rts=$rtsCleared")
+            delay(50)
+            val dtrSet = selected.setDTR()
+            val rtsSet = selected.setRTS()
+            Logger.d(TAG, "DTR/RTS set: dtr=$dtrSet rts=$rtsSet")
+            delay(1000)
+
             port = selected
             inputStream = selected.inputStream
             outputStream = selected.outputStream
             isConnected = true
             onConnectionStateChanged?.invoke(true)
+            Logger.d(TAG, "Conexao serial aberta: $portDescriptor @ $baudRate")
         } catch (e: Exception) {
             isConnected = false
             onConnectionStateChanged?.invoke(false)
@@ -68,6 +89,7 @@ class SpeeduinoSerialConnection(
     override fun send(data: ByteArray) {
         if (!isConnected) throw Exception("Nao conectado")
         try {
+            Logger.d(TAG, "Send ${data.size} bytes: ${data.previewHex()}")
             outputStream?.write(data)
             outputStream?.flush()
         } catch (e: Exception) {
@@ -80,18 +102,9 @@ class SpeeduinoSerialConnection(
         if (!isConnected) throw Exception("Nao conectado")
         return try {
             if (size > 0) {
-                val buffer = ByteArray(size)
-                var totalRead = 0
-                while (totalRead < size) {
-                    val read = inputStream?.read(buffer, totalRead, size - totalRead) ?: -1
-                    if (read <= 0) break
-                    totalRead += read
-                }
-                buffer.copyOf(totalRead)
+                readExact(size)
             } else {
-                val buffer = ByteArray(2048)
-                val bytesRead = inputStream?.read(buffer) ?: 0
-                buffer.copyOf(bytesRead)
+                readAvailable()
             }
         } catch (e: Exception) {
             handleError("Erro ao receber dados: ${e.message}")
@@ -105,7 +118,7 @@ class SpeeduinoSerialConnection(
         return "Serial: $portDescriptor @ $baudRate (${if (isConnected) "Conectado" else "Desconectado"})"
     }
 
-    override fun supportsModernProtocol(): Boolean = false
+    override fun supportsModernProtocol(): Boolean = enableModernProtocol
 
     override fun setOnConnectionStateChanged(callback: (Boolean) -> Unit) {
         onConnectionStateChanged = callback
@@ -125,7 +138,51 @@ class SpeeduinoSerialConnection(
         onConnectionStateChanged?.invoke(false)
     }
 
-    companion object {
-        fun listPorts(): List<String> = SerialPort.getCommPorts().map { it.systemPortName }.toList()
+    private fun readExact(size: Int): ByteArray {
+        Logger.d(TAG, "Receive exact $size bytes (timeout ${timeoutMs}ms)")
+        val buffer = ByteArray(size)
+        var totalRead = 0
+        val deadline = System.currentTimeMillis() + timeoutMs
+        val selected = port ?: return ByteArray(0)
+
+        while (totalRead < size) {
+            val available = selected?.bytesAvailable() ?: -1
+            if (available > 0) {
+                val toRead = minOf(available, size - totalRead)
+                val read = selected.readBytes(buffer, toRead, totalRead)
+                if (read > 0) {
+                    totalRead += read
+                    continue
+                }
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                Logger.w(TAG, "Receive timeout after ${timeoutMs}ms (got $totalRead/$size)")
+                break
+            }
+            Thread.sleep(5)
+        }
+
+        val result = buffer.copyOf(totalRead)
+        Logger.d(TAG, "Receive exact got ${result.size} bytes: ${result.previewHex()}")
+        return result
+    }
+
+    private fun readAvailable(): ByteArray {
+        val selected = port ?: return ByteArray(0)
+        val available = selected?.bytesAvailable() ?: 0
+        if (available <= 0) {
+            return ByteArray(0)
+        }
+
+        val buffer = ByteArray(minOf(available, 2048))
+        val read = selected.readBytes(buffer, buffer.size)
+        val result = buffer.copyOf(maxOf(read, 0))
+        Logger.d(TAG, "Receive (read avail) ${result.size} bytes: ${result.previewHex()}")
+        return result
+    }
+
+    private fun ByteArray.previewHex(max: Int = 32): String {
+        val shown = take(max).joinToString(" ") { "0x%02X".format(it) }
+        return if (size > max) "$shown ..." else shown
     }
 }

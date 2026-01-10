@@ -360,6 +360,10 @@ class SpeeduinoProtocol(
         }
 
         val payload = byteArrayOf(cmd) + extraPayload
+        Logger.d(
+            "SpeeduinoProtocol",
+            "Modern send cmd=0x%02X payload=%d bytes".format(cmd, payload.size)
+        )
         val crc = calculateCRC32(payload)
 
         // Length (2 bytes, big-endian)
@@ -376,6 +380,11 @@ class SpeeduinoProtocol(
 
         // Send: length + payload + crc
         val packet = lengthBytes + payload + crcBytes
+        val packetPreview = packet.take(12).joinToString(" ") { "0x%02X".format(it) }
+        Logger.d(
+            "SpeeduinoProtocol",
+            "Modern packet ${packet.size} bytes: $packetPreview..."
+        )
         connection.send(packet)
 
         return readModernResponse()
@@ -388,6 +397,9 @@ class SpeeduinoProtocol(
         // Read length (2 bytes, big-endian)
         val lengthBytes = connection.receive(2)
         Logger.d("SpeeduinoProtocol", "Length bytes: ${lengthBytes.joinToString(" ") { "0x%02X".format(it) }}")
+        if (lengthBytes.size < 2) {
+            throw Exception("Resposta modern incompleta (tamanho=${lengthBytes.size})")
+        }
 
         val length = ByteBuffer.wrap(lengthBytes)
             .order(ByteOrder.BIG_ENDIAN)
