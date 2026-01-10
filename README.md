@@ -1,32 +1,52 @@
-# SpeeduinoManager Desktop (Linux)
+# SpeeduinoManager Desktop
 
-Projeto desktop (Linux) em Kotlin Multiplatform baseado no SpeeduinoManager Android. O objetivo e reutilizar o maximo possivel de protocolo, modelos e conexoes, mantendo uma camada de UI desktop independente.
+Cross-platform desktop client for Speeduino ECUs, built with Kotlin Multiplatform and based on the SpeeduinoManager Android project. It reuses the Android protocol/models/connection core and delivers a modern, consistent desktop UI.
 
-## Objetivo
+## Highlights
 
-- Reaproveitar o core de comunicacao e protocolo do projeto Android.
-- Fornecer UI desktop leve para monitoramento e operacao basica.
-- Manter evolucao sincronizada entre Android e Desktop.
+- Cross-platform: Windows, macOS, Ubuntu/Debian (Compose Desktop).
+- Shared core with Android: protocol, models, tables, and parsers.
+- Open source and extensible, focused on reuse and consistency.
 
-## Escopo inicial
+## Features
 
-- Conexao TCP com simulador/ECU.
-- Tela de monitoramento em tempo real (RPM, MAP, coolant, TPS, bateria, ignicao).
-- Logs basicos de comunicacao e status de conexao.
+- TCP (Wi-Fi) and Serial (USB/Bluetooth SPP) connections.
+- Dashboard with gauges (RPM, MAP, TPS, CLT) and basic status.
+- Editable maps: VE, Ignition, AFR, with color gradients.
+- Base map wizard with automatic generation.
+- Configs: Engine Constants and Trigger Settings.
+- Logs: Real-time monitor, capture, CSV export.
+- Log Viewer with plotted charts and signal selection.
 
-## Documentacao
+## Documentation
 
-- Plano de criacao: `docs/PLAN.md`
-- Instrucoes de build e execucao: `docs/BUILD.md`
-- Diretrizes de arquitetura e modulos: `docs/ARCHITECTURE.md`
+- Creation plan: `docs/PLAN.md`
+- Build and run: `docs/BUILD.md`
+- Architecture and modules: `docs/ARCHITECTURE.md`
 
-## Status
+## Structure
 
-Bootstrap inicial criado com modulos `shared` e `desktopApp`.
+- `shared/` - shared core (protocol, models, connections).
+- `desktopApp/` - desktop UI (Compose).
 
-Para executar:
+## Build and run
 
 ```bash
 cd SpeeduinoManagerDesktop
 ./gradlew :desktopApp:run
 ```
+
+## Distribution
+
+```bash
+./build-release.sh
+```
+
+Generated formats:
+- Windows: EXE
+- macOS: DMG
+- Ubuntu/Debian: DEB and AppImage
+
+## Status
+
+Active project, evolving alongside Android. New functionality should prioritize the `shared` module to keep cross-platform compatibility.

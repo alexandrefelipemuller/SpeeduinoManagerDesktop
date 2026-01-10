@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
@@ -1236,7 +1237,138 @@ private fun SensorsConfigScreenDesktop() {
 
 @Composable
 private fun EngineProtectionScreenDesktop() {
-    PlaceholderScreen("Protecao", "Protecao e limitadores ainda nao suportados no desktop.")
+    var protectionCut by remember { mutableStateOf("Both") }
+    var engineProtectionRpmMin by remember { mutableStateOf("1500") }
+    var cutMethod by remember { mutableStateOf("Full") }
+    var engineProtectEnabled by remember { mutableStateOf(false) }
+    var revLimiterEnabled by remember { mutableStateOf(false) }
+    var boostLimitEnabled by remember { mutableStateOf(false) }
+    var oilPressureProtectEnabled by remember { mutableStateOf(false) }
+    var afrProtectEnabled by remember { mutableStateOf(false) }
+    var coolantProtectEnabled by remember { mutableStateOf(false) }
+    var hasChanges by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Engine Protection & Limiters",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "Protecoes de seguranca e limitadores do motor.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ProtectionSectionHeader("Main Settings")
+                DropdownField(
+                    label = "Protection Cut",
+                    value = protectionCut,
+                    options = listOf("Fuel", "Ignition", "Both")
+                ) { value ->
+                    protectionCut = value
+                    hasChanges = true
+                }
+                NumberField(
+                    label = "Engine Protection RPM min (rpm)",
+                    value = engineProtectionRpmMin,
+                    onValueChange = {
+                        engineProtectionRpmMin = it
+                        hasChanges = true
+                    }
+                )
+                DropdownField(
+                    label = "Cut Method",
+                    value = cutMethod,
+                    options = listOf("Full", "Progressive")
+                ) { value ->
+                    cutMethod = value
+                    hasChanges = true
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ProtectionSectionHeader("Active Protections")
+                ToggleField("Engine Protect", engineProtectEnabled) {
+                    engineProtectEnabled = it
+                    hasChanges = true
+                }
+                ToggleField("Rev Limiter", revLimiterEnabled) {
+                    revLimiterEnabled = it
+                    hasChanges = true
+                }
+                ToggleField("Boost Limit", boostLimitEnabled) {
+                    boostLimitEnabled = it
+                    hasChanges = true
+                }
+                ToggleField("Oil Pressure Protect", oilPressureProtectEnabled) {
+                    oilPressureProtectEnabled = it
+                    hasChanges = true
+                }
+                ToggleField("AFR Protect", afrProtectEnabled) {
+                    afrProtectEnabled = it
+                    hasChanges = true
+                }
+                ToggleField("Coolant Protect", coolantProtectEnabled) {
+                    coolantProtectEnabled = it
+                    hasChanges = true
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(
+                onClick = { hasChanges = false },
+                enabled = hasChanges
+            ) { Text("Salvar") }
+            FilledTonalButton(onClick = { hasChanges = false }) { Text("Carregar ECU") }
+        }
+    }
+}
+
+@Composable
+private fun ProtectionSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary
+    )
 }
 
 @Composable
@@ -1367,43 +1499,238 @@ private fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
                 if (entries.isEmpty()) {
                     Text("Nenhum log capturado.", style = MaterialTheme.typography.bodyMedium)
                 } else {
-                    val logScroll = rememberScrollState()
-                    Box(modifier = Modifier.heightIn(max = 420.dp)) {
-                        Column(
-                            modifier = Modifier.verticalScroll(logScroll),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            entries.take(200).forEach { entry ->
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("RPM ${entry.rpm}")
-                                        Text("MAP ${entry.mapKpa}")
-                                        Text("TPS ${entry.tps}")
-                                        Text("CLT ${entry.coolantTempC}")
-                                    }
-                                }
+                    val series = remember(entries) { buildLogSeries(entries) }
+                    var selected by remember(series) {
+                        mutableStateOf(series.take(3).map { it.name }.toSet())
+                    }
+
+                    LogViewerFiltersRow(
+                        signals = series.map { it.name },
+                        selectedSignals = selected,
+                        onToggle = { name ->
+                            selected = if (selected.contains(name)) {
+                                selected - name
+                            } else {
+                                selected + name
                             }
                         }
-                        VerticalScrollbar(
-                            adapter = rememberScrollbarAdapter(logScroll),
-                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
-                        )
-                    }
-                    Text(
-                        text = "Mostrando ${entries.take(200).size} de ${entries.size} amostras",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    LogViewerChart(
+                        series = series.filter { selected.contains(it.name) },
+                        totalSamples = entries.size
+                    )
+
+                    LogMetadataSummary(entries = entries)
                 }
             }
         }
+    }
+}
+
+private data class LogSeries(
+    val name: String,
+    val color: Color,
+    val values: List<Float>,
+    val min: Float,
+    val max: Float
+)
+
+private fun buildLogSeries(entries: List<com.speeduino.manager.model.logging.LiveLogEntry>): List<LogSeries> {
+    if (entries.isEmpty()) return emptyList()
+
+    fun build(
+        name: String,
+        color: Color,
+        extractor: (com.speeduino.manager.model.logging.LiveLogEntry) -> Float
+    ): LogSeries {
+        val values = entries.map(extractor)
+        val min = values.minOrNull() ?: 0f
+        val max = values.maxOrNull() ?: 0f
+        return LogSeries(name, color, values, min, max)
+    }
+
+    return listOf(
+        build("RPM", Color(0xFF2F6B5F)) { it.rpm.toFloat() },
+        build("MAP", Color(0xFFC37B2C)) { it.mapKpa.toFloat() },
+        build("TPS", Color(0xFF5C6BC0)) { it.tps.toFloat() },
+        build("CLT", Color(0xFFB04A3B)) { it.coolantTempC.toFloat() },
+        build("IAT", Color(0xFF8D6E63)) { it.intakeTempC.toFloat() },
+        build("BATT", Color(0xFF388E3C)) { it.batteryDeciVolt.toFloat() / 10f },
+        build("ADV", Color(0xFF6D4C41)) { it.advanceDeg.toFloat() },
+        build("O2", Color(0xFF00897B)) { it.o2.toFloat() }
+    )
+}
+
+@Composable
+private fun LogViewerFiltersRow(
+    signals: List<String>,
+    selectedSignals: Set<String>,
+    onToggle: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        signals.forEach { name ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .background(
+                        if (selectedSignals.contains(name)) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        RoundedCornerShape(12.dp)
+                    )
+                    .clickable { onToggle(name) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                androidx.compose.material3.Checkbox(
+                    checked = selectedSignals.contains(name),
+                    onCheckedChange = { onToggle(name) }
+                )
+                Text(name, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
+    if (series.isEmpty()) {
+        Text("Selecione sinais para plotar.", style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+
+    val maxPoints = 800
+    val downsampled = series.map { it.copy(values = downsample(it.values, maxPoints)) }
+    val chartWidth = maxOf(720.dp, (downsampled.first().values.size * 4).dp)
+    val chartHeight = 320.dp
+    val horizontal = rememberScrollState()
+    val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(chartHeight + 24.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(chartHeight)
+                    .horizontalScroll(horizontal)
+            ) {
+                Canvas(modifier = Modifier.width(chartWidth).height(chartHeight)) {
+                    val padding = 24f
+                    val width = size.width - padding * 2
+                    val height = size.height - padding * 2
+
+                    drawLine(
+                        color = axisColor,
+                        start = Offset(padding, padding),
+                        end = Offset(padding, padding + height),
+                        strokeWidth = 1.5f
+                    )
+                    drawLine(
+                        color = axisColor,
+                        start = Offset(padding, padding + height),
+                        end = Offset(padding + width, padding + height),
+                        strokeWidth = 1.5f
+                    )
+
+                    downsampled.forEach { s ->
+                        val min = s.min
+                        val max = if (s.max == s.min) s.min + 1f else s.max
+                        val values = s.values
+                        val stepX = if (values.size <= 1) width else width / (values.size - 1)
+                        val path = Path()
+                        values.forEachIndexed { index, value ->
+                            val normalized = (value - min) / (max - min)
+                            val x = padding + stepX * index
+                            val y = padding + height - (normalized * height)
+                            if (index == 0) {
+                                path.moveTo(x, y)
+                            } else {
+                                path.lineTo(x, y)
+                            }
+                        }
+                        drawPath(
+                            path = path,
+                            color = s.color,
+                            style = Stroke(width = 2.2f, cap = StrokeCap.Round)
+                        )
+                    }
+                }
+            }
+            HorizontalScrollbar(
+                adapter = rememberScrollbarAdapter(horizontal),
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            downsampled.forEach { s ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .background(s.color.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(s.color, RoundedCornerShape(4.dp))
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("${s.name} ${formatRange(s.min, s.max)}", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Text("Amostras: $totalSamples", style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun LogMetadataSummary(entries: List<com.speeduino.manager.model.logging.LiveLogEntry>) {
+    if (entries.isEmpty()) return
+    val start = entries.first().timestampMs
+    val end = entries.last().timestampMs
+    val durationSec = (end - start).coerceAtLeast(0) / 1000
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Duracao: ${durationSec}s", style = MaterialTheme.typography.labelLarge)
+        Text("Inicio: $start", style = MaterialTheme.typography.labelLarge)
+        Text("Fim: $end", style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+private fun downsample(values: List<Float>, maxPoints: Int): List<Float> {
+    if (values.size <= maxPoints) return values
+    val step = values.size.toFloat() / maxPoints
+    return List(maxPoints) { index ->
+        val idx = (index * step).toInt().coerceIn(0, values.size - 1)
+        values[idx]
+    }
+}
+
+private fun formatRange(min: Float, max: Float): String {
+    return if (min == max) {
+        String.format("%.1f", min)
+    } else {
+        String.format("%.1f-%.1f", min, max)
     }
 }
 

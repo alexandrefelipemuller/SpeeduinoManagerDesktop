@@ -43,6 +43,16 @@ compose.desktop {
             )
             packageName = "SpeeduinoManagerDesktop"
             packageVersion = "1.0.0"
+
+            linux {
+                iconFile.set(project.file("../assets/icon_256.png"))
+            }
+            windows {
+                iconFile.set(project.file("../assets/icon.ico"))
+            }
+            macOS {
+                iconFile.set(project.file("../assets/icon.icns"))
+            }
         }
     }
 }
