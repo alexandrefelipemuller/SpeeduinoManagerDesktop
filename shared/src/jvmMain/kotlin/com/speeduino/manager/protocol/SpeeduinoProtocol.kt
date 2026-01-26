@@ -216,19 +216,23 @@ class SpeeduinoProtocol(
      * Formato: 'r' + CAN_ID + Subcmd + Offset + Length
      *          0x72  0x00    0x30    0x0000   0x007F (127 bytes)
      */
-    suspend fun readLiveDataModern(): ByteArray {
+    suspend fun readLiveDataModern(length: Int = 127): ByteArray {
         if (!isModernEnabled()) {
             throw Exception("Modern protocol disabled for this connection")
         }
 
-        // Payload: 'r' + CAN_ID(0x00) + Subcmd(0x30) + Offset(0x0000) + Length(0x007F)
+        val sanitizedLength = length.coerceIn(1, 2048)
+        val lengthLsb = (sanitizedLength and 0xFF).toByte()
+        val lengthMsb = ((sanitizedLength shr 8) and 0xFF).toByte()
+
+        // Payload: 'r' + CAN_ID(0x00) + Subcmd(0x30) + Offset(0x0000) + Length(LSB, MSB)
         val payload = byteArrayOf(
             0x00,        // CAN ID (always 0 for standard Speeduino)
             0x30.toByte(), // Subcmd: Output Channels (48 decimal)
-            0x00,        // Offset MSB
             0x00,        // Offset LSB (start at byte 0)
-            0x7F,        // Length MSB (127 bytes)
-            0x00         // Length LSB
+            0x00,        // Offset MSB
+            lengthLsb,   // Length LSB
+            lengthMsb    // Length MSB
         )
 
         val response = sendModernCommand('r'.code.toByte(), payload)

@@ -59,6 +59,7 @@ class SpeeduinoClient(
     private var firmwareInfo: FirmwareInfo? = null
     private var tableDefinitions: TableDefinitions? = null
     private var outputChannelFields: List<OutputField>? = null
+    private var outputChannelBlockSize: Int? = null
     private var cachedEngineConstants: EngineConstants? = null
     private val connectMutex = Mutex()
 
@@ -109,6 +110,7 @@ class SpeeduinoClient(
 
                 // 4. Detect output channels block size and load field definitions
                 val blockSize = detectOutputChannelsBlockSize(firmwareSignature, era)
+                outputChannelBlockSize = blockSize
                 outputChannelFields = SpeeduinoOutputChannels.getDefinition(blockSize)
 
                 Logger.i(TAG, "✅ Firmware compatível: $firmwareSignature (era: $era)")
@@ -297,7 +299,7 @@ class SpeeduinoClient(
     /**
      * Grava Trigger Settings (Page 4) + Burn
      */
-    suspend fun writeTriggerSettings(settings: TriggerSettings) {
+    suspend fun writeTriggerSettings(settings: TriggerSettings, burn: Boolean = true) {
         Logger.d(TAG, "Gravando Trigger Settings (Page 4)...")
         val basePage = readPage(
             pageNum = TriggerSettings.PAGE_NUMBER.toByte(),
@@ -310,9 +312,13 @@ class SpeeduinoClient(
             offset = 0,
             data = updatedData
         )
-        delay(300)
-        protocol.burnConfig()
-        Logger.d(TAG, "Trigger Settings gravados e burn executado")
+        if (burn) {
+            delay(300)
+            protocol.burnConfig()
+            Logger.d(TAG, "Trigger Settings gravados e burn executado")
+        } else {
+            Logger.d(TAG, "Trigger Settings gravados (sem burn)")
+        }
     }
 
     /**
@@ -397,6 +403,31 @@ class SpeeduinoClient(
         protocol.burnConfig()
         Logger.d(TAG, "Burn executado com sucesso")
         cachedEngineConstants = engineConstants
+    }
+
+    /**
+     * Grava uma página completa de configuração (backup/restore).
+     */
+    suspend fun writeRawPage(pageNum: Byte, data: ByteArray) {
+        protocol.writePage(pageNum = pageNum, offset = 0, data = data)
+        protocol.burnConfig()
+        Logger.d(TAG, "Página $pageNum gravada via backup e burn executado")
+    }
+
+    /**
+     * Grava uma página completa sem executar burn (para restauração em lote).
+     */
+    suspend fun writeRawPageWithoutBurn(pageNum: Byte, data: ByteArray) {
+        protocol.writePage(pageNum = pageNum, offset = 0, data = data)
+        Logger.d(TAG, "Página $pageNum gravada via backup (sem burn)")
+    }
+
+    /**
+     * Executa burn após gravações em lote.
+     */
+    suspend fun burnConfigs() {
+        protocol.burnConfig()
+        Logger.d(TAG, "Burn executado após restauração em lote")
     }
 
     /**
@@ -590,10 +621,12 @@ class SpeeduinoClient(
      * Tenta Modern Protocol ('n') primeiro, fallback para Legacy ('A') se falhar
      */
     suspend fun readLiveData(): SpeeduinoLiveData = withContext(Dispatchers.IO) {
+        var usedModern = false
         val data = if (connection.supportsModernProtocol()) {
             try {
                 // ✅ Tenta Modern Protocol primeiro (Speeduino 202402+)
-                protocol.readLiveDataModern()
+                usedModern = true
+                protocol.readLiveDataModern(outputChannelBlockSize ?: 127)
             } catch (e: Exception) {
                 // ⚠️ Se timeout ou conexão perdida, NÃO tentar fallback
                 if (!connection.isConnected()) {
@@ -603,13 +636,18 @@ class SpeeduinoClient(
 
                 Logger.w(TAG, "Modern Protocol falhou, tentando Legacy: ${e.message}")
                 // ⚠️ Fallback para Legacy Protocol (versões antigas)
+                usedModern = false
                 protocol.readLiveData()
             }
         } else {
             protocol.readLiveData()
         }
 
-        parseLiveData(data)
+        if (usedModern) {
+            parseModernLiveData(data)
+        } else {
+            SpeeduinoLiveDataParser.fromLegacyFrame(data)
+        }
     }
 
     // ==================== Live Data Streaming ====================
@@ -735,6 +773,40 @@ class SpeeduinoClient(
             engineStatus = data[3].toInt() and 0xFF,  // Offset by 1
             sparkStatus = data[33].toInt() and 0xFF  // Offset by 1
         )
+    }
+
+    private fun parseModernLiveData(data: ByteArray): SpeeduinoLiveData {
+        val parsedOutputChannels = SpeeduinoLiveDataParser.fromOutputChannels(data)
+        val parsedLegacy = SpeeduinoLiveDataParser.fromLegacyFrame(data)
+
+        val outputScore = liveDataPlausibilityScore(parsedOutputChannels)
+        val legacyScore = liveDataPlausibilityScore(parsedLegacy)
+
+        return when {
+            outputScore > legacyScore -> parsedOutputChannels
+            legacyScore > outputScore -> parsedLegacy
+            else -> {
+                val expectedBlockSize = outputChannelBlockSize
+                if (expectedBlockSize != null && data.size == expectedBlockSize) {
+                    parsedOutputChannels
+                } else {
+                    parsedLegacy
+                }
+            }
+        }
+    }
+
+    private fun liveDataPlausibilityScore(liveData: SpeeduinoLiveData): Int {
+        var score = 0
+
+        if (liveData.rpm in 0..15000) score++
+        if (liveData.mapPressure in 10..300) score++
+        if (liveData.tps in 0..100) score++
+        if (liveData.batteryVoltage in 5.0..20.0) score++
+        if (liveData.coolantTemp in -40..200) score++
+        if (liveData.intakeTemp in -40..200) score++
+
+        return score
     }
 }
 
