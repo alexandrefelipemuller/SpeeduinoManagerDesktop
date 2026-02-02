@@ -1,3 +1,5 @@
+![Onboarding](docs/onboarding.png)
+
 # SpeeduinoManager Desktop
 
 Cross-platform desktop client for Speeduino ECUs, built with Kotlin Multiplatform and based on the SpeeduinoManager Android project. It reuses the Android protocol/models/connection core and delivers a modern, consistent desktop UI.
