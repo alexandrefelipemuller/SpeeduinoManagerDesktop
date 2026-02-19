@@ -16,6 +16,8 @@ object SpeeduinoLiveDataParser {
             batteryVoltage = u8(data, 10) / 10.0,
             advance = u8(data, 25),
             o2 = u8(data, 11),
+            afrMeasured = u8(data, 11) / 10.0,
+            afrTarget = null,
             engineStatus = u8(data, 3),
             sparkStatus = u8(data, 33)
         )
@@ -32,6 +34,8 @@ object SpeeduinoLiveDataParser {
         val battery = fieldDouble(data, blockSize, "batteryVoltage")
         val advance = fieldInt(data, blockSize, "advance")
         val o2 = fieldInt(data, blockSize, "afr")
+        val afrMeasured = fieldDoubleOrNull(data, blockSize, "afr")
+        val afrTarget = fieldDoubleOrNull(data, blockSize, "afrTarget")
         val engineStatus = fieldInt(data, blockSize, "engine")
         val sparkStatus = fieldInt(data, blockSize, "spark")
 
@@ -45,6 +49,8 @@ object SpeeduinoLiveDataParser {
             batteryVoltage = battery,
             advance = advance,
             o2 = o2,
+            afrMeasured = afrMeasured,
+            afrTarget = afrTarget,
             engineStatus = engineStatus,
             sparkStatus = sparkStatus
         )
@@ -58,6 +64,11 @@ object SpeeduinoLiveDataParser {
     private fun fieldDouble(data: ByteArray, blockSize: Int, name: String): Double {
         val field = SpeeduinoOutputChannels.getField(blockSize, name)
         return field?.parse(data) ?: 0.0
+    }
+
+    private fun fieldDoubleOrNull(data: ByteArray, blockSize: Int, name: String): Double? {
+        val field = SpeeduinoOutputChannels.getField(blockSize, name) ?: return null
+        return field.parse(data)
     }
 
     private fun u8(data: ByteArray, index: Int): Int {

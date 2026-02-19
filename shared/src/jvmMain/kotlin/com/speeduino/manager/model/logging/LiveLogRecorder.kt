@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.ArrayDeque
 import java.util.UUID
+import kotlin.math.roundToInt
 
 /**
  * Buffer leve em memoria para armazenar logs de live data no Android.
@@ -106,10 +107,14 @@ data class LiveLogEntry(
     val intakeTempC: Int,
     val batteryDeciVolt: Int,
     val advanceDeg: Int,
-    val o2: Int
+    val o2: Int,
+    val afrMeasuredDeci: Int? = null,
+    val afrTargetDeci: Int? = null
 ) {
     companion object {
         fun fromLiveData(liveData: SpeeduinoLiveData, timestampMs: Long): LiveLogEntry {
+            val afrMeasuredDeci = liveData.afrMeasured?.let { (it * 10.0).roundToInt() }
+            val afrTargetDeci = liveData.afrTarget?.let { (it * 10.0).roundToInt() }
             return LiveLogEntry(
                 timestampMs = timestampMs,
                 rpm = liveData.rpm,
@@ -119,7 +124,9 @@ data class LiveLogEntry(
                 intakeTempC = liveData.intakeTemp,
                 batteryDeciVolt = (liveData.batteryVoltage * 10).toInt(),
                 advanceDeg = liveData.advance,
-                o2 = liveData.o2
+                o2 = liveData.o2,
+                afrMeasuredDeci = afrMeasuredDeci,
+                afrTargetDeci = afrTargetDeci
             )
         }
     }

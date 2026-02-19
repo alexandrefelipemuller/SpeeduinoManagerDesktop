@@ -13,6 +13,8 @@ data class SpeeduinoLiveData(
     val batteryVoltage: Double,
     val advance: Int,
     val o2: Int,
+    val afrMeasured: Double? = null,
+    val afrTarget: Double? = null,
     val engineStatus: Int,
     val sparkStatus: Int
 ) {

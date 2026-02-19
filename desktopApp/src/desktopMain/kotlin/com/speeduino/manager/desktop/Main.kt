@@ -2,6 +2,7 @@ package com.speeduino.manager.desktop
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,14 +33,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
@@ -62,6 +67,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
@@ -81,6 +87,11 @@ import com.speeduino.manager.SpeeduinoClient
 import com.speeduino.manager.connection.SpeeduinoTcpConnection
 import com.speeduino.manager.connection.SpeeduinoSerialConnection
 import com.speeduino.manager.connection.ISpeeduinoConnection
+import com.speeduino.manager.compare.BeforeAfterLogComparator
+import com.speeduino.manager.compare.LogCompareException
+import com.speeduino.manager.compare.LogCompareReason
+import com.speeduino.manager.compare.LogCompareResult
+import com.speeduino.manager.compare.LogHeatCellState
 import com.speeduino.manager.model.AfrTable
 import com.speeduino.manager.model.Algorithm
 import com.speeduino.manager.model.Color as SharedColor
@@ -102,6 +113,10 @@ import com.speeduino.manager.model.basemap.FuelType
 import com.speeduino.manager.model.basemap.GeneratedBaseMap
 import com.speeduino.manager.model.logging.LiveLogRecorder
 import com.speeduino.manager.model.logging.LiveLogSnapshot
+import com.speeduino.manager.tuning.AnalyzerResult
+import com.speeduino.manager.tuning.CellRef
+import com.speeduino.manager.tuning.TuningAssistantAnalyzer
+import com.speeduino.manager.tuning.TuningStrategy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -120,6 +135,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.zip.CRC32
+import kotlin.math.abs
 
 private val SpeeduinoColorScheme = lightColorScheme(
     primary = Color(0xFF305C4F),
@@ -484,6 +500,8 @@ private fun ScreenHost(
         DesktopRoute.EngineProtection -> EngineProtectionScreenDesktop()
         DesktopRoute.RealTimeMonitor -> RealTimeMonitorScreenDesktop(controller, liveData)
         DesktopRoute.LogViewer -> LogViewerScreenDesktop(controller)
+        DesktopRoute.LogAnalyzer -> LogAnalyzerScreenDesktop(controller)
+        DesktopRoute.BeforeAfter -> BeforeAfterScreenDesktop(controller)
     }
 }
 
@@ -573,37 +591,19 @@ private fun DashboardScreen(
     onOpenSettings: () -> Unit
 ) {
     val strings = LocalStrings.current
-    val gauges = remember(liveData, strings) {
-        listOf(
-            GaugeSpec(
-                label = strings["label.rpm"],
-                value = (liveData?.rpm ?: 0).toFloat(),
-                min = 0f,
-                max = 7000f,
-                unit = strings["unit.rpm"]
-            ),
-            GaugeSpec(
-                label = strings["label.map"],
-                value = (liveData?.mapPressure ?: 0).toFloat(),
-                min = 0f,
-                max = 250f,
-                unit = strings["unit.kpa"]
-            ),
-            GaugeSpec(
-                label = strings["label.tps"],
-                value = (liveData?.tps ?: 0).toFloat(),
-                min = 0f,
-                max = 100f,
-                unit = strings["unit.percent"]
-            ),
-            GaugeSpec(
-                label = strings["label.coolant"],
-                value = (liveData?.coolantTemp ?: 0).toFloat(),
-                min = -20f,
-                max = 120f,
-                unit = strings["unit.celsius"]
-            )
-        )
+    val availableSignals = remember(liveData, strings) { dashboardGaugeSignals(liveData, strings) }
+    var selectedGaugeKeys by remember { mutableStateOf(listOf("rpm", "map", "tps", "coolant")) }
+
+    LaunchedEffect(availableSignals.map { it.key }) {
+        selectedGaugeKeys = selectedGaugeKeys.map { key ->
+            if (availableSignals.any { it.key == key }) key else availableSignals.first().key
+        }
+    }
+
+    val gauges = remember(availableSignals, selectedGaugeKeys) {
+        selectedGaugeKeys.mapIndexed { index, key ->
+            availableSignals.firstOrNull { it.key == key } ?: availableSignals[index % availableSignals.size]
+        }
     }
 
     val stats = remember(liveData, strings) {
@@ -623,7 +623,15 @@ private fun DashboardScreen(
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         AppSectionCard(onOpenSettings = onOpenSettings)
-        GaugeGrid(gauges)
+        GaugeGrid(
+            gauges = gauges,
+            availableSignals = availableSignals,
+            onChangeGauge = { index, signalKey ->
+                selectedGaugeKeys = selectedGaugeKeys.toMutableList().also { list ->
+                    list[index] = signalKey
+                }
+            }
+        )
         StatRow(stats)
     }
 }
@@ -668,7 +676,11 @@ private fun SettingsScreen(controller: DesktopSpeeduinoController) {
     val configState by controller.configState.collectAsState()
     val languageOptions = listOf(
         AppLanguage.EN to strings["app.languageEnglish"],
-        AppLanguage.PT to strings["app.languagePortuguese"]
+        AppLanguage.PT to strings["app.languagePortuguese"],
+        AppLanguage.ES to strings["app.languageSpanish"],
+        AppLanguage.FR to strings["app.languageFrench"],
+        AppLanguage.ID to strings["app.languageIndonesian"],
+        AppLanguage.ZH to strings["app.languageChinese"]
     )
     val selectedLabel = languageOptions.firstOrNull { it.first == language }?.second
         ?: strings["app.languageEnglish"]
@@ -904,6 +916,7 @@ private fun <T> MapTableScreen(
     var hasChanges by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<TableEditTarget?>(null) }
     var editValue by remember { mutableStateOf("") }
+    var invertYAxis by remember { mutableStateOf(true) }
 
     LaunchedEffect(table) {
         workingTable = table
@@ -934,6 +947,26 @@ private fun <T> MapTableScreen(
                         enabled = workingTable != null && hasChanges
                     ) { Text(strings["action.saveEcu"]) }
                 }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = strings["label.tableInvert"],
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            IconButton(onClick = { invertYAxis = !invertYAxis }) {
+                Text(
+                    text = "⇅",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (invertYAxis) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
@@ -970,22 +1003,24 @@ private fun <T> MapTableScreen(
                                 }
                             }
                         }
-                        load.forEachIndexed { rowIndex, loadValue ->
+                        val loadOrder = if (invertYAxis) load.indices.reversed() else load.indices
+                        loadOrder.forEach { dataRowIndex ->
+                            val loadValue = load.getOrNull(dataRowIndex) ?: return@forEach
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 HeaderCell(loadValue.toString()) {
-                                    editTarget = TableEditTarget.Load(rowIndex)
+                                    editTarget = TableEditTarget.Load(dataRowIndex)
                                     editValue = loadValue.toString()
                                 }
-                            grid.getOrNull(rowIndex)?.forEachIndexed { colIndex, cell ->
-                                ValueCell(
-                                    value = formatValue(cell),
-                                    background = cellColor(cell),
-                                    onClick = {
-                                        editTarget = TableEditTarget.Cell(rowIndex, colIndex)
-                                        editValue = formatValue(cell)
-                                    }
-                                )
-                            }
+                                grid.getOrNull(dataRowIndex)?.forEachIndexed { colIndex, cell ->
+                                    ValueCell(
+                                        value = formatValue(cell),
+                                        background = cellColor(cell),
+                                        onClick = {
+                                            editTarget = TableEditTarget.Cell(dataRowIndex, colIndex)
+                                            editValue = formatValue(cell)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1418,6 +1453,15 @@ private fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController)
                     triggerEdge = TriggerSettings.SignalEdge.valueOf(label)
                     hasChanges = true
                 }
+                TriggerVisualizationCardDesktop(
+                    totalTeeth = baseTeeth.toIntOrNull() ?: 0,
+                    missingTeeth = missingTeeth.toIntOrNull() ?: 0,
+                    triggerAngleDeg = triggerAngle.toIntOrNull() ?: 0,
+                    triggerAngleMultiplier = triggerMultiplier.toIntOrNull() ?: 0,
+                    triggerEdge = triggerEdge,
+                    primaryTriggerSpeed = primarySpeed,
+                    isMissingToothPattern = triggerPattern == 0
+                )
                 DropdownField(
                     strings["label.secondaryEdge"],
                     secondaryEdge.name,
@@ -1459,6 +1503,254 @@ private fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController)
             }
         }
     }
+}
+
+@Composable
+private fun TriggerVisualizationCardDesktop(
+    totalTeeth: Int,
+    missingTeeth: Int,
+    triggerAngleDeg: Int,
+    triggerAngleMultiplier: Int,
+    triggerEdge: TriggerSettings.SignalEdge,
+    primaryTriggerSpeed: TriggerSettings.TriggerSpeed,
+    isMissingToothPattern: Boolean
+) {
+    val strings = LocalStrings.current
+    val preview = remember(
+        totalTeeth,
+        missingTeeth,
+        triggerAngleDeg,
+        triggerAngleMultiplier,
+        triggerEdge,
+        primaryTriggerSpeed
+    ) {
+        TriggerPreviewModelDesktop.create(
+            totalTeeth = totalTeeth,
+            missingTeeth = missingTeeth,
+            triggerAngleDeg = triggerAngleDeg,
+            triggerAngleMultiplier = triggerAngleMultiplier,
+            triggerEdge = triggerEdge,
+            primaryTriggerSpeed = primaryTriggerSpeed
+        )
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(strings["label.triggerVisualPreview"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (!isMissingToothPattern) {
+                Text(strings["label.triggerVisualApproximation"], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (preview == null) {
+                Text(strings["label.triggerVisualInvalidInput"], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                return@Column
+            }
+
+            Text(strings["label.triggerWheelPreview"], style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            TriggerWheelCanvasDesktop(preview)
+            Text(strings["label.triggerSignalPreview"], style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            TriggerSignalCanvasDesktop(preview)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                LegendItemDesktop(MaterialTheme.colorScheme.primary, strings["label.syncMarker"])
+                LegendItemDesktop(MaterialTheme.colorScheme.tertiary, strings["label.tdcMarker"])
+                LegendItemDesktop(MaterialTheme.colorScheme.error, strings["label.missingWindow"])
+            }
+            Text(strings.format("label.syncToothFormat", preview.syncToothSlot + 1), style = MaterialTheme.typography.bodySmall)
+            Text(strings.format("label.effectiveTriggerAngleFormat", preview.effectiveTriggerAngleDeg), style = MaterialTheme.typography.bodySmall)
+            Text(strings.format("label.cycleScopeFormat", preview.cycleDegrees), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun TriggerWheelCanvasDesktop(preview: TriggerPreviewModelDesktop) {
+    val ringColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    val toothColor = MaterialTheme.colorScheme.onSurface
+    val syncColor = MaterialTheme.colorScheme.primary
+    val tdcColor = MaterialTheme.colorScheme.tertiary
+    val missingColor = MaterialTheme.colorScheme.error
+
+    Canvas(modifier = Modifier.fillMaxWidth().height(220.dp)) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val radius = size.minDimension * 0.29f
+        val toothInnerRadius = radius * 1.04f
+        val toothOuterRadius = radius * 1.27f
+        val markerOuterRadius = toothOuterRadius * 1.1f
+        val toothStroke = (360f / preview.totalTeeth).coerceIn(1.2f, 8f)
+
+        drawCircle(color = ringColor, radius = radius, center = center, style = Stroke(width = 6.dp.toPx()))
+
+        if (preview.missingTeeth > 0) {
+            val gapSweep = preview.slotAngleDeg * preview.missingTeeth
+            val arcRadius = toothOuterRadius * 1.01f
+            drawArc(
+                color = missingColor.copy(alpha = 0.28f),
+                startAngle = -90f,
+                sweepAngle = gapSweep,
+                useCenter = false,
+                topLeft = Offset(center.x - arcRadius, center.y - arcRadius),
+                size = androidx.compose.ui.geometry.Size(arcRadius * 2f, arcRadius * 2f),
+                style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
+            )
+        }
+
+        for (slot in 0 until preview.totalTeeth) {
+            if (slot < preview.missingTeeth) continue
+            val angle = -90f + (slot * preview.slotAngleDeg)
+            val start = polarDesktop(center, toothInnerRadius, angle)
+            val end = polarDesktop(center, toothOuterRadius, angle)
+            val tint = if (slot == preview.syncToothSlot) syncColor else toothColor
+            drawLine(color = tint, start = start, end = end, strokeWidth = toothStroke, cap = StrokeCap.Round)
+        }
+
+        val syncAngle = -90f + (preview.syncToothSlot * preview.slotAngleDeg)
+        val tdcAngle = -90f + (preview.tdcSlotPosition * preview.slotAngleDeg)
+        drawMarkerDesktop(center, radius * 0.7f, markerOuterRadius, syncAngle, syncColor, 4f)
+        drawMarkerDesktop(center, radius * 0.5f, markerOuterRadius * 0.95f, tdcAngle, tdcColor, 3f)
+    }
+}
+
+@Composable
+private fun TriggerSignalCanvasDesktop(preview: TriggerPreviewModelDesktop) {
+    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.30f)
+    val syncColor = MaterialTheme.colorScheme.primary
+    val tdcColor = MaterialTheme.colorScheme.tertiary
+    val signalColor = MaterialTheme.colorScheme.onSurface
+    val missingColor = MaterialTheme.colorScheme.error
+
+    Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+        val left = 14.dp.toPx()
+        val right = size.width - 14.dp.toPx()
+        val top = 18.dp.toPx()
+        val bottom = size.height - 18.dp.toPx()
+        val contentWidth = right - left
+        val toothWidth = contentWidth / preview.totalTeeth
+        val pulseLeadRatio = 0.12f
+        val pulseDutyRatio = 0.44f
+        val centerY = (top + bottom) / 2f
+        val halfAmplitude = (bottom - top) * 0.25f
+        val baselineY = if (preview.triggerEdge == TriggerSettings.SignalEdge.RISING) centerY + halfAmplitude else centerY - halfAmplitude
+        val pulseY = if (preview.triggerEdge == TriggerSettings.SignalEdge.RISING) centerY - halfAmplitude else centerY + halfAmplitude
+
+        drawRect(
+            color = missingColor.copy(alpha = 0.11f),
+            topLeft = Offset(left, top),
+            size = androidx.compose.ui.geometry.Size(toothWidth * preview.missingTeeth, bottom - top)
+        )
+        drawLine(color = axisColor, start = Offset(left, top), end = Offset(left, bottom), strokeWidth = 1.5f)
+        drawLine(color = axisColor, start = Offset(left, baselineY), end = Offset(right, baselineY), strokeWidth = 1.5f)
+
+        val path = Path().apply { moveTo(left, baselineY) }
+        for (slot in 0 until preview.totalTeeth) {
+            val x0 = left + (slot * toothWidth)
+            val x1 = x0 + toothWidth
+            val hasTooth = slot >= preview.missingTeeth
+            val pulseStart = x0 + (toothWidth * pulseLeadRatio)
+            val pulseEnd = pulseStart + (toothWidth * pulseDutyRatio)
+            if (!hasTooth) {
+                path.lineTo(x1, baselineY)
+                continue
+            }
+            path.lineTo(pulseStart, baselineY)
+            path.lineTo(pulseStart, pulseY)
+            path.lineTo(pulseEnd, pulseY)
+            path.lineTo(pulseEnd, baselineY)
+            path.lineTo(x1, baselineY)
+        }
+        drawPath(path = path, color = signalColor, style = Stroke(width = 2.4f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+
+        val syncSlotStart = left + (preview.syncToothSlot * toothWidth)
+        val syncPulseStart = syncSlotStart + (toothWidth * pulseLeadRatio)
+        val syncPulseEnd = syncPulseStart + (toothWidth * pulseDutyRatio)
+        val syncX = if (preview.triggerEdge == TriggerSettings.SignalEdge.RISING) syncPulseStart else syncPulseEnd
+        val tdcX = left + (preview.tdcSlotPosition / preview.totalTeeth) * contentWidth
+
+        drawLine(color = syncColor, start = Offset(syncX, top), end = Offset(syncX, bottom), strokeWidth = 3f)
+        drawLine(color = tdcColor, start = Offset(tdcX, top), end = Offset(tdcX, bottom), strokeWidth = 2.4f)
+    }
+}
+
+@Composable
+private fun LegendItemDesktop(color: Color, label: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(10.dp).background(color = color, shape = MaterialTheme.shapes.extraSmall))
+        Text(text = label, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+private data class TriggerPreviewModelDesktop(
+    val totalTeeth: Int,
+    val missingTeeth: Int,
+    val syncToothSlot: Int,
+    val tdcSlotPosition: Float,
+    val triggerEdge: TriggerSettings.SignalEdge,
+    val slotAngleDeg: Float,
+    val effectiveTriggerAngleDeg: Int,
+    val cycleDegrees: Float
+) {
+    companion object {
+        fun create(
+            totalTeeth: Int,
+            missingTeeth: Int,
+            triggerAngleDeg: Int,
+            triggerAngleMultiplier: Int,
+            triggerEdge: TriggerSettings.SignalEdge,
+            primaryTriggerSpeed: TriggerSettings.TriggerSpeed
+        ): TriggerPreviewModelDesktop? {
+            if (totalTeeth < 2) return null
+            val normalizedTotal = totalTeeth.coerceAtMost(255)
+            val normalizedMissing = missingTeeth.coerceIn(0, normalizedTotal - 1)
+            val syncToothSlot = normalizedMissing % normalizedTotal
+            val cycleDegrees = if (primaryTriggerSpeed == TriggerSettings.TriggerSpeed.CAM) 720f else 360f
+            val degreesPerSlot = cycleDegrees / normalizedTotal
+            val effectiveAngle = triggerAngleDeg * triggerAngleMultiplier
+            val tdcSlotPosition = wrapSlotDesktop(syncToothSlot - (effectiveAngle / degreesPerSlot), normalizedTotal.toFloat())
+            return TriggerPreviewModelDesktop(
+                totalTeeth = normalizedTotal,
+                missingTeeth = normalizedMissing,
+                syncToothSlot = syncToothSlot,
+                tdcSlotPosition = tdcSlotPosition,
+                triggerEdge = triggerEdge,
+                slotAngleDeg = 360f / normalizedTotal,
+                effectiveTriggerAngleDeg = effectiveAngle,
+                cycleDegrees = cycleDegrees
+            )
+        }
+    }
+}
+
+private fun wrapSlotDesktop(value: Float, total: Float): Float {
+    val wrapped = value % total
+    return if (wrapped < 0f) wrapped + total else wrapped
+}
+
+private fun polarDesktop(center: Offset, radius: Float, angleDeg: Float): Offset {
+    val radians = (angleDeg * (kotlin.math.PI / 180f)).toFloat()
+    return Offset(
+        x = center.x + kotlin.math.cos(radians) * radius,
+        y = center.y + kotlin.math.sin(radians) * radius
+    )
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMarkerDesktop(
+    center: Offset,
+    radiusStart: Float,
+    radiusEnd: Float,
+    angleDeg: Float,
+    color: Color,
+    strokeWidth: Float
+) {
+    val start = polarDesktop(center, radiusStart, angleDeg)
+    val end = polarDesktop(center, radiusEnd, angleDeg)
+    drawLine(color = color, start = start, end = end, strokeWidth = strokeWidth, cap = StrokeCap.Round)
 }
 
 @Composable
@@ -1637,9 +1929,12 @@ private fun RealTimeMonitorScreenDesktop(
 ) {
     val strings = LocalStrings.current
     val logState by controller.logState.collectAsState()
+    val logSaveStatus by controller.logSaveStatus.collectAsState()
+    val lastSavedLogPath by controller.lastSavedLogPath.collectAsState()
     val intervalMs by controller.streamIntervalMs.collectAsState()
     var selectedInterval by remember(intervalMs) { mutableStateOf(intervalMs.toString()) }
     var fileName by remember(strings) { mutableStateOf(strings["label.logFilenamePrefix"]) }
+    var selectedSignals by remember { mutableStateOf(DefaultSelectedLogSignals) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
@@ -1729,8 +2024,62 @@ private fun RealTimeMonitorScreenDesktop(
                     singleLine = true,
                     modifier = Modifier.width(280.dp)
                 )
-                FilledTonalButton(onClick = { controller.saveLogSnapshot(fileName) }) {
+                Text(
+                    text = strings["label.logSignalsSelect"],
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LogExportSignals.forEach { signal ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(
+                                    MaterialTheme.colorScheme.surface,
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            androidx.compose.material3.Checkbox(
+                                checked = selectedSignals.contains(signal.key),
+                                onCheckedChange = { checked ->
+                                    selectedSignals = if (checked) {
+                                        selectedSignals + signal.key
+                                    } else {
+                                        selectedSignals - signal.key
+                                    }
+                                }
+                            )
+                            Text(strings[signal.labelKey], style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                FilledTonalButton(onClick = { controller.saveLogSnapshot(fileName, selectedSignals) }) {
                     Text(strings["action.saveCsv"])
+                }
+                if (!logSaveStatus.isNullOrBlank()) {
+                    Text(
+                        text = logSaveStatus!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (logSaveStatus!!.contains("Error", ignoreCase = true) || logSaveStatus!!.contains("erro", ignoreCase = true)) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                if (!lastSavedLogPath.isNullOrBlank()) {
+                    Text(
+                        text = strings.format("label.lastSavedLogPath", lastSavedLogPath!!),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -1804,6 +2153,458 @@ private fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
             }
         }
     }
+}
+
+@Composable
+private fun LogAnalyzerScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
+    val currentVe by controller.veTable.collectAsState()
+    val currentAfr by controller.afrTable.collectAsState()
+    val analyzerResult by controller.analyzerResult.collectAsState()
+    val analyzerBusy by controller.analyzerBusy.collectAsState()
+    val analyzerError by controller.analyzerError.collectAsState()
+    val analyzerLogFile by controller.analyzerLogFile.collectAsState()
+    var strategy by remember { mutableStateOf(TuningStrategy.CONSERVATIVE) }
+    var selectedCell by remember(analyzerResult) { mutableStateOf<CellRef?>(null) }
+    var selectedClusterId by remember(analyzerResult) { mutableStateOf<String?>(null) }
+    var includedClusters by remember(analyzerResult) {
+        mutableStateOf(analyzerResult?.clusters?.map { it.id }?.toSet().orEmpty())
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    strings["label.logAnalyzerTitle"],
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(strings["label.logAnalyzerSubtitle"], style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    analyzerLogFile ?: strings["label.logAnalyzerNoFile"],
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(
+                        onClick = {
+                            val file = chooseOpenFile(strings["label.logAnalyzerOpenTitle"])
+                            controller.selectAnalyzerLogFile(file?.absolutePath)
+                        }
+                    ) { Text(strings["action.open"]) }
+                    FilledTonalButton(
+                        onClick = { controller.analyzeLogFile(strategy) },
+                        enabled = !analyzerBusy && !analyzerLogFile.isNullOrBlank() && currentVe != null && currentAfr != null
+                    ) { Text(strings["action.analyze"]) }
+                    FilledTonalButton(
+                        onClick = { controller.applyAnalyzerToVe(strategy, includedClusters) },
+                        enabled = !analyzerBusy && analyzerResult != null && currentVe != null
+                    ) { Text(strings["action.applyToVe"]) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(strings["label.strategy"], style = MaterialTheme.typography.bodyMedium)
+                    StrategyChip("Conservative", strategy == TuningStrategy.CONSERVATIVE) {
+                        strategy = TuningStrategy.CONSERVATIVE
+                    }
+                    StrategyChip("Standard", strategy == TuningStrategy.STANDARD) {
+                        strategy = TuningStrategy.STANDARD
+                    }
+                    StrategyChip("Aggressive", strategy == TuningStrategy.AGGRESSIVE) {
+                        strategy = TuningStrategy.AGGRESSIVE
+                    }
+                }
+                analyzerError?.let {
+                    Text(
+                        strings.format("label.errorWithValue", it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                if (analyzerBusy) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text(
+                            strings["label.analyzerLoading"],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        val signals = analyzerResult?.signalStatus
+        if (signals != null) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(strings["label.analyzerSignals"], style = MaterialTheme.typography.titleMedium)
+                    AnalyzerSignalRow("RPM", signals.hasRpm)
+                    AnalyzerSignalRow("Load", signals.hasLoad)
+                    AnalyzerSignalRow("AFR", signals.hasAfr)
+                    AnalyzerSignalRow("AFR Target", signals.hasAfrTarget)
+                }
+            }
+        }
+
+        analyzerResult?.let { result ->
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(strings["label.logAnalyzerSummary"], style = MaterialTheme.typography.titleMedium)
+                    Text(strings.format("label.samplesUsed", result.summary.usedSamples, result.summary.totalSamples))
+                    Text(strings.format("label.clustersCount", result.clusters.size))
+                    Text(strings.format("label.durationSeconds", result.summary.durationSeconds))
+                    result.summary.rpmRange?.let {
+                        Text(strings.format("label.rpmRange", it.first, it.last))
+                    }
+                    result.summary.loadRange?.let {
+                        Text(strings.format("label.loadRange", it.first, it.last, result.summary.loadLabel))
+                    }
+                }
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(strings["label.heatmapTitle"], style = MaterialTheme.typography.titleMedium)
+                    val highlighted = result.clusters.firstOrNull { it.id == selectedClusterId }?.cells?.toSet().orEmpty()
+                    AnalyzerHeatmapGrid(
+                        suggestions = result.cellSuggestions,
+                        maxChangePct = strategy.maxChangePct,
+                        highlightedCells = highlighted,
+                        onCellSelected = { selectedCell = it }
+                    )
+                    selectedCell?.let { cell ->
+                        val suggestion = result.cellSuggestions.getOrNull(cell.row)?.getOrNull(cell.col)
+                        if (suggestion != null) {
+                            val deltaPct = (suggestion.deltaPct * 100).toInt()
+                            Text(
+                                strings.format(
+                                    "label.heatmapCellInfo",
+                                    result.suggestedVeTable.rpmBins[cell.col],
+                                    result.suggestedVeTable.loadBins[cell.row],
+                                    deltaPct,
+                                    suggestion.hitCount
+                                ),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(strings["label.clusterSuggestions"], style = MaterialTheme.typography.titleMedium)
+                    if (result.clusters.isEmpty()) {
+                        Text(strings["label.noSuggestions"], style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        result.clusters.forEach { cluster ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(cluster.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    Text(cluster.reason, style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        strings.format("label.clusterDelta", (cluster.avgDeltaPct * 100).toInt(), cluster.avgHits),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        FilledTonalButton(
+                                            onClick = {
+                                                selectedClusterId = if (selectedClusterId == cluster.id) null else cluster.id
+                                            }
+                                        ) { Text(strings["label.preview"]) }
+                                        Switch(
+                                            checked = includedClusters.contains(cluster.id),
+                                            onCheckedChange = {
+                                                includedClusters = if (includedClusters.contains(cluster.id)) {
+                                                    includedClusters - cluster.id
+                                                } else {
+                                                    includedClusters + cluster.id
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BeforeAfterScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
+    val beforePath by controller.beforeAfterBeforeLogPath.collectAsState()
+    val afterPath by controller.beforeAfterAfterLogPath.collectAsState()
+    val busy by controller.beforeAfterBusy.collectAsState()
+    val error by controller.beforeAfterError.collectAsState()
+    val result by controller.beforeAfterResult.collectAsState()
+    var selectedCell by remember(result) { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(strings["label.beforeAfterTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(strings["label.beforeAfterSubtitle"], style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(
+                        onClick = {
+                            val file = chooseOpenFile(strings["label.beforeAfterPickBefore"])
+                            controller.setBeforeAfterBeforeLogPath(file?.absolutePath)
+                        }
+                    ) { Text(strings["label.beforeAfterBefore"]) }
+                    Text(beforePath ?: strings["label.logAnalyzerNoFile"], style = MaterialTheme.typography.bodySmall)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(
+                        onClick = {
+                            val file = chooseOpenFile(strings["label.beforeAfterPickAfter"])
+                            controller.setBeforeAfterAfterLogPath(file?.absolutePath)
+                        }
+                    ) { Text(strings["label.beforeAfterAfter"]) }
+                    Text(afterPath ?: strings["label.logAnalyzerNoFile"], style = MaterialTheme.typography.bodySmall)
+                }
+                FilledTonalButton(
+                    onClick = { controller.compareBeforeAfterLogs() },
+                    enabled = !busy && !beforePath.isNullOrBlank() && !afterPath.isNullOrBlank()
+                ) { Text(strings["action.compare"]) }
+                error?.let {
+                    Text(strings.format("label.errorWithValue", it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                if (busy) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text(strings["label.analyzerLoading"], style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
+        result?.let { compare ->
+            BeforeAfterSummary(strings, compare)
+            BeforeAfterHeatmap(compare, selectedCell) { row, col -> selectedCell = row to col }
+            selectedCell?.let { (row, col) ->
+                val cell = compare.cells.getOrNull(row)?.getOrNull(col)
+                if (cell != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(strings.format("label.beforeAfterCell", row + 1, col + 1), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(strings.format("label.beforeAfterCellBefore", cell.beforeAvgAbsError ?: 0.0, cell.beforeSamples), style = MaterialTheme.typography.bodySmall)
+                            Text(strings.format("label.beforeAfterCellAfter", cell.afterAvgAbsError ?: 0.0, cell.afterSamples), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BeforeAfterSummary(strings: Strings, result: LogCompareResult) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(strings["label.beforeAfterSummary"], style = MaterialTheme.typography.titleMedium)
+            Text(strings.format("label.beforeAfterMetricAfrError", result.beforeSummary.avgAbsError, result.afterSummary.avgAbsError))
+            Text(strings.format("label.beforeAfterMetricLean", result.beforeSummary.leanTimeRatio * 100.0, result.afterSummary.leanTimeRatio * 100.0))
+            Text(strings.format("label.beforeAfterMetricRich", result.beforeSummary.richTimeRatio * 100.0, result.afterSummary.richTimeRatio * 100.0))
+            Text(
+                strings.format(
+                    "label.beforeAfterMetricCoverage",
+                    result.beforeSummary.coverageCells,
+                    result.beforeSummary.totalCells,
+                    result.afterSummary.coverageCells,
+                    result.afterSummary.totalCells
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun BeforeAfterHeatmap(
+    result: LogCompareResult,
+    selectedCell: Pair<Int, Int>?,
+    onSelectCell: (Int, Int) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(LocalStrings.current["label.beforeAfterHeatmap"], style = MaterialTheme.typography.titleMedium)
+            Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                result.cells.forEachIndexed { rowIndex, row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        row.forEachIndexed { colIndex, cell ->
+                            val color = when (cell.state) {
+                                LogHeatCellState.IMPROVED -> Color(0xFF16A34A)
+                                LogHeatCellState.WORSE -> Color(0xFFDC2626)
+                                LogHeatCellState.UNCHANGED -> Color(0xFF9CA3AF)
+                                LogHeatCellState.NOT_ENOUGH -> Color(0xFFE5E7EB)
+                            }
+                            val border = if (selectedCell?.first == rowIndex && selectedCell.second == colIndex) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                Color.Transparent
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .border(2.dp, border, RoundedCornerShape(2.dp))
+                                    .background(color, RoundedCornerShape(2.dp))
+                                    .clickable { onSelectCell(rowIndex, colIndex) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StrategyChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.clickable { onClick() }.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium
+        )
+    }
+}
+
+@Composable
+private fun AnalyzerSignalRow(label: String, ok: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall)
+        Text(
+            if (ok) "OK" else "Missing",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (ok) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+        )
+    }
+}
+
+@Composable
+private fun AnalyzerHeatmapGrid(
+    suggestions: List<List<com.speeduino.manager.tuning.CellSuggestion?>>,
+    maxChangePct: Double,
+    highlightedCells: Set<CellRef>,
+    onCellSelected: (CellRef) -> Unit
+) {
+    Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+        suggestions.forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                row.forEachIndexed { colIndex, cell ->
+                    val color = when {
+                        cell == null -> Color(0xFFE5E7EB)
+                        cell.deltaPct >= 0 -> analyzerHeatColor(Color(0xFFDC2626), abs(cell.deltaPct) / maxChangePct)
+                        else -> analyzerHeatColor(Color(0xFF2563EB), abs(cell.deltaPct) / maxChangePct)
+                    }
+                    val border = if (highlightedCells.contains(CellRef(rowIndex, colIndex))) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.Transparent
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .border(2.dp, border, shape = RoundedCornerShape(2.dp))
+                            .background(color, shape = RoundedCornerShape(2.dp))
+                            .clickable { onCellSelected(CellRef(rowIndex, colIndex)) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+    }
+}
+
+private fun analyzerHeatColor(base: Color, intensity: Double): Color {
+    val alpha = intensity.coerceIn(0.2, 1.0).toFloat()
+    return base.copy(alpha = alpha)
 }
 
 private data class LogSeries(
@@ -2458,7 +3259,11 @@ private fun InfoRow(label: String, value: String) {
 }
 
 @Composable
-private fun GaugeGrid(gauges: List<GaugeSpec>) {
+private fun GaugeGrid(
+    gauges: List<GaugeSpec>,
+    availableSignals: List<GaugeSpec>,
+    onChangeGauge: (Int, String) -> Unit
+) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val columns = if (maxWidth < 900.dp) 2 else 4
         LazyVerticalGrid(
@@ -2468,15 +3273,24 @@ private fun GaugeGrid(gauges: List<GaugeSpec>) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth().height(280.dp)
         ) {
-            items(gauges) { gauge ->
-                GaugeCard(gauge)
+            items(gauges.size) { index ->
+                GaugeCard(
+                    spec = gauges[index],
+                    options = availableSignals,
+                    onChangeSignal = { key -> onChangeGauge(index, key) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun GaugeCard(spec: GaugeSpec) {
+private fun GaugeCard(
+    spec: GaugeSpec,
+    options: List<GaugeSpec>,
+    onChangeSignal: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
     Surface(
         modifier = Modifier.fillMaxWidth().height(160.dp),
         shape = RoundedCornerShape(18.dp),
@@ -2487,11 +3301,25 @@ private fun GaugeCard(spec: GaugeSpec) {
             modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = spec.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Box {
+                Text(
+                    text = spec.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { expanded = true }
+                )
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    options.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.label) },
+                            onClick = {
+                                onChangeSignal(option.key)
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val sweep = ((spec.value - spec.min) / (spec.max - spec.min)).coerceIn(0f, 1f) * 240f
                 val trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
@@ -2514,7 +3342,7 @@ private fun GaugeCard(spec: GaugeSpec) {
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = spec.displayValue(),
+                        text = spec.display,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -2563,25 +3391,59 @@ private fun StatRow(items: List<StatItem>) {
 }
 
 private data class GaugeSpec(
+    val key: String,
     val label: String,
     val value: Float,
     val min: Float,
     val max: Float,
-    val unit: String
-) {
-    fun displayValue(): String {
-        return if (value.isNaN()) {
-            LocalizationManager.currentStrings()["label.noData"]
-        } else {
-            value.toInt().toString()
-        }
-    }
+    val unit: String,
+    val display: String
+)
+
+private fun dashboardGaugeSignals(liveData: SpeeduinoLiveData?, strings: Strings): List<GaugeSpec> {
+    fun valueOrZero(value: Float?): Float = value ?: 0f
+    fun display0(value: Float?): String = if (value == null) strings["label.noData"] else value.toInt().toString()
+    fun display1(value: Float?): String = if (value == null) strings["label.noData"] else String.format(Locale.US, "%.1f", value)
+
+    val afrMeasured = liveData?.afrMeasured?.toFloat()
+    val afrTarget = liveData?.afrTarget?.toFloat()
+    return listOf(
+        GaugeSpec("rpm", strings["label.rpm"], valueOrZero(liveData?.rpm?.toFloat()), 0f, 7000f, strings["unit.rpm"], display0(liveData?.rpm?.toFloat())),
+        GaugeSpec("map", strings["label.map"], valueOrZero(liveData?.mapPressure?.toFloat()), 0f, 250f, strings["unit.kpa"], display0(liveData?.mapPressure?.toFloat())),
+        GaugeSpec("tps", strings["label.tps"], valueOrZero(liveData?.tps?.toFloat()), 0f, 100f, strings["unit.percent"], display0(liveData?.tps?.toFloat())),
+        GaugeSpec("coolant", strings["label.coolant"], valueOrZero(liveData?.coolantTemp?.toFloat()), -20f, 120f, strings["unit.celsius"], display0(liveData?.coolantTemp?.toFloat())),
+        GaugeSpec("iat", strings["label.iat"], valueOrZero(liveData?.intakeTemp?.toFloat()), -20f, 120f, strings["unit.celsius"], display0(liveData?.intakeTemp?.toFloat())),
+        GaugeSpec("battery", strings["label.battery"], valueOrZero(liveData?.batteryVoltage?.toFloat()), 8f, 16f, "V", display1(liveData?.batteryVoltage?.toFloat())),
+        GaugeSpec("advance", strings["label.advance"], valueOrZero(liveData?.advance?.toFloat()), -20f, 60f, "deg", display0(liveData?.advance?.toFloat())),
+        GaugeSpec("afr", strings["label.afr"], valueOrZero(afrMeasured), 8f, 22f, strings["label.afr"], display1(afrMeasured)),
+        GaugeSpec("afr_target", strings["label.afrTarget"], valueOrZero(afrTarget), 8f, 22f, strings["label.afr"], display1(afrTarget))
+    )
 }
 
 private data class StatItem(
     val label: String,
     val value: String
 )
+
+private data class LogExportSignal(
+    val key: String,
+    val header: String,
+    val labelKey: String
+)
+
+private val LogExportSignals = listOf(
+    LogExportSignal("rpm", "rpm", "label.rpm"),
+    LogExportSignal("map", "map_kpa", "label.map"),
+    LogExportSignal("tps", "tps", "label.tps"),
+    LogExportSignal("coolant", "coolant_c", "label.coolant"),
+    LogExportSignal("iat", "iat_c", "label.iat"),
+    LogExportSignal("battery", "battery_v", "label.battery"),
+    LogExportSignal("advance", "advance_deg", "label.advance"),
+    LogExportSignal("afr", "afr", "label.afr"),
+    LogExportSignal("afr_target", "afr_target", "label.afrTarget")
+)
+
+private val DefaultSelectedLogSignals: Set<String> = LogExportSignals.map { it.key }.toSet()
 
 
 private enum class ConnectionStatus {
@@ -2676,6 +3538,28 @@ private class DesktopSpeeduinoController(
     val logState = logRecorder.state
     private val _logSnapshot = MutableStateFlow<LiveLogSnapshot?>(null)
     val logSnapshot = _logSnapshot.asStateFlow()
+    private val _lastSavedLogPath = MutableStateFlow<String?>(null)
+    val lastSavedLogPath = _lastSavedLogPath.asStateFlow()
+    private val _logSaveStatus = MutableStateFlow<String?>(null)
+    val logSaveStatus = _logSaveStatus.asStateFlow()
+    private val _analyzerLogFile = MutableStateFlow<String?>(null)
+    val analyzerLogFile = _analyzerLogFile.asStateFlow()
+    private val _analyzerResult = MutableStateFlow<AnalyzerResult?>(null)
+    val analyzerResult = _analyzerResult.asStateFlow()
+    private val _analyzerBusy = MutableStateFlow(false)
+    val analyzerBusy = _analyzerBusy.asStateFlow()
+    private val _analyzerError = MutableStateFlow<String?>(null)
+    val analyzerError = _analyzerError.asStateFlow()
+    private val _beforeAfterBeforeLogPath = MutableStateFlow<String?>(null)
+    val beforeAfterBeforeLogPath = _beforeAfterBeforeLogPath.asStateFlow()
+    private val _beforeAfterAfterLogPath = MutableStateFlow<String?>(null)
+    val beforeAfterAfterLogPath = _beforeAfterAfterLogPath.asStateFlow()
+    private val _beforeAfterResult = MutableStateFlow<LogCompareResult?>(null)
+    val beforeAfterResult = _beforeAfterResult.asStateFlow()
+    private val _beforeAfterBusy = MutableStateFlow(false)
+    val beforeAfterBusy = _beforeAfterBusy.asStateFlow()
+    private val _beforeAfterError = MutableStateFlow<String?>(null)
+    val beforeAfterError = _beforeAfterError.asStateFlow()
 
     private val configManager = ConfigManager()
     private val _configState = MutableStateFlow(ConfigSyncState())
@@ -2688,6 +3572,7 @@ private class DesktopSpeeduinoController(
     private var client: SpeeduinoClient? = null
     private var localSessionDir: File? = null
     private var ecuSessionDir: File? = null
+    private val beforeAfterComparator = BeforeAfterLogComparator()
 
     fun connectTcp(host: String, port: Int) {
         connectInternal(SpeeduinoTcpConnection(host, port))
@@ -3340,34 +4225,202 @@ private class DesktopSpeeduinoController(
         _logSnapshot.value = logRecorder.snapshot()
     }
 
-    fun saveLogSnapshot(fileName: String) {
-        val strings = LocalizationManager.currentStrings()
-        val snapshot = logRecorder.snapshot() ?: return
-        val sanitizedName = fileName.ifBlank { strings["label.logFilenamePrefix"] }
-        val targetDir = java.nio.file.Paths.get(
-            System.getProperty("user.home"),
-            "SpeeduinoManagerDesktop",
-            "logs"
-        )
-        java.nio.file.Files.createDirectories(targetDir)
-        val targetFile = targetDir.resolve(strings.format("label.logFilenameSuffix", sanitizedName)).toFile()
+    fun saveLogSnapshot(fileName: String, selectedSignalKeys: Set<String>) {
+        scope.launch(Dispatchers.IO) {
+            val strings = LocalizationManager.currentStrings()
+            try {
+                val snapshot = logRecorder.snapshot()
+                if (snapshot == null || snapshot.entries.isEmpty()) {
+                    _logSaveStatus.value = strings["label.logSaveNoData"]
+                    return@launch
+                }
 
-        targetFile.bufferedWriter().use { writer ->
-            writer.appendLine(strings["label.captureCsvHeader"])
-            snapshot.entries.forEach { entry ->
-                writer.appendLine(
-                    listOf(
-                        entry.timestampMs,
-                        entry.rpm,
-                        entry.mapKpa,
-                        entry.tps,
-                        entry.coolantTempC,
-                        entry.intakeTempC,
-                        entry.batteryDeciVolt / 10.0,
-                        entry.advanceDeg,
-                        entry.o2
-                    ).joinToString(",")
+                val rawName = fileName.ifBlank { strings["label.logFilenamePrefix"] }
+                val sanitizedName = rawName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                val targetDir = java.nio.file.Paths.get(
+                    System.getProperty("user.home"),
+                    "SpeeduinoManagerDesktop",
+                    "logs"
                 )
+                java.nio.file.Files.createDirectories(targetDir)
+                val baseFile = targetDir.resolve(strings.format("label.logFilenameSuffix", sanitizedName)).toFile()
+                val targetFile = uniqueFile(baseFile)
+
+                val selected = selectedSignalKeys.ifEmpty { DefaultSelectedLogSignals }
+                val activeSignals = LogExportSignals.filter { selected.contains(it.key) }
+                val header = buildList {
+                    add("timestamp_ms")
+                    activeSignals.forEach { add(it.header) }
+                }
+
+                targetFile.bufferedWriter().use { writer ->
+                    writer.appendLine(header.joinToString(","))
+                    snapshot.entries.forEach { entry ->
+                        val row = mutableListOf<String>()
+                        row += entry.timestampMs.toString()
+                        activeSignals.forEach { signal ->
+                            row += when (signal.key) {
+                                "rpm" -> entry.rpm.toString()
+                                "map" -> entry.mapKpa.toString()
+                                "tps" -> entry.tps.toString()
+                                "coolant" -> entry.coolantTempC.toString()
+                                "iat" -> entry.intakeTempC.toString()
+                                "battery" -> (entry.batteryDeciVolt / 10.0).toString()
+                                "advance" -> entry.advanceDeg.toString()
+                                "afr" -> entry.afrMeasuredDeci?.let { (it / 10.0).toString() } ?: ""
+                                "afr_target" -> entry.afrTargetDeci?.let { (it / 10.0).toString() } ?: ""
+                                else -> ""
+                            }
+                        }
+                        writer.appendLine(row.joinToString(","))
+                    }
+                }
+
+                _lastSavedLogPath.value = targetFile.absolutePath
+                _analyzerLogFile.value = targetFile.absolutePath
+                _logSaveStatus.value = strings.format("label.logSaveSuccess", targetFile.absolutePath)
+            } catch (e: Exception) {
+                _logSaveStatus.value = strings.format("label.logSaveError", e.message ?: "unknown")
+            }
+        }
+    }
+
+    private fun uniqueFile(baseFile: File): File {
+        if (!baseFile.exists()) return baseFile
+        val name = baseFile.nameWithoutExtension
+        val ext = baseFile.extension
+        var index = 1
+        while (true) {
+            val candidateName = if (ext.isBlank()) "${name}_$index" else "${name}_$index.$ext"
+            val candidate = File(baseFile.parentFile, candidateName)
+            if (!candidate.exists()) return candidate
+            index++
+        }
+    }
+
+    fun selectAnalyzerLogFile(path: String?) {
+        _analyzerLogFile.value = path
+        _analyzerResult.value = null
+        _analyzerError.value = null
+    }
+
+    fun setBeforeAfterBeforeLogPath(path: String?) {
+        _beforeAfterBeforeLogPath.value = path
+        _beforeAfterResult.value = null
+        _beforeAfterError.value = null
+    }
+
+    fun setBeforeAfterAfterLogPath(path: String?) {
+        _beforeAfterAfterLogPath.value = path
+        _beforeAfterResult.value = null
+        _beforeAfterError.value = null
+    }
+
+    fun compareBeforeAfterLogs() {
+        scope.launch(Dispatchers.IO) {
+            val beforePath = _beforeAfterBeforeLogPath.value
+            val afterPath = _beforeAfterAfterLogPath.value
+            val ve = _veTable.value
+            if (beforePath.isNullOrBlank() || afterPath.isNullOrBlank() || ve == null) {
+                _beforeAfterError.value = "Load VE and select before/after logs first."
+                return@launch
+            }
+            _beforeAfterBusy.value = true
+            _beforeAfterError.value = null
+            try {
+                _beforeAfterResult.value = beforeAfterComparator.compareLogs(
+                    beforePath = beforePath,
+                    afterPath = afterPath,
+                    rpmBins = ve.rpmBins,
+                    loadBins = ve.loadBins,
+                    preferredLoadType = ve.loadType
+                )
+            } catch (e: Exception) {
+                _beforeAfterResult.value = null
+                _beforeAfterError.value = when ((e as? LogCompareException)?.reason) {
+                    LogCompareReason.EMPTY_LOG -> "Empty CSV."
+                    LogCompareReason.MISSING_RPM -> "Missing RPM column."
+                    LogCompareReason.MISSING_AFR_MEASURED -> "Missing AFR measured column."
+                    LogCompareReason.MISSING_AFR_TARGET -> "Missing AFR target column."
+                    LogCompareReason.MISSING_LOAD_CHANNEL -> "Missing MAP/TPS load column."
+                    LogCompareReason.NO_VALID_SAMPLES -> "No valid samples in CSV."
+                    null -> e.message ?: "Failed to compare logs."
+                }
+            } finally {
+                _beforeAfterBusy.value = false
+            }
+        }
+    }
+
+    fun analyzeLogFile(strategy: TuningStrategy) {
+        scope.launch(Dispatchers.IO) {
+            val logPath = _analyzerLogFile.value
+            val ve = _veTable.value
+            val afr = _afrTable.value
+            if (logPath.isNullOrBlank() || ve == null || afr == null) {
+                _analyzerError.value = "Load VE, AFR and a log file first."
+                return@launch
+            }
+
+            _analyzerBusy.value = true
+            _analyzerError.value = null
+            try {
+                val result = File(logPath).useLines { lines ->
+                    TuningAssistantAnalyzer.analyzeLines(
+                        logName = File(logPath).name,
+                        lines = lines,
+                        veTable = ve,
+                        afrTable = afr,
+                        strategy = strategy
+                    )
+                }
+                _analyzerResult.value = result
+            } catch (e: Exception) {
+                _analyzerError.value = e.message
+                _analyzerResult.value = null
+            } finally {
+                _analyzerBusy.value = false
+            }
+        }
+    }
+
+    fun applyAnalyzerToVe(strategy: TuningStrategy, includedClusterIds: Set<String>) {
+        scope.launch(Dispatchers.IO) {
+            val ve = _veTable.value ?: return@launch
+            val result = _analyzerResult.value ?: return@launch
+            val logPath = _analyzerLogFile.value
+            val afr = _afrTable.value
+            _analyzerBusy.value = true
+            _analyzerError.value = null
+            try {
+                val allClusterIds = result.clusters.map { it.id }.toSet()
+                val updated = TuningAssistantAnalyzer.applyClustersToVe(
+                    veTable = ve,
+                    suggestions = result.cellSuggestions,
+                    includedClusterIds = if (includedClusterIds.isEmpty()) allClusterIds else includedClusterIds,
+                    clusters = result.clusters
+                )
+                val activeClient = client
+                if (activeClient != null && _connectionState.value.isConnected) {
+                    activeClient.writeVeTable(updated)
+                }
+                updateLocalVeTable(updated)
+                _veTable.value = updated
+                if (!logPath.isNullOrBlank() && afr != null) {
+                    _analyzerResult.value = File(logPath).useLines { lines ->
+                        TuningAssistantAnalyzer.analyzeLines(
+                            logName = File(logPath).name,
+                            lines = lines,
+                            veTable = updated,
+                            afrTable = afr,
+                            strategy = strategy
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _analyzerError.value = e.message
+            } finally {
+                _analyzerBusy.value = false
             }
         }
     }
@@ -3453,7 +4506,9 @@ private fun navSections(): List<NavSection> {
             routes = listOf(
                 DesktopRoute.Connection,
                 DesktopRoute.LogViewer,
-                DesktopRoute.RealTimeMonitor
+                DesktopRoute.RealTimeMonitor,
+                DesktopRoute.LogAnalyzer,
+                DesktopRoute.BeforeAfter
             )
         )
     )
@@ -3472,5 +4527,7 @@ private enum class DesktopRoute(val labelKey: String, val titleKey: String) {
     SensorsConfig("route.sensorsConfig", "route.sensorsConfig"),
     EngineProtection("route.engineProtection", "route.engineProtection"),
     RealTimeMonitor("route.realTimeMonitor", "route.realTimeMonitor"),
-    LogViewer("route.logViewer", "route.logViewer")
+    LogViewer("route.logViewer", "route.logViewer"),
+    LogAnalyzer("route.logAnalyzer", "route.logAnalyzer"),
+    BeforeAfter("route.beforeAfter", "route.beforeAfter")
 }
