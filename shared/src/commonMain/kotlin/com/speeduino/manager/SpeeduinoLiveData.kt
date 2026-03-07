@@ -13,10 +13,10 @@ data class SpeeduinoLiveData(
     val batteryVoltage: Double,
     val advance: Int,
     val o2: Int,
-    val afrMeasured: Double? = null,
-    val afrTarget: Double? = null,
     val engineStatus: Int,
-    val sparkStatus: Int
+    val sparkStatus: Int,
+    val outputChannelBlockSize: Int = 0,
+    val outputChannelData: ByteArray? = null
 ) {
     val isEngineRunning: Boolean
         get() = (engineStatus and 0x01) != 0

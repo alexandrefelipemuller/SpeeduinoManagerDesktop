@@ -3405,8 +3405,8 @@ private fun dashboardGaugeSignals(liveData: SpeeduinoLiveData?, strings: Strings
     fun display0(value: Float?): String = if (value == null) strings["label.noData"] else value.toInt().toString()
     fun display1(value: Float?): String = if (value == null) strings["label.noData"] else String.format(Locale.US, "%.1f", value)
 
-    val afrMeasured = liveData?.afrMeasured?.toFloat()
-    val afrTarget = liveData?.afrTarget?.toFloat()
+    val afrMeasured = liveData?.o2?.toFloat()
+    val afrTarget: Float? = null
     return listOf(
         GaugeSpec("rpm", strings["label.rpm"], valueOrZero(liveData?.rpm?.toFloat()), 0f, 7000f, strings["unit.rpm"], display0(liveData?.rpm?.toFloat())),
         GaugeSpec("map", strings["label.map"], valueOrZero(liveData?.mapPressure?.toFloat()), 0f, 250f, strings["unit.kpa"], display0(liveData?.mapPressure?.toFloat())),
@@ -4267,8 +4267,8 @@ private class DesktopSpeeduinoController(
                                 "iat" -> entry.intakeTempC.toString()
                                 "battery" -> (entry.batteryDeciVolt / 10.0).toString()
                                 "advance" -> entry.advanceDeg.toString()
-                                "afr" -> entry.afrMeasuredDeci?.let { (it / 10.0).toString() } ?: ""
-                                "afr_target" -> entry.afrTargetDeci?.let { (it / 10.0).toString() } ?: ""
+                                "afr" -> entry.o2.toString()
+                                "afr_target" -> ""
                                 else -> ""
                             }
                         }

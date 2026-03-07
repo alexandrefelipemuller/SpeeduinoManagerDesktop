@@ -1,10 +1,14 @@
 package com.speeduino.manager.protocol
 
+import com.speeduino.manager.formatPageId
 import com.speeduino.manager.shared.Logger
 import com.speeduino.manager.connection.ISpeeduinoConnection
+import com.speeduino.manager.model.EcuFamily
+import kotlinx.coroutines.delay
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.CRC32
+import kotlin.jvm.Synchronized
 
 /**
  * Implementação do protocolo de comunicação Speeduino
@@ -19,6 +23,11 @@ class SpeeduinoProtocol(
 ) {
 
     companion object {
+        // Master switch apenas para debug local. Manter false em produção:
+        // USB/BT já forçam legado via supportsModernProtocol() = false
+        // e TCP/Wi-Fi precisa de modern protocol (simulador e firmwares novos).
+        private const val FORCE_LEGACY_PROTOCOL = false
+
         // Response codes
         const val SERIAL_RC_OK = 0x00.toByte()
         const val SERIAL_RC_BURN_OK = 0x04.toByte()
@@ -48,48 +57,44 @@ class SpeeduinoProtocol(
 
     private var lastLegacyWrittenPage: Byte? = null
 
-    private fun isModernEnabled(): Boolean = connection.supportsModernProtocol()
+    private fun isModernEnabled(): Boolean = !FORCE_LEGACY_PROTOCOL && connection.supportsModernProtocol()
 
     /**
      * Obtém informações do firmware (comando 'Q')
      */
     suspend fun getFirmwareInfo(): String {
-        if (!isModernEnabled()) {
-            return safeLegacyString('Q'.code.toByte(), "firmware info")
-        }
+        return queryStringCandidates(
+            commands = listOf('Q'.code.toByte(), 'S'.code.toByte()),
+            label = "firmware info"
+        )
+    }
 
-        return try {
-            val response = sendModernCommand('Q'.code.toByte(), byteArrayOf())
-            if (response.isNotEmpty() && response[0] == SERIAL_RC_OK) {
-                String(response, 1, response.size - 1)
-            } else {
-                fallbackLegacyString('Q'.code.toByte(), "firmware info")
-            }
-        } catch (e: Exception) {
-            Logger.w("SpeeduinoProtocol", "Modern firmware query failed, trying legacy: ${e.message}")
-            fallbackLegacyString('Q'.code.toByte(), "firmware info")
+    /**
+     * Consulta estrita legacy para assinatura de firmware (somente comando 'Q').
+     * Usado no caminho de compatibilidade USB/serial para manter comportamento antigo.
+     */
+    suspend fun getFirmwareInfoLegacyStrict(): String {
+        val response = sendLegacyCommand('Q'.code.toByte())
+        if (response.isEmpty()) {
+            throw Exception("Legacy firmware info returned empty response")
         }
+        val parsed = parseLegacyStringResponse(response, "firmware info")
+        if (parsed.isBlank()) {
+            throw Exception("Legacy firmware info returned blank response")
+        }
+        return parsed
     }
 
     /**
      * Obtém string do produto (comando 'S')
      */
-    suspend fun getProductString(): String {
-        if (!isModernEnabled()) {
-            return safeLegacyString('S'.code.toByte(), "product string")
+    suspend fun getProductString(signatureHint: String? = null): String {
+        val commands = if (signatureHint?.trim()?.startsWith("rusEFI", ignoreCase = true) == true) {
+            listOf('V'.code.toByte(), 'S'.code.toByte())
+        } else {
+            listOf('S'.code.toByte(), 'V'.code.toByte())
         }
-
-        return try {
-            val response = sendModernCommand('S'.code.toByte(), byteArrayOf())
-            if (response.isNotEmpty() && response[0] == SERIAL_RC_OK) {
-                String(response, 1, response.size - 1)
-            } else {
-                safeLegacyString('S'.code.toByte(), "product string")
-            }
-        } catch (e: Exception) {
-            Logger.w("SpeeduinoProtocol", "Modern product query failed, trying legacy: ${e.message}")
-            safeLegacyString('S'.code.toByte(), "product string")
-        }
+        return queryStringCandidates(commands, "product string")
     }
 
     /**
@@ -101,16 +106,20 @@ class SpeeduinoProtocol(
             return SerialCapability(0, 0, 0)
         }
 
-        val response = sendModernCommand('f'.code.toByte(), byteArrayOf(0x00))
+        return try {
+            val response = sendModernCommand('f'.code.toByte(), byteArrayOf(0x00))
 
-        return if (response.size >= 6 && response[0] == SERIAL_RC_OK) {
-            val protocolVersion = response[1].toInt() and 0xFF
-            val blockingFactor = ((response[2].toInt() and 0xFF) shl 8) or (response[3].toInt() and 0xFF)
-            val tableBlockingFactor = ((response[4].toInt() and 0xFF) shl 8) or (response[5].toInt() and 0xFF)
-
-            SerialCapability(protocolVersion, blockingFactor, tableBlockingFactor)
-        } else {
-            SerialCapability(0, 0, 0)
+            if (response.size >= 6 && response[0] == SERIAL_RC_OK) {
+                val protocolVersion = response[1].toInt() and 0xFF
+                val blockingFactor = ((response[2].toInt() and 0xFF) shl 8) or (response[3].toInt() and 0xFF)
+                val tableBlockingFactor = ((response[4].toInt() and 0xFF) shl 8) or (response[5].toInt() and 0xFF)
+                SerialCapability(protocolVersion, blockingFactor, tableBlockingFactor)
+            } else {
+                fallbackProtocolCapability()
+            }
+        } catch (e: Exception) {
+            Logger.w("SpeeduinoProtocol", "Modern serial capability query failed, trying protocol-version fallback: ${e.message}")
+            fallbackProtocolCapability()
         }
     }
 
@@ -163,7 +172,7 @@ class SpeeduinoProtocol(
             payload[4] = (length and 0xFF).toByte()
             payload[5] = ((length shr 8) and 0xFF).toByte()
 
-            Logger.d("SpeeduinoProtocol", "readPage (LEGACY): pageNum=$pageNum, offset=$offset, length=$length")
+            Logger.d("SpeeduinoProtocol", "readPage (LEGACY): pageNum=${formatPageId(pageNum)}, offset=$offset, length=$length")
             sendLegacyCommand('p'.code.toByte(), payload = payload, expectResponse = false)
             return connection.receive(length)
         }
@@ -180,7 +189,7 @@ class SpeeduinoProtocol(
         payload[4] = (length and 0xFF).toByte()           // LSB first
         payload[5] = ((length shr 8) and 0xFF).toByte()   // MSB second
 
-        Logger.d("SpeeduinoProtocol", "readPage: pageNum=$pageNum, offset=$offset, length=$length")
+        Logger.d("SpeeduinoProtocol", "readPage: pageNum=${formatPageId(pageNum)}, offset=$offset, length=$length")
         Logger.d("SpeeduinoProtocol", "Payload bytes: ${payload.joinToString(" ") { "0x%02X".format(it) }}")
 
         val response = sendModernCommand('p'.code.toByte(), payload)
@@ -191,7 +200,48 @@ class SpeeduinoProtocol(
         return if (response.isNotEmpty() && response[0] == SERIAL_RC_OK) {
             response.copyOfRange(1, response.size)
         } else {
-            throw Exception("Erro ao ler página $pageNum")
+            throw Exception("Erro ao ler página ${formatPageId(pageNum)}")
+        }
+    }
+
+    /**
+     * Lê uma tabela/genpage via protocolo moderno ('r' + table id).
+     * Usado por ECUs MS3/newserial.
+     */
+    suspend fun readTable(tableId: Byte, offset: Int, length: Int): ByteArray {
+        return readTable(tableId.toInt() and 0xFF, offset, length, EcuFamily.MS3)
+    }
+
+    suspend fun readTable(tableId: Int, offset: Int, length: Int, family: EcuFamily): ByteArray {
+        if (!isModernEnabled()) {
+            throw Exception("Modern protocol disabled for table read")
+        }
+
+        val response = if (family == EcuFamily.RUSEFI) {
+            val payload = byteArrayOf(
+                (tableId and 0xFF).toByte(),
+                ((tableId shr 8) and 0xFF).toByte(),
+                (offset and 0xFF).toByte(),
+                ((offset shr 8) and 0xFF).toByte(),
+                (length and 0xFF).toByte(),
+                ((length shr 8) and 0xFF).toByte(),
+            )
+            sendModernCommand('R'.code.toByte(), payload)
+        } else {
+            val payload = ByteArray(6)
+            payload[0] = 0x00
+            payload[1] = (tableId and 0xFF).toByte()
+            payload[2] = ((offset shr 8) and 0xFF).toByte()
+            payload[3] = (offset and 0xFF).toByte()
+            payload[4] = ((length shr 8) and 0xFF).toByte()
+            payload[5] = (length and 0xFF).toByte()
+            sendModernCommand('r'.code.toByte(), payload)
+        }
+
+        return if (response.isNotEmpty() && response[0] == SERIAL_RC_OK) {
+            response.copyOfRange(1, response.size)
+        } else {
+            throw Exception("Erro ao ler tabela ${formatPageId(tableId)}")
         }
     }
 
@@ -199,33 +249,53 @@ class SpeeduinoProtocol(
      * Lê dados em tempo real (comando 'A' legacy)
      * ⚠️ DEPRECATED: Speeduino modernas (202402+) podem ter isso desabilitado
      */
-    suspend fun readLiveData(): ByteArray {
-        val response = sendLegacyCommand('A'.code.toByte())
+    suspend fun readLiveData(expectedSize: Int = LIVE_DATA_SIZE): ByteArray {
+        require(expectedSize > 0) { "Tamanho inválido de live data: $expectedSize" }
+        val response = try {
+            sendLegacyCommand('A'.code.toByte(), responseSize = expectedSize)
+        } catch (e: Exception) {
+            if (!isZeroByteTimeout(e, expectedSize)) {
+                throw e
+            }
 
-        return if (response.size >= LIVE_DATA_SIZE) {
+            Logger.w(
+                "SpeeduinoProtocol",
+                "LiveData timeout 0 bytes (expected=$expectedSize), flushing input and retrying once"
+            )
+            connection.clearInputBuffer()
+            delay(25)
+            sendLegacyCommand('A'.code.toByte(), responseSize = expectedSize)
+        }
+
+        return if (response.size >= expectedSize) {
             response
         } else {
-            throw Exception("Resposta de live data incompleta: ${response.size} bytes")
+            throw Exception("Resposta de live data incompleta: ${response.size}/$expectedSize bytes")
         }
+    }
+
+    private fun isZeroByteTimeout(error: Exception, expectedSize: Int): Boolean {
+        val message = error.message ?: return false
+        return message.contains("Timeout: expected $expectedSize bytes, received 0")
     }
 
     /**
      * Lê dados em tempo real usando Modern Protocol (comando 'r' + Output Channels)
      * ✅ RECOMENDADO: Comando usado pelo TunerStudio
      *
-     * Formato: 'r' + CAN_ID + Subcmd + Offset + Length
-     *          0x72  0x00    0x30    0x0000   0x007F (127 bytes)
+     * Formato: 'r' + CAN_ID + Subcmd + Offset(LSB/MSB) + Length(LSB/MSB)
+     *          0x72  0x00    0x30    0x0000        0x007F (127 bytes)
      */
-    suspend fun readLiveDataModern(length: Int = 127): ByteArray {
+    suspend fun readLiveDataModern(length: Int): ByteArray {
         if (!isModernEnabled()) {
             throw Exception("Modern protocol disabled for this connection")
         }
+        require(length > 0) { "Live data length inválido: $length" }
 
-        val sanitizedLength = length.coerceIn(1, 2048)
-        val lengthLsb = (sanitizedLength and 0xFF).toByte()
-        val lengthMsb = ((sanitizedLength shr 8) and 0xFF).toByte()
+        val lengthLsb = (length and 0xFF).toByte()
+        val lengthMsb = ((length shr 8) and 0xFF).toByte()
 
-        // Payload: 'r' + CAN_ID(0x00) + Subcmd(0x30) + Offset(0x0000) + Length(LSB, MSB)
+        // Payload: 'r' + CAN_ID(0x00) + Subcmd(0x30) + Offset(0x0000) + Length
         val payload = byteArrayOf(
             0x00,        // CAN ID (always 0 for standard Speeduino)
             0x30.toByte(), // Subcmd: Output Channels (48 decimal)
@@ -246,9 +316,38 @@ class SpeeduinoProtocol(
         }
     }
 
+    suspend fun readRusefiOutputChannels(length: Int, offset: Int = 0): ByteArray {
+        if (!isModernEnabled()) {
+            throw Exception("Modern protocol disabled for rusEFI output channels")
+        }
+        require(length > 0) { "rusEFI output length inválido: $length" }
+
+        val payload = byteArrayOf(
+            (offset and 0xFF).toByte(),
+            ((offset shr 8) and 0xFF).toByte(),
+            (length and 0xFF).toByte(),
+            ((length shr 8) and 0xFF).toByte(),
+        )
+
+        val response = sendModernCommand(
+            'O'.code.toByte(),
+            payload,
+            maxResponseSize = length + 1
+        )
+        return if (response.isNotEmpty() && response[0] == SERIAL_RC_OK) {
+            response.copyOfRange(1, response.size)
+        } else {
+            val code = response.getOrNull(0)?.toInt()?.and(0xFF)
+            throw Exception("Erro ao ler output channels rusEFI: ${code?.let { "0x${it.toString(16)}" } ?: "null"}")
+        }
+    }
+
     /**
      * Envia comando legacy (single-byte)
      */
+    // Base de conhecimento (USB serial/OTG): sem serialização global, chamadas paralelas
+    // (ex.: stream + write/refresh) podem misturar TX/RX no mesmo canal e corromper frame.
+    @Synchronized
     private fun sendLegacyCommand(
         cmd: Byte,
         payload: ByteArray = byteArrayOf(),
@@ -352,10 +451,67 @@ class SpeeduinoProtocol(
         }
     }
 
+    private fun queryStringCandidates(commands: List<Byte>, label: String): String {
+        commands.forEach { cmd ->
+            val modernValue = runCatching { queryModernString(cmd) }
+                .onFailure { Logger.w("SpeeduinoProtocol", "Modern $label cmd=${cmd.toInt().toChar()} failed: ${it.message}") }
+                .getOrNull()
+            if (!modernValue.isNullOrBlank()) {
+                return modernValue
+            }
+
+            val legacyValue = runCatching { queryLegacyString(cmd, label) }
+                .onFailure { Logger.w("SpeeduinoProtocol", "Legacy $label cmd=${cmd.toInt().toChar()} failed: ${it.message}") }
+                .getOrNull()
+            if (!legacyValue.isNullOrBlank() && !legacyValue.equals("Unknown", ignoreCase = true)) {
+                return legacyValue
+            }
+        }
+
+        return "Unknown"
+    }
+
+    private fun queryModernString(cmd: Byte): String? {
+        if (!isModernEnabled()) return null
+
+        val response = sendModernCommand(cmd, byteArrayOf())
+        if (response.isEmpty() || response[0] != SERIAL_RC_OK || response.size <= 1) {
+            return null
+        }
+
+        return String(response, 1, response.size - 1).trim().takeIf { it.isNotBlank() }
+    }
+
+    private fun queryLegacyString(cmd: Byte, label: String): String? {
+        val response = sendLegacyCommand(cmd)
+        if (response.isEmpty()) {
+            Logger.w("SpeeduinoProtocol", "Legacy $label returned empty response")
+            return null
+        }
+
+        return parseLegacyStringResponse(response, label).takeIf { it.isNotBlank() }
+    }
+
+    private fun fallbackProtocolCapability(): SerialCapability {
+        val versionText = queryStringCandidates(listOf('F'.code.toByte()), "protocol version")
+        val versionNumber = versionText.filter { it.isDigit() }.toIntOrNull() ?: 1
+        return SerialCapability(
+            protocolVersion = versionNumber,
+            blockingFactor = 1024,
+            tableBlockingFactor = 1024,
+        )
+    }
+
     /**
      * Envia comando modern (CRC32-based)
      */
-    private fun sendModernCommand(cmd: Byte, extraPayload: ByteArray): ByteArray {
+    // Mantém atomicidade send+receive também no caminho modern.
+    @Synchronized
+    private fun sendModernCommand(
+        cmd: Byte,
+        extraPayload: ByteArray,
+        maxResponseSize: Int = 2048
+    ): ByteArray {
         if (!isModernEnabled()) {
             throw Exception("Modern protocol disabled for this connection")
         }
@@ -364,10 +520,6 @@ class SpeeduinoProtocol(
         }
 
         val payload = byteArrayOf(cmd) + extraPayload
-        Logger.d(
-            "SpeeduinoProtocol",
-            "Modern send cmd=0x%02X payload=%d bytes".format(cmd, payload.size)
-        )
         val crc = calculateCRC32(payload)
 
         // Length (2 bytes, big-endian)
@@ -384,26 +536,21 @@ class SpeeduinoProtocol(
 
         // Send: length + payload + crc
         val packet = lengthBytes + payload + crcBytes
-        val packetPreview = packet.take(12).joinToString(" ") { "0x%02X".format(it) }
-        Logger.d(
-            "SpeeduinoProtocol",
-            "Modern packet ${packet.size} bytes: $packetPreview..."
-        )
         connection.send(packet)
 
-        return readModernResponse()
+        return readModernResponse(cmd, maxResponseSize)
     }
 
     /**
      * Lê resposta modern (length + payload + crc32)
      */
-    private fun readModernResponse(): ByteArray {
+    private fun readModernResponse(cmd: Byte, maxResponseSize: Int = 2048): ByteArray {
         // Read length (2 bytes, big-endian)
         val lengthBytes = connection.receive(2)
-        Logger.d("SpeeduinoProtocol", "Length bytes: ${lengthBytes.joinToString(" ") { "0x%02X".format(it) }}")
         if (lengthBytes.size < 2) {
-            throw Exception("Resposta modern incompleta (tamanho=${lengthBytes.size})")
+            throw IncompleteResponseException("length", 2, lengthBytes.size, cmd)
         }
+        Logger.d("SpeeduinoProtocol", "Length bytes: ${lengthBytes.joinToString(" ") { "0x%02X".format(it) }}")
 
         val length = ByteBuffer.wrap(lengthBytes)
             .order(ByteOrder.BIG_ENDIAN)
@@ -412,16 +559,23 @@ class SpeeduinoProtocol(
 
         Logger.d("SpeeduinoProtocol", "Payload length: $length bytes")
 
-        if (length > 2048) {
+        if (length > maxResponseSize) {
+            connection.clearInputBuffer()
             throw Exception("Resposta muito grande: $length bytes")
         }
 
         // Read payload
         val payload = connection.receive(length)
+        if (payload.size < length) {
+            throw IncompleteResponseException("payload", length, payload.size, cmd)
+        }
         Logger.d("SpeeduinoProtocol", "Payload bytes: ${payload.joinToString(" ") { "0x%02X".format(it) }}")
 
         // Read CRC32 (4 bytes, big-endian)
         val crcBytes = connection.receive(4)
+        if (crcBytes.size < 4) {
+            throw IncompleteResponseException("crc", 4, crcBytes.size, cmd)
+        }
         Logger.d("SpeeduinoProtocol", "CRC bytes: ${crcBytes.joinToString(" ") { "0x%02X".format(it) }}")
 
         val receivedCrc = ByteBuffer.wrap(crcBytes)
@@ -441,6 +595,15 @@ class SpeeduinoProtocol(
 
         return payload
     }
+
+    class IncompleteResponseException(
+        private val stage: String,
+        private val expected: Int,
+        private val received: Int,
+        private val cmd: Byte
+    ) : Exception(
+        "Incomplete modern response ($stage) for cmd=0x${cmd.toInt().and(0xFF).toString(16)}: expected $expected bytes, received $received"
+    )
 
     /**
      * Grava dados em uma página (comando 'M' - MODERN PROTOCOL)
@@ -477,7 +640,7 @@ class SpeeduinoProtocol(
         // Data bytes
         data.copyInto(extraPayload, 6)
 
-        Logger.d("SpeeduinoProtocol", "writePage (MODERN): pageNum=$pageNum, offset=$offset, length=$length")
+        Logger.d("SpeeduinoProtocol", "writePage (MODERN): pageNum=${formatPageId(pageNum)}, offset=$offset, length=$length")
         Logger.d("SpeeduinoProtocol", "Payload bytes: ${extraPayload.take(10).joinToString(" ") { "0x%02X".format(it) }}... (${extraPayload.size} total)")
 
         // Enviar via Modern Protocol (com CRC wrapper)
@@ -488,17 +651,101 @@ class SpeeduinoProtocol(
             Logger.w("SpeeduinoProtocol", "⚠️  Write page não retornou resposta (compatibilidade legacy)")
         } else if (response[0] != SERIAL_RC_OK) {
             val responseCode = response[0].toInt() and 0xFF
+            val isRangeError = responseCode == (SERIAL_RC_RANGE_ERR.toInt() and 0xFF) || responseCode == 0x80
             val errorMsg = when (response[0]) {
                 SERIAL_RC_RANGE_ERR -> "RANGE_ERR (0x84): Valor fora do range ou bins não estão em ordem crescente. Verifique RPM/Load bins!"
                 SERIAL_RC_CRC_ERR -> "CRC_ERR (0x82): Erro de CRC"
                 SERIAL_RC_UKWN_ERR -> "UKWN_ERR (0x83): Comando desconhecido"
                 SERIAL_RC_BUSY_ERR -> "BUSY_ERR (0x85): ECU ocupada"
-                else -> "response code = 0x${responseCode.toString(16)}"
+                else -> if (isRangeError) {
+                    "RANGE_ERR (0x${responseCode.toString(16)}): Valor fora do range ou tamanho de página incompatível."
+                } else {
+                    "response code = 0x${responseCode.toString(16)}"
+                }
             }
-            throw Exception("Erro ao gravar página $pageNum: $errorMsg")
+            throw Exception("Erro ao gravar página ${formatPageId(pageNum)}: $errorMsg")
         } else {
             val responseCode = response[0].toInt() and 0xFF
-            Logger.d("SpeeduinoProtocol", "✅ Page $pageNum gravada com resposta (code: 0x${responseCode.toString(16)})")
+            Logger.d("SpeeduinoProtocol", "✅ Page ${formatPageId(pageNum)} gravada com resposta (code: 0x${responseCode.toString(16)})")
+        }
+    }
+
+    /**
+     * Grava uma tabela/newserial page via protocolo MS3 ('w').
+     */
+    suspend fun writeTable(tableId: Byte, offset: Int, data: ByteArray) {
+        writeTable(tableId.toInt() and 0xFF, offset, data, EcuFamily.MS3)
+    }
+
+    suspend fun writeTable(tableId: Int, offset: Int, data: ByteArray, family: EcuFamily) {
+        if (!isModernEnabled()) {
+            throw Exception("Modern protocol disabled for table write")
+        }
+
+        val response = if (family == EcuFamily.RUSEFI) {
+            val payload = ByteArray(6 + data.size)
+            payload[0] = (tableId and 0xFF).toByte()
+            payload[1] = ((tableId shr 8) and 0xFF).toByte()
+            payload[2] = (offset and 0xFF).toByte()
+            payload[3] = ((offset shr 8) and 0xFF).toByte()
+            payload[4] = (data.size and 0xFF).toByte()
+            payload[5] = ((data.size shr 8) and 0xFF).toByte()
+            data.copyInto(payload, 6)
+            sendModernCommand('C'.code.toByte(), payload)
+        } else {
+            val payload = ByteArray(6 + data.size)
+            payload[0] = 0x00
+            payload[1] = (tableId and 0xFF).toByte()
+            payload[2] = ((offset shr 8) and 0xFF).toByte()
+            payload[3] = (offset and 0xFF).toByte()
+            payload[4] = ((data.size shr 8) and 0xFF).toByte()
+            payload[5] = (data.size and 0xFF).toByte()
+            data.copyInto(payload, 6)
+            sendModernCommand('w'.code.toByte(), payload)
+        }
+
+        if (response.isEmpty() || response[0] != SERIAL_RC_OK) {
+            val responseCode = response.getOrNull(0)?.toInt()?.and(0xFF)
+            throw Exception(
+                "Erro ao gravar tabela ${formatPageId(tableId)}: " +
+                    (responseCode?.let { "response code=0x${it.toString(16)}" } ?: "sem resposta")
+            )
+        }
+    }
+
+    /**
+     * Executa burn de uma tabela MS3/newserial ('b').
+     */
+    suspend fun burnTable(tableId: Byte) {
+        burnTable(tableId.toInt() and 0xFF, EcuFamily.MS3)
+    }
+
+    suspend fun burnTable(tableId: Int, family: EcuFamily) {
+        if (!isModernEnabled()) {
+            throw Exception("Modern protocol disabled for table burn")
+        }
+
+        val response = if (family == EcuFamily.RUSEFI) {
+            val payload = byteArrayOf(
+                (tableId and 0xFF).toByte(),
+                ((tableId shr 8) and 0xFF).toByte(),
+            )
+            sendModernCommand('B'.code.toByte(), payload)
+        } else {
+            val payload = byteArrayOf(0x00, (tableId and 0xFF).toByte())
+            sendModernCommand('b'.code.toByte(), payload)
+        }
+        if (response.isEmpty()) {
+            throw Exception("Burn da tabela ${formatPageId(tableId)} sem resposta")
+        }
+
+        val responseCode = response[0].toInt() and 0xFF
+        if (responseCode != (SERIAL_RC_OK.toInt() and 0xFF) &&
+            responseCode != (SERIAL_RC_BURN_OK.toInt() and 0xFF) &&
+            responseCode != 0x80) {
+            throw Exception(
+                "Erro no burn da tabela ${formatPageId(tableId)}: code=0x${responseCode.toString(16)}"
+            )
         }
     }
 
@@ -572,7 +819,7 @@ class SpeeduinoProtocol(
         }
 
         lastLegacyWrittenPage = pageNum
-        Logger.d("SpeeduinoProtocol", "writePage (LEGACY): pageNum=$pageNum, offset=$offset, length=${data.size}")
+        Logger.d("SpeeduinoProtocol", "writePage (LEGACY): pageNum=${formatPageId(pageNum)}, offset=$offset, length=${data.size}")
     }
 
     private fun legacyPageChar(pageNum: Byte): Byte {

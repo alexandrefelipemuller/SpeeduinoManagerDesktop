@@ -4,22 +4,22 @@ import com.speeduino.manager.model.SpeeduinoOutputChannels
 
 object SpeeduinoLiveDataParser {
     fun fromLegacyFrame(data: ByteArray): SpeeduinoLiveData {
-        val rpm = u16le(data, 15)
+        val rpm = u16le(data, 14)
 
         return SpeeduinoLiveData(
-            secl = u8(data, 1),
+            secl = u8(data, 0),
             rpm = rpm,
-            coolantTemp = u8(data, 8) - 40,
-            intakeTemp = u8(data, 7) - 40,
-            mapPressure = (u8(data, 6) shl 8) or u8(data, 5),
-            tps = u8(data, 26),
-            batteryVoltage = u8(data, 10) / 10.0,
-            advance = u8(data, 25),
-            o2 = u8(data, 11),
-            afrMeasured = u8(data, 11) / 10.0,
-            afrTarget = null,
-            engineStatus = u8(data, 3),
-            sparkStatus = u8(data, 33)
+            coolantTemp = u8(data, 7) - 40,
+            intakeTemp = u8(data, 6) - 40,
+            mapPressure = u16le(data, 4),
+            tps = u8(data, 24),
+            batteryVoltage = u8(data, 9) / 10.0,
+            advance = u8(data, 23),
+            o2 = u8(data, 10),
+            engineStatus = u8(data, 2),
+            sparkStatus = u8(data, 31),
+            outputChannelBlockSize = data.size,
+            outputChannelData = data
         )
     }
 
@@ -34,8 +34,6 @@ object SpeeduinoLiveDataParser {
         val battery = fieldDouble(data, blockSize, "batteryVoltage")
         val advance = fieldInt(data, blockSize, "advance")
         val o2 = fieldInt(data, blockSize, "afr")
-        val afrMeasured = fieldDoubleOrNull(data, blockSize, "afr")
-        val afrTarget = fieldDoubleOrNull(data, blockSize, "afrTarget")
         val engineStatus = fieldInt(data, blockSize, "engine")
         val sparkStatus = fieldInt(data, blockSize, "spark")
 
@@ -49,10 +47,10 @@ object SpeeduinoLiveDataParser {
             batteryVoltage = battery,
             advance = advance,
             o2 = o2,
-            afrMeasured = afrMeasured,
-            afrTarget = afrTarget,
             engineStatus = engineStatus,
-            sparkStatus = sparkStatus
+            sparkStatus = sparkStatus,
+            outputChannelBlockSize = blockSize,
+            outputChannelData = data
         )
     }
 
@@ -64,11 +62,6 @@ object SpeeduinoLiveDataParser {
     private fun fieldDouble(data: ByteArray, blockSize: Int, name: String): Double {
         val field = SpeeduinoOutputChannels.getField(blockSize, name)
         return field?.parse(data) ?: 0.0
-    }
-
-    private fun fieldDoubleOrNull(data: ByteArray, blockSize: Int, name: String): Double? {
-        val field = SpeeduinoOutputChannels.getField(blockSize, name) ?: return null
-        return field.parse(data)
     }
 
     private fun u8(data: ByteArray, index: Int): Int {

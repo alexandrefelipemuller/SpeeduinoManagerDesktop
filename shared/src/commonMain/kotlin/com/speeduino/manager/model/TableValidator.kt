@@ -35,6 +35,7 @@ class TableValidator(private val metadata: TableMetadata) {
         const val VE_VERY_RICH_THRESHOLD = 200.0             // %
         const val AFR_LEAN_THRESHOLD = 16.0                  // AFR
         const val AFR_RICH_THRESHOLD = 10.0                  // AFR
+        const val IGNITION_ADVANCE_HARD_MAX = 54.0           // ECU compatibility limit
         private const val MAP_LOAD_SCALE = 2
         private const val MAP_LOAD_MAX = MAP_LOAD_SCALE * 255
     }
@@ -188,13 +189,15 @@ class TableValidator(private val metadata: TableMetadata) {
 
     private fun validateIgnitionValues(values: List<List<Int>>, errors: MutableList<String>, warnings: MutableList<String>) {
         var outOfRangeCount = 0
+        val allowedMax = minOf(metadata.valueRange.endInclusive, IGNITION_ADVANCE_HARD_MAX)
+        val allowedRange = metadata.valueRange.start..allowedMax
 
         values.forEachIndexed { row, rowValues ->
             rowValues.forEachIndexed { col, value ->
-                if (value.toDouble() !in metadata.valueRange) {
+                if (value.toDouble() !in allowedRange) {
                     outOfRangeCount++
                     if (outOfRangeCount <= 5) {
-                        errors.add("Ignition advance out of range at [$row,$col]: ${value}° (valid: ${metadata.valueRange}°)")
+                        errors.add("Ignition advance out of range at [$row,$col]: ${value}° (valid: ${allowedRange}°)")
                     }
                 }
             }

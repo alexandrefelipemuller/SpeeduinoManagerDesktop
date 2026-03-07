@@ -24,6 +24,117 @@ import com.speeduino.manager.shared.Logger
 object SpeeduinoOutputChannels {
 
     private const val TAG = "OutputChannels"
+    private val runtimeDefinitions = mutableMapOf<Int, List<OutputField>>()
+
+    val RUSEFI_2084_FIELDS = listOf(
+        OutputField("rpm", 4, DataType.U16, units = "rpm"),
+        OutputField("RPMValue", 4, DataType.U16, units = "rpm"),
+        OutputField("coolantRaw", 16, DataType.S16, scale = 0.01, units = "°C"),
+        OutputField("coolant", 16, DataType.S16, scale = 0.01, units = "°C"),
+        OutputField("iatRaw", 18, DataType.S16, scale = 0.01, units = "°C"),
+        OutputField("intake", 18, DataType.S16, scale = 0.01, units = "°C"),
+        OutputField("tps", 24, DataType.S16, scale = 0.01, units = "%"),
+        OutputField("TPSValue", 24, DataType.S16, scale = 0.01, units = "%"),
+        OutputField("map", 34, DataType.U16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("MAPValue", 34, DataType.U16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("lambdaValue", 38, DataType.U16, scale = 0.0001, units = "lambda"),
+        OutputField("afr", 38, DataType.U16, scale = 0.00147, units = "AFR"),
+        OutputField("batteryVoltage", 40, DataType.U16, scale = 0.001, units = "V"),
+        OutputField("VBatt", 40, DataType.U16, scale = 0.001, units = "V"),
+        OutputField("oilPressure", 42, DataType.U16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("advance", 288, DataType.S16, scale = 0.02, units = "deg"),
+        OutputField("ignitionAdvanceCyl1", 288, DataType.S16, scale = 0.02, units = "deg"),
+        OutputField("gear", 108, DataType.U08),
+        OutputField("detectedGear", 108, DataType.U08),
+        OutputField("fuelPressure", 114, DataType.S16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("lowFuelPressure", 114, DataType.S16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("seconds", 88, DataType.U16, units = "s"),
+        OutputField("ve", 86, DataType.U16, scale = 0.1, units = "%"),
+        OutputField("targetLambda", 910, DataType.U16, scale = 0.0001, units = "lambda"),
+        OutputField("afrTarget", 912, DataType.U16, scale = 0.001, units = "AFR"),
+        OutputField("targetAFR", 912, DataType.U16, scale = 0.001, units = "AFR"),
+        OutputField("vss", 738, DataType.U16, scale = 0.01, units = "km/h"),
+        OutputField("vehicleSpeedKph", 738, DataType.U16, scale = 0.01, units = "km/h"),
+    )
+
+    val RUSEFI_2068_FIELDS = listOf(
+        OutputField("rpm", 4, DataType.U16, units = "rpm"),
+        OutputField("RPMValue", 4, DataType.U16, units = "rpm"),
+        OutputField("coolantRaw", 14, DataType.S16, scale = 0.01, units = "°C"),
+        OutputField("coolant", 14, DataType.S16, scale = 0.01, units = "°C"),
+        OutputField("iatRaw", 16, DataType.S16, scale = 0.01, units = "°C"),
+        OutputField("intake", 16, DataType.S16, scale = 0.01, units = "°C"),
+        OutputField("tps", 22, DataType.S16, scale = 0.01, units = "%"),
+        OutputField("TPSValue", 22, DataType.S16, scale = 0.01, units = "%"),
+        OutputField("map", 32, DataType.U16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("MAPValue", 32, DataType.U16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("lambdaValue", 36, DataType.U16, scale = 0.0001, units = "lambda"),
+        OutputField("afr", 254, DataType.U16, scale = 0.00147, units = "AFR"),
+        OutputField("AFRValue", 254, DataType.U16, scale = 0.00147, units = "AFR"),
+        OutputField("batteryVoltage", 38, DataType.U16, scale = 0.001, units = "V"),
+        OutputField("VBatt", 38, DataType.U16, scale = 0.001, units = "V"),
+        OutputField("oilPressure", 40, DataType.U16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("advance", 288, DataType.S16, scale = 0.02, units = "deg"),
+        OutputField("ignitionAdvanceCyl1", 288, DataType.S16, scale = 0.02, units = "deg"),
+        OutputField("gear", 108, DataType.U08),
+        OutputField("detectedGear", 108, DataType.U08),
+        OutputField("fuelPressure", 114, DataType.S16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("lowFuelPressure", 114, DataType.S16, scale = 1.0 / 30.0, units = "kPa"),
+        OutputField("ve", 86, DataType.U16, scale = 0.1, units = "%"),
+    )
+
+    val MS2_212_FIELDS = listOf(
+        OutputField("secl", 0, DataType.U16, byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("pulseWidth1", 2, DataType.U16, scale = 0.000666, units = "ms", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("pulseWidth2", 4, DataType.U16, scale = 0.000666, units = "ms", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("rpm", 6, DataType.U16, units = "rpm", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("advance", 8, DataType.S16, scale = 0.1, units = "deg", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("squirt", 10, DataType.U08, units = "bits"),
+        OutputField("engine", 11, DataType.U08, units = "bits"),
+        OutputField("afrtgt1", 12, DataType.U08, scale = 0.1, units = "AFR"),
+        OutputField("afrtgt2", 13, DataType.U08, scale = 0.1, units = "AFR"),
+        OutputField("map", 18, DataType.S16, scale = 0.1, units = "kPa", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("tps", 24, DataType.S16, scale = 0.1, units = "%", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("batteryVoltage", 26, DataType.S16, scale = 0.1, units = "V", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("afr", 28, DataType.S16, scale = 0.1, units = "AFR", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("afr2", 30, DataType.S16, scale = 0.1, units = "AFR", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("egoCorrection1", 34, DataType.S16, scale = 0.1, units = "%", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("egoCorrection2", 36, DataType.S16, scale = 0.1, units = "%", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("warmupEnrich", 40, DataType.S16, units = "%", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("accelEnrich", 42, DataType.S16, scale = 0.1, units = "ms", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("baroCorrection", 46, DataType.S16, scale = 0.1, units = "%", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("veCurr1", 50, DataType.S16, scale = 0.1, units = "%", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("iacstep", 54, DataType.S16, byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("dwell", 62, DataType.U16, scale = 0.0666, units = "ms", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("mafload", 64, DataType.S16, scale = 0.1, units = "kPa", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("fuelload", 66, DataType.S16, scale = 0.1, byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("knockRetard", 71, DataType.U08, scale = 0.1, units = "deg"),
+        OutputField("egoV", 74, DataType.S16, scale = 0.01, units = "V", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("egoV2", 76, DataType.S16, scale = 0.01, units = "V", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("status1", 78, DataType.U08),
+        OutputField("status2", 79, DataType.U08),
+        OutputField("status3", 80, DataType.U08),
+        OutputField("status4", 81, DataType.U08),
+        OutputField("looptime", 82, DataType.U16, scale = 0.6667, units = "us", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("tpsADC", 86, DataType.U16, byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("ignload", 90, DataType.S16, scale = 0.1, byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("synccnt", 94, DataType.U08),
+        OutputField("boostduty", 138, DataType.U08, units = "%"),
+        OutputField("inj_adv1", 142, DataType.S16, scale = 0.1, units = "deg", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("afrload1", 162, DataType.S16, scale = 0.1, byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("cl_idle_targ_rpm", 170, DataType.S16, units = "rpm", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("boost_targ", 180, DataType.S16, scale = 0.1, units = "kPa", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("adv1", 192, DataType.S16, scale = 0.1, units = "deg", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("adv2", 194, DataType.S16, scale = 0.1, units = "deg", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("adv3", 196, DataType.S16, scale = 0.1, units = "deg", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("oil", 212, DataType.S16, scale = 0.1, units = "bar", byteOrder = EcuByteOrder.BIG_ENDIAN),
+    )
+
+    val MEGASPEED_219_FIELDS = MS2_212_FIELDS + listOf(
+        OutputField("fuel", 214, DataType.S16, scale = 0.1, units = "bar", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("runsecs", 216, DataType.U16, units = "s", byteOrder = EcuByteOrder.BIG_ENDIAN),
+        OutputField("start_retard", 218, DataType.S16, scale = 0.1, units = "deg", byteOrder = EcuByteOrder.BIG_ENDIAN),
+    )
 
     // ========================================
     // LEGACY FIELDS (35 bytes - 2016)
@@ -260,7 +371,31 @@ object SpeeduinoOutputChannels {
      * @return List of output channel field definitions
      */
     fun getDefinition(blockSize: Int): List<OutputField> {
+        runtimeDefinitions[blockSize]?.let {
+            Logger.d(TAG, "Using runtime output channels override ($blockSize bytes)")
+            return it
+        }
         return when {
+            blockSize == 2068 -> {
+                Logger.d(TAG, "Using rusEFI f407-discovery output channels ($blockSize bytes)")
+                RUSEFI_2068_FIELDS
+            }
+
+            blockSize >= 2084 -> {
+                Logger.d(TAG, "Using rusEFI output channels ($blockSize bytes)")
+                RUSEFI_2084_FIELDS
+            }
+
+            blockSize >= 219 -> {
+                Logger.d(TAG, "Using MegaSpeed output channels ($blockSize bytes)")
+                MEGASPEED_219_FIELDS
+            }
+
+            blockSize >= 212 -> {
+                Logger.d(TAG, "Using MS2 output channels ($blockSize bytes)")
+                MS2_212_FIELDS
+            }
+
             // Modern 2024-2025 (127-130 bytes)
             blockSize >= 127 -> {
                 Logger.d(TAG, "Using MODERN_2024 output channels ($blockSize bytes)")
@@ -288,6 +423,25 @@ object SpeeduinoOutputChannels {
     }
 
     /**
+     * Catalog of all known output channels across legacy + modern definitions.
+     *
+     * This is useful for UI selection lists and settings screens.
+     * Fields are de-duplicated by name, preferring the newest definition.
+     */
+    fun getCatalog(): List<OutputField> {
+        val byName = LinkedHashMap<String, OutputField>()
+        val definitions = runtimeDefinitions.values.toList() + listOf(RUSEFI_2084_FIELDS, RUSEFI_2068_FIELDS, MEGASPEED_219_FIELDS, MS2_212_FIELDS, MODERN_2024_FIELDS, MODERN_2020_FIELDS, LEGACY_FIELDS)
+        definitions.forEach { fields ->
+            fields.forEach { field ->
+                if (!byName.containsKey(field.name)) {
+                    byName[field.name] = field
+                }
+            }
+        }
+        return byName.values.sortedBy { it.name.lowercase() }
+    }
+
+    /**
      * Get specific field by name
      *
      * @param blockSize Block size
@@ -296,6 +450,18 @@ object SpeeduinoOutputChannels {
      */
     fun getField(blockSize: Int, fieldName: String): OutputField? {
         return getDefinition(blockSize).find { it.name == fieldName }
+    }
+
+    fun registerRuntimeDefinition(blockSize: Int, fields: List<OutputField>) {
+        runtimeDefinitions[blockSize] = fields
+    }
+
+    fun clearRuntimeDefinition(blockSize: Int) {
+        runtimeDefinitions.remove(blockSize)
+    }
+
+    fun clearAllRuntimeDefinitions() {
+        runtimeDefinitions.clear()
     }
 }
 
@@ -317,7 +483,8 @@ data class OutputField(
     val type: DataType,
     val scale: Double = 1.0,
     val translate: Double = 0.0,
-    val units: String = ""
+    val units: String = "",
+    val byteOrder: EcuByteOrder = EcuByteOrder.LITTLE_ENDIAN,
 ) {
     /**
      * Parse this field from byte array
@@ -336,21 +503,25 @@ data class OutputField(
                 data[offset].toInt() and 0xFF
             }
             DataType.U16 -> {
-                // LSB first (little-endian)
                 if (offset + 1 >= data.size) return 0.0
-                val lsb = data[offset].toInt() and 0xFF
-                val msb = data[offset + 1].toInt() and 0xFF
-                lsb or (msb shl 8)
+                val first = data[offset].toInt() and 0xFF
+                val second = data[offset + 1].toInt() and 0xFF
+                when (byteOrder) {
+                    EcuByteOrder.LITTLE_ENDIAN -> first or (second shl 8)
+                    EcuByteOrder.BIG_ENDIAN -> (first shl 8) or second
+                }
             }
             DataType.S08 -> {
                 data[offset].toInt()  // Signed byte
             }
             DataType.S16 -> {
-                // LSB first (little-endian), signed
                 if (offset + 1 >= data.size) return 0.0
-                val lsb = data[offset].toInt() and 0xFF
-                val msb = data[offset + 1].toInt() and 0xFF
-                val unsigned = lsb or (msb shl 8)
+                val first = data[offset].toInt() and 0xFF
+                val second = data[offset + 1].toInt() and 0xFF
+                val unsigned = when (byteOrder) {
+                    EcuByteOrder.LITTLE_ENDIAN -> first or (second shl 8)
+                    EcuByteOrder.BIG_ENDIAN -> (first shl 8) or second
+                }
                 // Convert to signed
                 if (unsigned >= 32768) unsigned - 65536 else unsigned
             }

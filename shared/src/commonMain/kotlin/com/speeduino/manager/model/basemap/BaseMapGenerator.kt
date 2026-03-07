@@ -276,22 +276,36 @@ class BaseMapGenerator(
 
             rpmBins.map { rpm ->
                 val base = baseRpmAdvance(rpm, profile.maxRpm, profile.idleRpm)
-                val vacuumAdvance = ((100 - map).coerceAtLeast(0) / 80.0) * 10.0
+                val vacuumAdvance = ((100 - map).coerceAtLeast(0) / 80.0) * 8.0
 
-                val advance = base + vacuumAdvance - boostRetard - loadPenalty + fuelAdvanceBonus + compressionPenalty + adjustments.advanceOffset
-                advance.coerceIn(0.0, 45.0)
+                val rawAdvance = base + vacuumAdvance - boostRetard - loadPenalty + fuelAdvanceBonus + compressionPenalty + adjustments.advanceOffset
+                val cappedAdvance = if (rpm <= profile.idleRpm + 200 && map <= 60) {
+                    rawAdvance.coerceAtMost(18.0)
+                } else {
+                    rawAdvance
+                }
+                cappedAdvance.coerceIn(0.0, 45.0)
             }
         }
 
         val smoothed = TableSmoother.smooth(raw, passes = 3)
-        return smoothed.map { row ->
-            row.map { it.roundToInt().coerceIn(-40, 70) }
+        return smoothed.mapIndexed { rowIndex, row ->
+            val mapKpa = mapBins.getOrNull(rowIndex) ?: 0
+            row.mapIndexed { colIndex, value ->
+                val rpm = rpmBins.getOrNull(colIndex) ?: 0
+                val capped = if (rpm <= profile.idleRpm + 200 && mapKpa <= 60) {
+                    value.coerceAtMost(18.0)
+                } else {
+                    value
+                }
+                capped.roundToInt().coerceIn(-40, 70)
+            }
         }
     }
 
     private fun baseRpmAdvance(rpm: Int, maxRpm: Int, idleRpm: Int): Double {
         return when {
-            rpm <= idleRpm + 200 -> 12.0
+            rpm <= idleRpm + 200 -> 9.0
             rpm <= 1500 -> 18.0
             rpm <= 2500 -> 26.0
             rpm <= 3500 -> 32.0
@@ -362,7 +376,7 @@ class AxisGenerator {
             bins.add(rpm)
         }
 
-        return enforceMonotonic(bins, minStep = 50, start)
+        return enforceMonotonic(bins, minStep = 50, startMin = start, maxEnd = end)
     }
 
     fun generateMapAxis(mapMaxKpa: Int, size: Int = 16): List<Int> {
@@ -395,7 +409,11 @@ class AxisGenerator {
         val fixed = mutableListOf<Int>()
         var last = startMin
         for (value in values) {
-            val raw = max(value, last + minStep)
+            val raw = if (fixed.isEmpty()) {
+                max(value, startMin)
+            } else {
+                max(value, last + minStep)
+            }
             val next = if (maxEnd != null) min(raw, maxEnd) else raw
             fixed.add(next)
             last = next

@@ -49,7 +49,7 @@ compose.desktop {
                 )
             }
             packageName = "SpeeduinoManagerDesktop"
-            packageVersion = "1.0.1"
+            packageVersion = rootProject.version.toString()
 
             linux {
                 iconFile.set(project.file("../assets/icon_256.png"))

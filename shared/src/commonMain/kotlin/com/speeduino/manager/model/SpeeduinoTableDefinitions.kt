@@ -23,6 +23,15 @@ enum class FirmwareEra {
     /** Legacy firmware (201609) - VE Table on Page 1, ochBlockSize 35 */
     LEGACY,
 
+    /** Megasquirt 2 family - dedicated runtime/output-channel schema */
+    MS2,
+
+    /** Megasquirt 3 family - placeholder era until dedicated schema lands */
+    MS3,
+
+    /** rusEFI family - CRC envelope + 16-bit page identifiers */
+    RUSEFI,
+
     /** Modern firmware (202008-202012) - ochBlockSize 114-116 */
     MODERN_2020,
 
@@ -38,8 +47,11 @@ enum class FirmwareEra {
     /** Modern firmware (202501+) - ochBlockSize 130 */
     MODERN_2025;
 
-    /** Backward compatibility - todas Modern eras são "Modern" */
-    fun isModern(): Boolean = this != LEGACY
+    /** Backward compatibility - apenas eras Speeduino 2020+ são "Modern" */
+    fun isModern(): Boolean = when (this) {
+        MODERN_2020, MODERN_2022, MODERN_2023, MODERN_2024, MODERN_2025 -> true
+        LEGACY, MS2, MS3, RUSEFI -> false
+    }
 }
 
 /**
@@ -122,7 +134,9 @@ data class TableDefinitions(
     val boostTable: TableMetadata? = null,
     val ochBlockSize: Int = 0,  // Output channels block size
     val nPages: Int = 0,          // Number of pages
-    val era: FirmwareEra = FirmwareEra.MODERN_2025
+    val era: FirmwareEra = FirmwareEra.MODERN_2025,
+    val family: EcuFamily = EcuFamily.SPEEDUINO,
+    val byteOrder: EcuByteOrder = EcuByteOrder.LITTLE_ENDIAN,
 )
 
 /**
@@ -131,6 +145,7 @@ data class TableDefinitions(
  * Provides hardcoded table definitions based on firmware version analysis.
  */
 object SpeeduinoTableDefinitions {
+    private const val LATEST_KNOWN_VERSION = 202501
 
     // ========================================
     // VE TABLE (Fuel Map)
@@ -286,20 +301,21 @@ object SpeeduinoTableDefinitions {
      */
     fun getDefinitions(firmwareVersion: String): TableDefinitions {
         val versionNumber = extractVersion(firmwareVersion)
+        val effectiveVersion = clampToLatest(versionNumber)
         val era = detectFirmwareEra(firmwareVersion)
 
         // Determinar ochBlockSize e nPages baseado na versão
         val (ochBlockSize, nPages) = when {
-            versionNumber >= 202501 -> 130 to 15
-            versionNumber >= 202402 -> 127 to 15
-            versionNumber >= 202310 -> 125 to 15
-            versionNumber >= 202305 -> 125 to 15
-            versionNumber >= 202207 -> 122 to 15
-            versionNumber >= 202202 -> 122 to 15
-            versionNumber >= 202201 -> 122 to 15
-            versionNumber >= 202012 -> 116 to 14
-            versionNumber >= 202008 -> 114 to 13
-            versionNumber >= 201609 -> 35 to 8
+            effectiveVersion >= 202501 -> 130 to 15
+            effectiveVersion >= 202402 -> 127 to 15
+            effectiveVersion >= 202310 -> 125 to 15
+            effectiveVersion >= 202305 -> 125 to 15
+            effectiveVersion >= 202207 -> 122 to 15
+            effectiveVersion >= 202202 -> 122 to 15
+            effectiveVersion >= 202201 -> 122 to 15
+            effectiveVersion >= 202012 -> 116 to 14
+            effectiveVersion >= 202008 -> 114 to 13
+            effectiveVersion >= 201609 -> 35 to 8
             else -> throw UnsupportedFirmwareException("Firmware too old: $firmwareVersion")
         }
 
@@ -339,14 +355,15 @@ object SpeeduinoTableDefinitions {
      */
     fun detectFirmwareEra(firmwareVersion: String): FirmwareEra {
         val versionNumber = extractVersion(firmwareVersion)
+        val effectiveVersion = clampToLatest(versionNumber)
 
         return when {
-            versionNumber >= 202501 -> FirmwareEra.MODERN_2025  // 202501+
-            versionNumber >= 202402 -> FirmwareEra.MODERN_2024  // 202402-202412
-            versionNumber >= 202305 -> FirmwareEra.MODERN_2023  // 202305-202401
-            versionNumber >= 202201 -> FirmwareEra.MODERN_2022  // 202201-202304
-            versionNumber >= 202008 -> FirmwareEra.MODERN_2020  // 202008-202012
-            versionNumber >= 201609 -> FirmwareEra.LEGACY       // 201609-202007
+            effectiveVersion >= 202501 -> FirmwareEra.MODERN_2025  // 202501+
+            effectiveVersion >= 202402 -> FirmwareEra.MODERN_2024  // 202402-202412
+            effectiveVersion >= 202305 -> FirmwareEra.MODERN_2023  // 202305-202401
+            effectiveVersion >= 202201 -> FirmwareEra.MODERN_2022  // 202201-202304
+            effectiveVersion >= 202008 -> FirmwareEra.MODERN_2020  // 202008-202012
+            effectiveVersion >= 201609 -> FirmwareEra.LEGACY       // 201609-202007
             else -> throw UnsupportedFirmwareException(
                 "Firmware too old: $firmwareVersion (minimum: speeduino 201609)"
             )
@@ -381,6 +398,14 @@ object SpeeduinoTableDefinitions {
         }
 
         throw UnsupportedFirmwareException("Invalid firmware format: $firmwareVersion")
+    }
+
+    private fun clampToLatest(versionNumber: Int): Int {
+        return if (versionNumber > LATEST_KNOWN_VERSION) {
+            LATEST_KNOWN_VERSION
+        } else {
+            versionNumber
+        }
     }
 
     /**
@@ -420,6 +445,63 @@ object SpeeduinoTableDefinitions {
         } catch (e: Exception) {
             false
         }
+    }
+}
+
+/**
+ * ECU-agnostic wrapper around the existing Speeduino table catalog.
+ *
+ * This keeps current behavior intact while exposing a generic abstraction that
+ * later PRs can share with MS3 support.
+ */
+object SpeeduinoDefinitionProvider : EcuDefinitionProvider {
+    override val family: EcuFamily = EcuFamily.SPEEDUINO
+
+    private val defaultPageCatalog = listOf(
+        EcuPageDescriptor(0, 128, "Status"),
+        EcuPageDescriptor(1, 128, "Engine Constants"),
+        EcuPageDescriptor(2, 288, "VE Table"),
+        EcuPageDescriptor(3, 288, "Ignition Table"),
+        EcuPageDescriptor(4, 128, "Trigger Settings"),
+        EcuPageDescriptor(5, 288, "AFR Table"),
+        EcuPageDescriptor(6, 128, "Boost VVT"),
+        EcuPageDescriptor(7, 240, "Trim Tables"),
+        EcuPageDescriptor(8, 384, "CAN Config"),
+        EcuPageDescriptor(9, 192, "Warmup Enrichment"),
+        EcuPageDescriptor(10, 192, "Linear Misc"),
+        EcuPageDescriptor(11, 288, "Page 11"),
+        EcuPageDescriptor(12, 192, "Page 12"),
+        EcuPageDescriptor(13, 128, "Page 13"),
+        EcuPageDescriptor(14, 288, "Page 14"),
+        EcuPageDescriptor(15, 256, "Page 15"),
+    )
+
+    override fun supports(signature: String, productString: String?): Boolean {
+        return signature.trim().startsWith("speeduino", ignoreCase = true)
+    }
+
+    override fun resolve(signature: String, productString: String?): EcuDefinition {
+        val definitions = SpeeduinoTableDefinitions.getDefinitions(signature)
+        return EcuDefinition(
+            family = family,
+            normalizedSignature = signature,
+            runtime = EcuRuntimeSchema(
+                blockSize = definitions.ochBlockSize,
+                byteOrder = definitions.byteOrder,
+                schemaId = "speeduino-${definitions.era.name.lowercase()}",
+            ),
+            capabilities = EcuCapabilities(
+                supportsModernProtocol = true,
+                supportsLegacyProtocol = true,
+                supportsPageRead = true,
+                supportsPageWrite = true,
+                supportsBurn = true,
+                supportsLiveData = true,
+            ),
+            tableDefinitions = definitions,
+            pageCatalog = defaultPageCatalog,
+            productString = productString,
+        )
     }
 }
 

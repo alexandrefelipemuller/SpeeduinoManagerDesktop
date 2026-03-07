@@ -65,6 +65,11 @@ interface ISpeeduinoConnection {
     fun setOnError(callback: (String) -> Unit)
 
     /**
+     * Limpa bytes pendentes no buffer de entrada, se suportado pelo transporte.
+     */
+    fun clearInputBuffer() {}
+
+    /**
      * Limpa recursos da conexao.
      */
     fun close() {
