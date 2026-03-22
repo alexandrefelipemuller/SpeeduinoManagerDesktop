@@ -101,16 +101,30 @@ class BaseMapGenerator(
         adjustments: BaseMapAdjustments = BaseMapAdjustments()
     ): GeneratedBaseMap {
         val stoichAfr = profile.fuelType.stoichAfr
+        val algorithm = existingConstants?.algorithm ?: Algorithm.SPEED_DENSITY
+        val isAlphaN = algorithm == Algorithm.ALPHA_N
         val rpmBins = axisGenerator.generateRpmAxis(profile.idleRpm, profile.maxRpm)
-        val mapBins = axisGenerator.generateMapAxis(profile.mapMaxKpa)
+        val loadBins = if (isAlphaN) {
+            axisGenerator.generateTpsAxis()
+        } else {
+            axisGenerator.generateMapAxis(profile.mapMaxKpa)
+        }
+        val modelLoadBins = if (isAlphaN) {
+            loadBins.map { tpsToEstimatedMapKpa(it, profile.mapMaxKpa) }
+        } else {
+            loadBins
+        }
 
-        val veValues = generateVeSurface(profile, rpmBins, mapBins, adjustments)
-        val afrValues = generateAfrSurface(profile, rpmBins, mapBins, adjustments)
-        val ignitionValues = generateIgnitionSurface(profile, rpmBins, mapBins, adjustments)
+        val veValues = generateVeSurface(profile, rpmBins, modelLoadBins, adjustments)
+        val afrValues = generateAfrSurface(profile, rpmBins, modelLoadBins, adjustments)
+        val ignitionValues = generateIgnitionSurface(profile, rpmBins, modelLoadBins, adjustments)
 
-        val veTable = VeTable(rpmBins = rpmBins, loadBins = mapBins, values = veValues)
-        val afrTable = AfrTable(rpmBins = rpmBins, loadBins = mapBins, values = afrValues)
-        val ignitionTable = IgnitionTable(rpmBins = rpmBins, loadBins = mapBins, values = ignitionValues)
+        val veLoadType = if (isAlphaN) VeTable.LoadType.TPS else VeTable.LoadType.MAP
+        val ignLoadType = if (isAlphaN) IgnitionTable.LoadType.TPS else IgnitionTable.LoadType.MAP
+        val afrLoadType = if (isAlphaN) AfrTable.LoadType.TPS else AfrTable.LoadType.MAP
+        val veTable = VeTable(rpmBins = rpmBins, loadBins = loadBins, values = veValues, loadType = veLoadType)
+        val afrTable = AfrTable(rpmBins = rpmBins, loadBins = loadBins, values = afrValues, loadType = afrLoadType)
+        val ignitionTable = IgnitionTable(rpmBins = rpmBins, loadBins = loadBins, values = ignitionValues, loadType = ignLoadType)
 
         val injectorFlowCcPerMin = injectorFlowLbsPerHourToCcPerMin(profile.injectorFlowLbsPerHour, profile.fuelType)
         val requiredFuelMs = calculateRequiredFuel(profile, stoichAfr, injectorFlowCcPerMin) * (1 + adjustments.richness)
@@ -120,7 +134,8 @@ class BaseMapGenerator(
             stoichAfr = stoichAfr,
             requiredFuelMs = requiredFuelMs,
             existing = existingConstants,
-            injectorFlowCcPerMin = injectorFlowCcPerMin
+            injectorFlowCcPerMin = injectorFlowCcPerMin,
+            algorithm = algorithm,
         )
 
         return GeneratedBaseMap(
@@ -322,7 +337,8 @@ class BaseMapGenerator(
         stoichAfr: Double,
         requiredFuelMs: Double,
         existing: EngineConstants?,
-        injectorFlowCcPerMin: Double
+        injectorFlowCcPerMin: Double,
+        algorithm: Algorithm,
     ): EngineConstants {
         val base = existing ?: EngineConstants(
             reqFuel = requiredFuelMs.toFloat(),
@@ -353,9 +369,16 @@ class BaseMapGenerator(
             mapSampleMethod = base.mapSampleMethod,
             squirtsPerCycle = base.squirtsPerCycle.coerceIn(1, 4),
             injectorStaging = base.injectorStaging,
-            algorithm = Algorithm.SPEED_DENSITY,
+            algorithm = algorithm,
             engineStroke = base.engineStroke
         )
+    }
+
+    private fun tpsToEstimatedMapKpa(tps: Int, mapMaxKpa: Int): Int {
+        val startKpa = 20.0
+        val endKpa = mapMaxKpa.coerceIn(100, 510).toDouble()
+        val normalized = (tps.coerceIn(0, 100) / 100.0).pow(1.15)
+        return (startKpa + (endKpa - startKpa) * normalized).roundToInt()
     }
 
     private fun lerp(a: Double, b: Double, t: Double): Double {
@@ -403,6 +426,19 @@ class AxisGenerator {
         }
 
         return enforceMonotonic(bins, minStep = 2, startMin = start, maxEnd = end)
+    }
+
+    fun generateTpsAxis(size: Int = 16): List<Int> {
+        val start = 0
+        val end = 100
+        val bins = mutableListOf<Int>()
+        for (i in 0 until size) {
+            val t = i.toDouble() / (size - 1).coerceAtLeast(1)
+            val curved = t.pow(1.2)
+            val value = (start + (end - start) * curved).roundToInt()
+            bins.add(value)
+        }
+        return enforceMonotonic(bins, minStep = 1, startMin = start, maxEnd = end)
     }
 
     private fun enforceMonotonic(values: List<Int>, minStep: Int, startMin: Int, maxEnd: Int? = null): List<Int> {

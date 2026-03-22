@@ -120,6 +120,14 @@ class SpeeduinoSerialConnection(
 
     override fun supportsModernProtocol(): Boolean = enableModernProtocol
 
+    override fun supportsModernProtocolFallback(): Boolean = enableModernProtocol
+
+    override fun prefersLegacyProtocol(): Boolean = true
+
+    override fun legacyFirmwareHandshakeAttempts(): Int = 3
+
+    override fun legacyFirmwareHandshakeRetryDelayMs(): Long = 150L
+
     override fun setOnConnectionStateChanged(callback: (Boolean) -> Unit) {
         onConnectionStateChanged = callback
     }

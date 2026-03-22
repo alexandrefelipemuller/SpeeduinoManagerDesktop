@@ -1,7 +1,10 @@
 package com.speeduino.manager
 
 import com.speeduino.manager.model.Algorithm
+import com.speeduino.manager.model.afrTableLoadType
 import com.speeduino.manager.model.EngineConstants
+import com.speeduino.manager.model.fuelTableLoadType
+import com.speeduino.manager.model.ignitionTableLoadType
 import com.speeduino.manager.protocol.SerialCapability
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -176,17 +179,13 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
         return null
     }
 
-    private fun resolveAlgorithm(sessionDir: File): Algorithm? {
+    private fun resolveEngineConstantsModel(sessionDir: File): EngineConstants? {
         val pageFile = findPageFile(sessionDir, listOf(1)) ?: return null
         return try {
-            EngineConstants.fromPage1(pageFile.readBytes()).algorithm
+            EngineConstants.fromPage1(pageFile.readBytes())
         } catch (e: Exception) {
             null
         }
-    }
-
-    private fun isMapAlgorithm(algorithm: Algorithm?): Boolean {
-        return algorithm != Algorithm.ALPHA_N
     }
 
     fun deleteConfig(sessionDir: File): Boolean {
@@ -234,39 +233,43 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
         return sessionDir
     }
 
-    suspend fun loadVeTable(): com.speeduino.manager.model.VeTable? = withContext(Dispatchers.IO) {
+    suspend fun loadVeTable(mapIndex: Int = 1): com.speeduino.manager.model.VeTable? = withContext(Dispatchers.IO) {
         val latestSession = listSavedConfigs().firstOrNull() ?: return@withContext null
-        return@withContext loadVeTable(latestSession)
+        return@withContext loadVeTable(latestSession, mapIndex)
     }
 
-    suspend fun loadVeTable(sessionDir: File): com.speeduino.manager.model.VeTable? = withContext(Dispatchers.IO) {
-        val pageFile = findPageFile(sessionDir, listOf(2, 1)) ?: return@withContext null
+    suspend fun loadVeTable(sessionDir: File, mapIndex: Int = 1): com.speeduino.manager.model.VeTable? = withContext(Dispatchers.IO) {
+        val candidates = when (mapIndex) {
+            2 -> listOf(7)
+            3 -> listOf(8)
+            4 -> listOf(9)
+            else -> listOf(2, 1)
+        }
+        val pageFile = findPageFile(sessionDir, candidates) ?: return@withContext null
 
         val data = pageFile.readBytes()
-        val algorithm = resolveAlgorithm(sessionDir)
-        val loadType = if (isMapAlgorithm(algorithm)) {
-            com.speeduino.manager.model.VeTable.LoadType.MAP
-        } else {
-            com.speeduino.manager.model.VeTable.LoadType.TPS
-        }
+        val constants = resolveEngineConstantsModel(sessionDir)
+        val loadType = constants?.fuelTableLoadType() ?: com.speeduino.manager.model.VeTable.LoadType.MAP
         com.speeduino.manager.model.VeTable.fromPageData(data, loadType = loadType)
     }
 
-    suspend fun loadIgnitionTable(): com.speeduino.manager.model.IgnitionTable? = withContext(Dispatchers.IO) {
+    suspend fun loadIgnitionTable(mapIndex: Int = 1): com.speeduino.manager.model.IgnitionTable? = withContext(Dispatchers.IO) {
         val latestSession = listSavedConfigs().firstOrNull() ?: return@withContext null
-        return@withContext loadIgnitionTable(latestSession)
+        return@withContext loadIgnitionTable(latestSession, mapIndex)
     }
 
-    suspend fun loadIgnitionTable(sessionDir: File): com.speeduino.manager.model.IgnitionTable? = withContext(Dispatchers.IO) {
-        val pageFile = findPageFile(sessionDir, listOf(3)) ?: return@withContext null
+    suspend fun loadIgnitionTable(sessionDir: File, mapIndex: Int = 1): com.speeduino.manager.model.IgnitionTable? = withContext(Dispatchers.IO) {
+        val candidates = when (mapIndex) {
+            2 -> listOf(10)
+            3 -> listOf(11)
+            4 -> listOf(12)
+            else -> listOf(3)
+        }
+        val pageFile = findPageFile(sessionDir, candidates) ?: return@withContext null
 
         val data = pageFile.readBytes()
-        val algorithm = resolveAlgorithm(sessionDir)
-        val loadType = if (isMapAlgorithm(algorithm)) {
-            com.speeduino.manager.model.IgnitionTable.LoadType.MAP
-        } else {
-            com.speeduino.manager.model.IgnitionTable.LoadType.TPS
-        }
+        val constants = resolveEngineConstantsModel(sessionDir)
+        val loadType = constants?.ignitionTableLoadType() ?: com.speeduino.manager.model.IgnitionTable.LoadType.MAP
         com.speeduino.manager.model.IgnitionTable.fromPageData(data, loadType = loadType)
     }
 
@@ -279,12 +282,9 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
         val pageFile = findPageFile(sessionDir, listOf(5)) ?: return@withContext null
 
         val data = pageFile.readBytes()
-        val algorithm = resolveAlgorithm(sessionDir)
-        val loadType = if (isMapAlgorithm(algorithm)) {
-            com.speeduino.manager.model.AfrTable.LoadType.MAP
-        } else {
-            com.speeduino.manager.model.AfrTable.LoadType.TPS
-        }
+        val constants = resolveEngineConstantsModel(sessionDir)
+        val loadType = constants?.afrTableLoadType(isLegacyFormat = data.size >= 304)
+            ?: com.speeduino.manager.model.AfrTable.LoadType.MAP
         com.speeduino.manager.model.AfrTable.fromPageData(data, loadType = loadType)
     }
 

@@ -1,6 +1,7 @@
 package com.speeduino.manager
 
 import com.speeduino.manager.definition.IniDefinition
+import com.speeduino.manager.definition.IniFieldKind
 import com.speeduino.manager.shared.Logger
 import com.speeduino.manager.connection.ConnectionTrace
 import com.speeduino.manager.connection.ISpeeduinoConnection
@@ -21,6 +22,7 @@ import com.speeduino.manager.model.Ms2TableDefinitions
 import com.speeduino.manager.model.PinLayoutDetector
 import com.speeduino.manager.model.PinLayoutInfo
 import com.speeduino.manager.model.TableDefinitions
+import com.speeduino.manager.model.TableMetadata
 import com.speeduino.manager.model.TableValidator
 import com.speeduino.manager.model.UnsupportedFirmwareException
 import com.speeduino.manager.model.ValidationException
@@ -39,6 +41,9 @@ import com.speeduino.manager.model.SpeeduinoIniDefinitions
 import com.speeduino.manager.model.TpsCalibration
 import com.speeduino.manager.model.VeTable
 import com.speeduino.manager.model.TriggerSettings
+import com.speeduino.manager.model.afrTableLoadType
+import com.speeduino.manager.model.fuelTableLoadType
+import com.speeduino.manager.model.ignitionTableLoadType
 import com.speeduino.manager.protocol.SerialCapability
 import com.speeduino.manager.protocol.SpeeduinoProtocol
 import kotlinx.coroutines.*
@@ -69,6 +74,11 @@ class SpeeduinoClient(
     private val onConnectionStateChanged: (Boolean) -> Unit,
     private val onError: (String) -> Unit
 ) {
+    data class MapSelectionSupport(
+        val veMapIndices: List<Int> = listOf(1),
+        val ignitionMapIndices: List<Int> = listOf(1),
+    )
+
     companion object {
         private const val TAG = "SpeeduinoClient"
         private const val LIVE_DATA_FAULT_REPORT_INTERVAL_MS = 30_000L
@@ -125,11 +135,20 @@ class SpeeduinoClient(
             val firmwareSamples: List<String>
             val firmwareConsensus: FirmwareConsensus?
             val detectedFirmwareSignature = if (useLegacyHandshakeCore) {
-                val raw = protocol.getFirmwareInfoLegacyStrict()
-                val sanitized = sanitizeFirmwareSignature(raw).ifBlank { "Unknown" }
-                firmwareSamples = listOf(sanitized)
-                firmwareConsensus = null
-                normalizeFirmwareSignature(sanitized) ?: sanitized
+                firmwareSamples = try {
+                    readLegacyFirmwareSignatureSamples()
+                } catch (legacyError: Exception) {
+                    if (connection.supportsModernProtocolFallback()) {
+                        Logger.w(TAG, "Legacy handshake falhou, tentando modern fallback: ${legacyError.message}")
+                        listOf(protocol.getFirmwareInfo())
+                    } else {
+                        throw legacyError
+                    }
+                }
+                firmwareConsensus = resolveFirmwareConsensus(firmwareSamples)
+                firmwareConsensus.signature
+                    ?: firmwareSamples.lastOrNull()
+                    ?: "Unknown"
             } else {
                 firmwareSamples = readFirmwareSignatureSamples()
                 firmwareConsensus = resolveFirmwareConsensus(firmwareSamples)
@@ -160,8 +179,11 @@ class SpeeduinoClient(
 
             // 3. Validar compatibilidade e carregar definitions
             try {
-                if (manualFirmwareProfile == null && firmwareConsensus != null) {
-                    validateFirmwareConsensus(firmwareConsensus, firmwareSamples)
+                if (manualFirmwareProfile == null) {
+                    validateFirmwareConsensus(
+                        firmwareConsensus ?: resolveFirmwareConsensus(firmwareSamples),
+                        firmwareSamples
+                    )
                 }
                 val resolvedDefinition = EcuDefinitionRegistry.resolve(
                     signature = effectiveFirmwareSignature,
@@ -194,6 +216,7 @@ class SpeeduinoClient(
                 outputChannelFields = definitions?.let { loadedDefinitions ->
                     SpeeduinoOutputChannels.getDefinition(loadedDefinitions.ochBlockSize)
                 }
+                preloadPinLayoutInfoIfPossible()
 
                 Logger.i(TAG, "✅ Firmware compatível: $effectiveFirmwareSignature (era: $era)")
                 if (definitions != null) {
@@ -285,12 +308,55 @@ class SpeeduinoClient(
         return FirmwareConsensus(signature = best?.key, consensusHits = best?.value ?: 0)
     }
 
+    private suspend fun readLegacyFirmwareSignatureSamples(): List<String> {
+        val maxAttempts = connection.legacyFirmwareHandshakeAttempts().coerceAtLeast(2)
+        val retryDelayMs = connection.legacyFirmwareHandshakeRetryDelayMs().coerceAtLeast(0L)
+        var lastError: Exception? = null
+
+        repeat(maxAttempts) { attempt ->
+            try {
+                connection.clearInputBuffer()
+                if (attempt > 0) {
+                    Logger.w(TAG, "Retry legacy firmware handshake (${attempt + 1}/$maxAttempts)")
+                    if (retryDelayMs > 0L) {
+                        delay(retryDelayMs)
+                    }
+                }
+
+                val candidates = protocol.getFirmwareInfoLegacyCandidates()
+                val selectedSample = selectBestFirmwareSample(candidates)
+                if (!selectedSample.isNullOrBlank()) {
+                    return listOf(selectedSample)
+                }
+
+                val cleanedCandidates = candidates
+                    .map(::sanitizeFirmwareSignature)
+                    .filter(String::isNotBlank)
+                val detail = if (cleanedCandidates.isEmpty()) {
+                    "no readable legacy candidates"
+                } else {
+                    "invalid legacy candidates: ${cleanedCandidates.joinToString(" | ")}"
+                }
+                lastError = UnsupportedFirmwareException(detail)
+                Logger.w(TAG, "Discarding legacy firmware sample (${attempt + 1}/$maxAttempts): $detail")
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+
+        throw (lastError ?: UnsupportedFirmwareException("Unable to read legacy firmware signature"))
+    }
+
     private fun sanitizeFirmwareSignature(raw: String): String {
-        val withoutControls = raw.map { ch ->
-            if (ch.isISOControl()) ' ' else ch
+        val asciiOnly = raw.map { ch ->
+            when {
+                ch == '\t' || ch == '\n' || ch == '\r' -> ' '
+                ch in ' '..'~' -> ch
+                else -> ' '
+            }
         }.joinToString("")
 
-        return withoutControls
+        return asciiOnly
             .replace(Regex("\\s+"), " ")
             .trim()
     }
@@ -354,6 +420,25 @@ class SpeeduinoClient(
         return null
     }
 
+    private fun selectBestFirmwareSample(candidates: List<String>): String? {
+        val sanitizedCandidates = candidates
+            .map(::sanitizeFirmwareSignature)
+            .filter(String::isNotBlank)
+
+        sanitizedCandidates.firstNotNullOfOrNull(::normalizeFirmwareSignature)?.let { return it }
+
+        return sanitizedCandidates.firstOrNull(::looksLikeFirmwareSample)
+    }
+
+    private fun looksLikeFirmwareSample(signature: String): Boolean {
+        val lower = signature.lowercase(Locale.US)
+        val hasVersionDigits = signature.count(Char::isDigit) >= 4
+        return (lower.contains("speeduino") && hasVersionDigits) ||
+            lower.startsWith("ms2extra ") ||
+            lower.startsWith("ms3 format ") ||
+            lower.startsWith("rusefi ")
+    }
+
     private fun validateFirmwareConsensus(
         consensus: FirmwareConsensus,
         samples: List<String>
@@ -377,6 +462,30 @@ class SpeeduinoClient(
         }
         Logger.e(TAG, errorMessage)
         throw UnsupportedFirmwareException(errorMessage)
+    }
+
+    private suspend fun preloadPinLayoutInfoIfPossible() {
+        if ((firmwareInfo?.family ?: EcuFamily.UNKNOWN) != EcuFamily.SPEEDUINO) {
+            return
+        }
+        if (pinLayoutInfo != null) {
+            return
+        }
+
+        try {
+            val pageData = readPage(pageNum = 1, offset = 0, length = 16)
+            if (pageData.size >= 16) {
+                pinLayoutInfo = PinLayoutDetector.fromPage1(pageData)
+                Logger.d(
+                    TAG,
+                    "Pin layout detectado no connect: idx=${pinLayoutInfo?.index}, name=${pinLayoutInfo?.name}, mcu=${pinLayoutInfo?.mcuFamily}"
+                )
+            } else {
+                Logger.w(TAG, "Nao foi possivel detectar pin layout no connect: resposta curta (${pageData.size} bytes)")
+            }
+        } catch (e: Exception) {
+            Logger.w(TAG, "Falha ao detectar pin layout no connect: ${e.message}")
+        }
     }
 
     /**
@@ -1005,7 +1114,7 @@ class SpeeduinoClient(
      *
      * @throws IllegalStateException if not connected
      */
-    suspend fun readVeTable(): VeTable {
+    suspend fun readVeTable(mapIndex: Int = 1): VeTable {
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             return readMs2VeTable()
         }
@@ -1019,18 +1128,27 @@ class SpeeduinoClient(
         val defs = tableDefinitions
             ?: throw IllegalStateException("Not connected! Call connect() first.")
 
-        val metadata = defs.veTable
+        val fallbackMetadata = defs.veTable
+        val metadata = if (mapIndex == 1) {
+            fallbackMetadata
+        } else {
+            resolveSpeeduinoTableMetadata(
+                tableNames = listOf("veTable$mapIndex"),
+                fallback = fallbackMetadata,
+                displayName = "VE Table $mapIndex"
+            )
+        }
 
-        Logger.d(TAG, "Lendo VE Table (Page ${metadata.page}, offset ${metadata.offset}, ${metadata.totalSize} bytes)...")
+        Logger.d(TAG, "Lendo VE Table $mapIndex (Page ${metadata.page}, offset ${metadata.offset}, ${metadata.totalSize} bytes)...")
         val pageData = readPage(
             pageNum = metadata.page.toByte(),
             offset = metadata.offset,
             length = metadata.totalSize
         )
-        Logger.d(TAG, "VE Table recebida: ${pageData.size} bytes")
+        Logger.d(TAG, "VE Table $mapIndex recebida: ${pageData.size} bytes")
 
         val storageFormat = VeTable.StorageFormat.fromTotalSize(metadata.totalSize)
-        val loadType = if (isMapLoad()) VeTable.LoadType.MAP else VeTable.LoadType.TPS
+        val loadType = resolveVeLoadType(mapIndex)
         return VeTable.fromPageData(pageData, storageFormat, loadType)
     }
 
@@ -1046,7 +1164,7 @@ class SpeeduinoClient(
      *
      * @throws IllegalStateException if not connected
      */
-    suspend fun readIgnitionTable(): IgnitionTable {
+    suspend fun readIgnitionTable(mapIndex: Int = 1): IgnitionTable {
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             return readMs2IgnitionTable()
         }
@@ -1060,18 +1178,27 @@ class SpeeduinoClient(
         val defs = tableDefinitions
             ?: throw IllegalStateException("Not connected! Call connect() first.")
 
-        val metadata = defs.ignitionTable
+        val fallbackMetadata = defs.ignitionTable
+        val metadata = if (mapIndex == 1) {
+            fallbackMetadata
+        } else {
+            resolveSpeeduinoTableMetadata(
+                tableNames = listOf("advTable$mapIndex"),
+                fallback = fallbackMetadata,
+                displayName = "Ignition Table $mapIndex"
+            )
+        }
 
-        Logger.d(TAG, "Lendo Ignition Table (Page ${metadata.page}, offset ${metadata.offset}, ${metadata.totalSize} bytes)...")
+        Logger.d(TAG, "Lendo Ignition Table $mapIndex (Page ${metadata.page}, offset ${metadata.offset}, ${metadata.totalSize} bytes)...")
         val pageData = readPage(
             pageNum = metadata.page.toByte(),
             offset = metadata.offset,
             length = metadata.totalSize
         )
-        Logger.d(TAG, "Ignition Table recebida: ${pageData.size} bytes")
+        Logger.d(TAG, "Ignition Table $mapIndex recebida: ${pageData.size} bytes")
 
         val storageFormat = IgnitionTable.StorageFormat.fromTotalSize(metadata.totalSize)
-        val loadType = if (isMapLoad()) IgnitionTable.LoadType.MAP else IgnitionTable.LoadType.TPS
+        val loadType = resolveIgnitionLoadType(mapIndex)
         return IgnitionTable.fromPageData(pageData, storageFormat, loadType)
     }
 
@@ -1181,7 +1308,7 @@ class SpeeduinoClient(
      * @param veTable VE Table to write
      * @throws ValidationException if table has critical errors
      */
-    suspend fun writeVeTable(veTable: VeTable) {
+    suspend fun writeVeTable(veTable: VeTable, mapIndex: Int = 1) {
         ensureWritable("writeVeTable")
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             writeMs2VeTable(veTable)
@@ -1195,13 +1322,20 @@ class SpeeduinoClient(
             writeRusefiVeTable(veTable)
             return
         }
-        Logger.d(TAG, "Gravando VE Table (Page 1)...")
-
-        // 1. CRITICAL: Validate table before writing
         val defs = tableDefinitions
             ?: throw IllegalStateException("Not connected! Call connect() first.")
+        val metadata = if (mapIndex == 1) {
+            defs.veTable
+        } else {
+            resolveSpeeduinoTableMetadata(
+                tableNames = listOf("veTable$mapIndex"),
+                fallback = defs.veTable,
+                displayName = "VE Table $mapIndex"
+            )
+        }
+        Logger.d(TAG, "Gravando VE Table $mapIndex (Page ${metadata.page})...")
 
-        val validator = TableValidator(defs.veTable)
+        val validator = TableValidator(metadata)
         val validationResult = validator.validateBeforeWrite(veTable)
 
         if (!validationResult.isValid) {
@@ -1213,7 +1347,7 @@ class SpeeduinoClient(
             Logger.w(TAG, "⚠️  VE Table has ${validationResult.warnings.size} warnings - proceeding anyway")
         }
 
-        val storageFormat = VeTable.StorageFormat.fromTotalSize(defs.veTable.totalSize)
+        val storageFormat = VeTable.StorageFormat.fromTotalSize(metadata.totalSize)
 
         // 2. Convert model to bytes usando formato correto
         val pageData = if (storageFormat != null) {
@@ -1225,11 +1359,11 @@ class SpeeduinoClient(
 
         // 3. Write to ECU using dynamic page number (fire-and-forget, não aguarda resposta)
         protocol.writePage(
-            pageNum = defs.veTable.page.toByte(),
-            offset = defs.veTable.offset,
+            pageNum = metadata.page.toByte(),
+            offset = metadata.offset,
             data = pageData
         )
-        Logger.d(TAG, "VE Table enviada para Page ${defs.veTable.page}")
+        Logger.d(TAG, "VE Table $mapIndex enviada para Page ${metadata.page}")
 
         // ⚠️ CRÍTICO: Delay MAIOR para Speeduino processar write completo
         // Write page é assíncrono - 304 bytes levam tempo para gravar na RAM
@@ -1251,7 +1385,7 @@ class SpeeduinoClient(
      * @param ignitionTable Ignition Table to write
      * @throws ValidationException if table has critical errors (esp. dangerous advance)
      */
-    suspend fun writeIgnitionTable(ignitionTable: IgnitionTable) {
+    suspend fun writeIgnitionTable(ignitionTable: IgnitionTable, mapIndex: Int = 1) {
         ensureWritable("writeIgnitionTable")
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             writeMs2IgnitionTable(ignitionTable)
@@ -1265,13 +1399,20 @@ class SpeeduinoClient(
             writeRusefiIgnitionTable(ignitionTable)
             return
         }
-        Logger.d(TAG, "Gravando Ignition Table (Page 3)...")
-
-        // 1. CRITICAL: Validate table before writing (prevent engine damage!)
         val defs = tableDefinitions
             ?: throw IllegalStateException("Not connected! Call connect() first.")
+        val metadata = if (mapIndex == 1) {
+            defs.ignitionTable
+        } else {
+            resolveSpeeduinoTableMetadata(
+                tableNames = listOf("advTable$mapIndex"),
+                fallback = defs.ignitionTable,
+                displayName = "Ignition Table $mapIndex"
+            )
+        }
+        Logger.d(TAG, "Gravando Ignition Table $mapIndex (Page ${metadata.page})...")
 
-        val validator = TableValidator(defs.ignitionTable)
+        val validator = TableValidator(metadata)
         val validationResult = validator.validateBeforeWrite(ignitionTable)
 
         if (!validationResult.isValid) {
@@ -1286,7 +1427,7 @@ class SpeeduinoClient(
             Logger.w(TAG, "⚠️  Proceeding with write - MONITOR ENGINE FOR KNOCK!")
         }
 
-        val storageFormat = IgnitionTable.StorageFormat.fromTotalSize(defs.ignitionTable.totalSize)
+        val storageFormat = IgnitionTable.StorageFormat.fromTotalSize(metadata.totalSize)
 
         // 2. Convert model to bytes usando formato correto
         val pageData = if (storageFormat != null) {
@@ -1297,7 +1438,7 @@ class SpeeduinoClient(
         Logger.d(TAG, "Ignition Table serializada: ${pageData.size} bytes")
 
         // 3. Write to ECU (fire-and-forget, não aguarda resposta)
-        protocol.writePage(pageNum = defs.ignitionTable.page.toByte(), offset = 0, data = pageData)
+        protocol.writePage(pageNum = metadata.page.toByte(), offset = metadata.offset, data = pageData)
         Logger.d(TAG, "Ignition Table enviada")
 
         // 4. Delay para processar write
@@ -1346,11 +1487,12 @@ class SpeeduinoClient(
         Logger.d(TAG, "AFR Table recebida: ${pageData.size} bytes")
 
         val storageFormat = AfrTable.StorageFormat.fromTotalSize(metadata.totalSize)
-        val loadType = if (isMapLoad()) AfrTable.LoadType.MAP else AfrTable.LoadType.TPS
+        val loadType = resolveAfrLoadType(isLegacyFormat = storageFormat == AfrTable.StorageFormat.LEGACY_304)
         return AfrTable.fromPageData(pageData, storageFormat, loadType)
     }
 
     private suspend fun readMs3VeTable(): VeTable {
+        val loadType = if (isMapLoad()) VeTable.LoadType.MAP else VeTable.LoadType.TPS
         val layout = Ms3TableDefinitions.VE_TABLE_1
         Logger.d(
             TAG,
@@ -1375,18 +1517,19 @@ class SpeeduinoClient(
             valuesData = valuesData,
             rpmAxisData = rpmAxisData,
             loadAxisData = loadAxisData,
-            loadType = VeTable.LoadType.MAP
+            loadType = loadType
         )
     }
 
     private suspend fun readMs2VeTable(): VeTable {
+        val loadType = if (isMapLoad()) VeTable.LoadType.MAP else VeTable.LoadType.TPS
         if (firmwareInfo?.family == EcuFamily.MEGASPEED) {
             megaSpeedIniCatalog?.let { catalog ->
                 Logger.d(TAG, "Lendo MegaSpeed VE Table 1 via .ini (${formatPageId(catalog.veTable.metadata.page)})...")
                 val valuesData = readConfigChunk(catalog.veTable.metadata.page, catalog.veTable.metadata.offset, catalog.veTable.metadata.totalSize)
                 val rpmAxisData = readConfigChunk(catalog.veTable.rpmAxis.pageId, catalog.veTable.rpmAxis.offset, catalog.veTable.rpmAxis.count * 2)
                 val loadAxisData = readConfigChunk(catalog.veTable.loadAxis.pageId, catalog.veTable.loadAxis.offset, catalog.veTable.loadAxis.count * 2)
-                return MegaSpeedIniTableDefinitions.parseVeTable(catalog.veTable, valuesData, rpmAxisData, loadAxisData)
+                return MegaSpeedIniTableDefinitions.parseVeTable(catalog.veTable, valuesData, rpmAxisData, loadAxisData, loadType)
             }
         }
         val layout = Ms2TableDefinitions.VE_TABLE_1
@@ -1413,11 +1556,12 @@ class SpeeduinoClient(
             valuesData = valuesData,
             rpmAxisData = rpmAxisData,
             loadAxisData = loadAxisData,
-            loadType = VeTable.LoadType.MAP
+            loadType = loadType
         )
     }
 
     private suspend fun readMs3IgnitionTable(): IgnitionTable {
+        val loadType = if (isMapLoad()) IgnitionTable.LoadType.MAP else IgnitionTable.LoadType.TPS
         val layout = Ms3TableDefinitions.IGNITION_TABLE_1
         Logger.d(
             TAG,
@@ -1442,18 +1586,19 @@ class SpeeduinoClient(
             valuesData = valuesData,
             rpmAxisData = rpmAxisData,
             loadAxisData = loadAxisData,
-            loadType = IgnitionTable.LoadType.MAP
+            loadType = loadType
         )
     }
 
     private suspend fun readMs2IgnitionTable(): IgnitionTable {
+        val loadType = if (isMapLoad()) IgnitionTable.LoadType.MAP else IgnitionTable.LoadType.TPS
         if (firmwareInfo?.family == EcuFamily.MEGASPEED) {
             megaSpeedIniCatalog?.let { catalog ->
                 Logger.d(TAG, "Lendo MegaSpeed Ignition Table 1 via .ini (${formatPageId(catalog.ignitionTable.metadata.page)})...")
                 val valuesData = readConfigChunk(catalog.ignitionTable.metadata.page, catalog.ignitionTable.metadata.offset, catalog.ignitionTable.metadata.totalSize)
                 val rpmAxisData = readConfigChunk(catalog.ignitionTable.rpmAxis.pageId, catalog.ignitionTable.rpmAxis.offset, catalog.ignitionTable.rpmAxis.count * 2)
                 val loadAxisData = readConfigChunk(catalog.ignitionTable.loadAxis.pageId, catalog.ignitionTable.loadAxis.offset, catalog.ignitionTable.loadAxis.count * 2)
-                return MegaSpeedIniTableDefinitions.parseIgnitionTable(catalog.ignitionTable, valuesData, rpmAxisData, loadAxisData)
+                return MegaSpeedIniTableDefinitions.parseIgnitionTable(catalog.ignitionTable, valuesData, rpmAxisData, loadAxisData, loadType)
             }
         }
         val layout = Ms2TableDefinitions.IGNITION_TABLE_1
@@ -1480,11 +1625,12 @@ class SpeeduinoClient(
             valuesData = valuesData,
             rpmAxisData = rpmAxisData,
             loadAxisData = loadAxisData,
-            loadType = IgnitionTable.LoadType.MAP
+            loadType = loadType
         )
     }
 
     private suspend fun readMs3AfrTable(): AfrTable {
+        val loadType = if (isMapLoad()) AfrTable.LoadType.MAP else AfrTable.LoadType.TPS
         val layout = Ms3TableDefinitions.AFR_TABLE_1
         Logger.d(
             TAG,
@@ -1509,18 +1655,19 @@ class SpeeduinoClient(
             valuesData = valuesData,
             rpmAxisData = rpmAxisData,
             loadAxisData = loadAxisData,
-            loadType = AfrTable.LoadType.MAP
+            loadType = loadType
         )
     }
 
     private suspend fun readMs2AfrTable(): AfrTable {
+        val loadType = if (isMapLoad()) AfrTable.LoadType.MAP else AfrTable.LoadType.TPS
         if (firmwareInfo?.family == EcuFamily.MEGASPEED) {
             megaSpeedIniCatalog?.let { catalog ->
                 Logger.d(TAG, "Lendo MegaSpeed AFR Table 1 via .ini (${formatPageId(catalog.afrTable.metadata.page)})...")
                 val valuesData = readConfigChunk(catalog.afrTable.metadata.page, catalog.afrTable.metadata.offset, catalog.afrTable.metadata.totalSize)
                 val rpmAxisData = readConfigChunk(catalog.afrTable.rpmAxis.pageId, catalog.afrTable.rpmAxis.offset, catalog.afrTable.rpmAxis.count * 2)
                 val loadAxisData = readConfigChunk(catalog.afrTable.loadAxis.pageId, catalog.afrTable.loadAxis.offset, catalog.afrTable.loadAxis.count * 2)
-                return MegaSpeedIniTableDefinitions.parseAfrTable(catalog.afrTable, valuesData, rpmAxisData, loadAxisData)
+                return MegaSpeedIniTableDefinitions.parseAfrTable(catalog.afrTable, valuesData, rpmAxisData, loadAxisData, loadType)
             }
         }
         val layout = Ms2TableDefinitions.AFR_TABLE_1
@@ -1547,17 +1694,18 @@ class SpeeduinoClient(
             valuesData = valuesData,
             rpmAxisData = rpmAxisData,
             loadAxisData = loadAxisData,
-            loadType = AfrTable.LoadType.MAP
+            loadType = loadType
         )
     }
 
     private suspend fun readRusefiVeTable(): VeTable {
+        val loadType = if (isMapLoad()) VeTable.LoadType.MAP else VeTable.LoadType.TPS
         rusefiIniCatalog?.let { catalog ->
             Logger.d(TAG, "Lendo rusEFI VE Table 1 via .ini (${formatPageId(catalog.veTable.metadata.page)})...")
             val valuesData = readConfigChunk(catalog.veTable.metadata.page, catalog.veTable.metadata.offset, catalog.veTable.metadata.totalSize)
             val rpmAxisData = readConfigChunk(catalog.veTable.rpmAxis.tableId, catalog.veTable.rpmAxis.offset, catalog.veTable.rpmAxis.count * 2)
             val loadAxisData = readConfigChunk(catalog.veTable.loadAxis.tableId, catalog.veTable.loadAxis.offset, catalog.veTable.loadAxis.count * 2)
-            return RusefiTableDefinitions.parseVeTableWithLayout(catalog.veTable, valuesData, rpmAxisData, loadAxisData, loadType = VeTable.LoadType.MAP)
+            return RusefiTableDefinitions.parseVeTableWithLayout(catalog.veTable, valuesData, rpmAxisData, loadAxisData, loadType = loadType)
         }
         val schemaId = ecuDefinition?.runtime?.schemaId ?: "rusefi-main"
         val isF407Discovery = schemaId == "rusefi-f407-discovery"
@@ -1569,17 +1717,18 @@ class SpeeduinoClient(
         return if (isF407Discovery) {
             RusefiF407DiscoveryDefinitions.parseVeTable(valuesData, rpmAxisData, loadAxisData)
         } else {
-            RusefiTableDefinitions.parseVeTable(valuesData, rpmAxisData, loadAxisData, loadType = VeTable.LoadType.MAP)
+            RusefiTableDefinitions.parseVeTable(valuesData, rpmAxisData, loadAxisData, loadType = loadType)
         }
     }
 
     private suspend fun readRusefiIgnitionTable(): IgnitionTable {
+        val loadType = if (isMapLoad()) IgnitionTable.LoadType.MAP else IgnitionTable.LoadType.TPS
         rusefiIniCatalog?.let { catalog ->
             Logger.d(TAG, "Lendo rusEFI Ignition Table 1 via .ini (${formatPageId(catalog.ignitionTable.metadata.page)})...")
             val valuesData = readConfigChunk(catalog.ignitionTable.metadata.page, catalog.ignitionTable.metadata.offset, catalog.ignitionTable.metadata.totalSize)
             val rpmAxisData = readConfigChunk(catalog.ignitionTable.rpmAxis.tableId, catalog.ignitionTable.rpmAxis.offset, catalog.ignitionTable.rpmAxis.count * 2)
             val loadAxisData = readConfigChunk(catalog.ignitionTable.loadAxis.tableId, catalog.ignitionTable.loadAxis.offset, catalog.ignitionTable.loadAxis.count * 2)
-            return RusefiTableDefinitions.parseIgnitionTableWithLayout(catalog.ignitionTable, valuesData, rpmAxisData, loadAxisData, loadType = IgnitionTable.LoadType.MAP)
+            return RusefiTableDefinitions.parseIgnitionTableWithLayout(catalog.ignitionTable, valuesData, rpmAxisData, loadAxisData, loadType = loadType)
         }
         val schemaId = ecuDefinition?.runtime?.schemaId ?: "rusefi-main"
         val isF407Discovery = schemaId == "rusefi-f407-discovery"
@@ -1591,17 +1740,18 @@ class SpeeduinoClient(
         return if (isF407Discovery) {
             RusefiF407DiscoveryDefinitions.parseIgnitionTable(valuesData, rpmAxisData, loadAxisData)
         } else {
-            RusefiTableDefinitions.parseIgnitionTable(valuesData, rpmAxisData, loadAxisData, loadType = IgnitionTable.LoadType.MAP)
+            RusefiTableDefinitions.parseIgnitionTable(valuesData, rpmAxisData, loadAxisData, loadType = loadType)
         }
     }
 
     private suspend fun readRusefiAfrTable(): AfrTable {
+        val loadType = if (isMapLoad()) AfrTable.LoadType.MAP else AfrTable.LoadType.TPS
         rusefiIniCatalog?.let { catalog ->
             Logger.d(TAG, "Lendo rusEFI AFR Table 1 via .ini (${formatPageId(catalog.afrTable.metadata.page)})...")
             val valuesData = readConfigChunk(catalog.afrTable.metadata.page, catalog.afrTable.metadata.offset, catalog.afrTable.metadata.totalSize)
             val rpmAxisData = readConfigChunk(catalog.afrTable.rpmAxis.tableId, catalog.afrTable.rpmAxis.offset, catalog.afrTable.rpmAxis.count * 2)
             val loadAxisData = readConfigChunk(catalog.afrTable.loadAxis.tableId, catalog.afrTable.loadAxis.offset, catalog.afrTable.loadAxis.count * 2)
-            return RusefiTableDefinitions.parseAfrTableWithLayout(catalog.afrTable, valuesData, rpmAxisData, loadAxisData, loadType = AfrTable.LoadType.MAP)
+            return RusefiTableDefinitions.parseAfrTableWithLayout(catalog.afrTable, valuesData, rpmAxisData, loadAxisData, loadType = loadType)
         }
         val schemaId = ecuDefinition?.runtime?.schemaId ?: "rusefi-main"
         val isF407Discovery = schemaId == "rusefi-f407-discovery"
@@ -1613,7 +1763,7 @@ class SpeeduinoClient(
         return if (isF407Discovery) {
             RusefiF407DiscoveryDefinitions.parseAfrTable(valuesData, rpmAxisData, loadAxisData)
         } else {
-            RusefiTableDefinitions.parseAfrTable(valuesData, rpmAxisData, loadAxisData, loadType = AfrTable.LoadType.MAP)
+            RusefiTableDefinitions.parseAfrTable(valuesData, rpmAxisData, loadAxisData, loadType = loadType)
         }
     }
 
@@ -2108,16 +2258,156 @@ class SpeeduinoClient(
         streamJob = null
     }
 
-    private suspend fun isMapLoad(): Boolean {
-        val constants = cachedEngineConstants ?: run {
+    private suspend fun resolveEngineConstantsOrNull(): EngineConstants? {
+        return cachedEngineConstants ?: run {
             try {
                 readEngineConstants()
             } catch (e: Exception) {
-                Logger.w(TAG, "NÇœo foi possÇðvel ler Engine Constants para detectar loadType: ${e.message}")
+                Logger.w(TAG, "Nao foi possivel ler Engine Constants para detectar loadType: ${e.message}")
                 null
             }
         }
+    }
+
+    suspend fun readMapSelectionSupport(): MapSelectionSupport {
+        if (firmwareInfo?.family != EcuFamily.SPEEDUINO) {
+            return MapSelectionSupport()
+        }
+        if (activeIniDefinition == null) {
+            return MapSelectionSupport()
+        }
+
+        val veMaps = mutableListOf(1)
+        val ignitionMaps = mutableListOf(1)
+
+        for (index in 2..4) {
+            val veTableExists = findIniFieldByName("veTable$index") != null
+            val veMode = readIniFieldNumericValue("fuel${index}Mode")
+            if (veTableExists && (veMode ?: 0) > 0) {
+                veMaps += index
+            }
+
+            val ignTableExists = findIniFieldByName("advTable$index") != null
+            val ignMode = readIniFieldNumericValue("spark${index}Mode")
+            if (ignTableExists && (ignMode ?: 0) > 0) {
+                ignitionMaps += index
+            }
+        }
+
+        return MapSelectionSupport(
+            veMapIndices = veMaps.distinct().sorted(),
+            ignitionMapIndices = ignitionMaps.distinct().sorted(),
+        )
+    }
+
+    private suspend fun resolveVeLoadType(mapIndex: Int = 1): VeTable.LoadType {
+        if (mapIndex > 1) {
+            val algorithmBits = readIniFieldNumericValue("fuel${mapIndex}Algorithm")
+            if (algorithmBits != null) {
+                return if (Algorithm.fromBits(algorithmBits and 0x07) == Algorithm.ALPHA_N) {
+                    VeTable.LoadType.TPS
+                } else {
+                    VeTable.LoadType.MAP
+                }
+            }
+        }
+        return resolveEngineConstantsOrNull()?.fuelTableLoadType() ?: VeTable.LoadType.MAP
+    }
+
+    private suspend fun resolveIgnitionLoadType(mapIndex: Int = 1): IgnitionTable.LoadType {
+        if (mapIndex > 1) {
+            val algorithmBits = readIniFieldNumericValue("spark${mapIndex}Algorithm")
+            if (algorithmBits != null) {
+                return if (Algorithm.fromBits(algorithmBits and 0x07) == Algorithm.ALPHA_N) {
+                    IgnitionTable.LoadType.TPS
+                } else {
+                    IgnitionTable.LoadType.MAP
+                }
+            }
+        }
+        return resolveEngineConstantsOrNull()?.ignitionTableLoadType() ?: IgnitionTable.LoadType.MAP
+    }
+
+    private suspend fun resolveAfrLoadType(isLegacyFormat: Boolean = false): AfrTable.LoadType {
+        return resolveEngineConstantsOrNull()?.afrTableLoadType(isLegacyFormat) ?: AfrTable.LoadType.MAP
+    }
+
+    private suspend fun isMapLoad(): Boolean {
+        val constants = resolveEngineConstantsOrNull()
         return constants?.algorithm != Algorithm.ALPHA_N
+    }
+
+    private fun findIniFieldByName(name: String) =
+        activeIniDefinition?.fields?.firstOrNull { it.name.equals(name, ignoreCase = true) }
+
+    private suspend fun readIniFieldNumericValue(name: String): Int? {
+        val field = findIniFieldByName(name) ?: return null
+        val pageId = field.page ?: return null
+        val offset = field.offset ?: return null
+        val length = when (field.dataType.trim().uppercase(Locale.US)) {
+            "U16", "S16" -> 2
+            else -> 1
+        }
+        val data = readConfigChunk(pageId, offset, length)
+        if (data.size < length) return null
+
+        val rawValue = when (field.dataType.trim().uppercase(Locale.US)) {
+            "U16", "S16" -> (data[0].toInt() and 0xFF) or ((data[1].toInt() and 0xFF) shl 8)
+            else -> data[0].toInt() and 0xFF
+        }
+
+        if (field.kind != IniFieldKind.BITS) {
+            return rawValue
+        }
+
+        val bitRange = Regex("""\[(\d+):(\d+)]""")
+            .find(field.rawDefinition)
+            ?.groupValues
+            ?.drop(1)
+            ?.mapNotNull { it.toIntOrNull() }
+            ?: return rawValue
+        if (bitRange.size != 2) return rawValue
+
+        val start = bitRange[0]
+        val end = bitRange[1]
+        if (start > end) return rawValue
+        val width = (end - start + 1).coerceAtMost(31)
+        val mask = (1 shl width) - 1
+        return (rawValue ushr start) and mask
+    }
+
+    private fun resolveSpeeduinoTableMetadata(
+        tableNames: List<String>,
+        fallback: TableMetadata,
+        displayName: String,
+    ): TableMetadata {
+        val field = tableNames.firstNotNullOfOrNull { findIniFieldByName(it) } ?: return fallback
+        val shape = field.shape
+        val rows = shape?.rows ?: fallback.valuesShape.first
+        val cols = shape?.columns ?: fallback.valuesShape.second
+        val valueSize = when (field.dataType.trim().uppercase(Locale.US)) {
+            "U16", "S16" -> 2
+            else -> 1
+        }
+        val valuesBytes = rows * cols * valueSize
+        val axisBytes = if (rows == 16 && cols == 16) 32 else (rows + cols) * valueSize
+        val totalSize = valuesBytes + axisBytes
+        return fallback.copy(
+            name = displayName,
+            page = field.page ?: fallback.page,
+            offset = field.offset ?: fallback.offset,
+            totalSize = totalSize,
+            valuesShape = rows to cols,
+            valuesOffset = 0,
+            rpmBinsOffset = valuesBytes,
+            loadBinsOffset = valuesBytes + (cols * valueSize),
+            valueType = when (field.dataType.trim().uppercase(Locale.US)) {
+                "S08" -> com.speeduino.manager.model.DataType.S08
+                "U16" -> com.speeduino.manager.model.DataType.U16
+                "S16" -> com.speeduino.manager.model.DataType.S16
+                else -> com.speeduino.manager.model.DataType.U08
+            }
+        )
     }
 
     private fun readU8(data: ByteArray, offset: Int): Int = data[offset].toInt() and 0xFF

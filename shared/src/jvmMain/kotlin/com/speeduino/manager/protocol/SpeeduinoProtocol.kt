@@ -59,6 +59,11 @@ class SpeeduinoProtocol(
 
     private fun isModernEnabled(): Boolean = !FORCE_LEGACY_PROTOCOL && connection.supportsModernProtocol()
 
+    private fun canAttemptModernFallback(): Boolean {
+        return !FORCE_LEGACY_PROTOCOL &&
+            (connection.supportsModernProtocol() || connection.supportsModernProtocolFallback())
+    }
+
     /**
      * Obtém informações do firmware (comando 'Q')
      */
@@ -83,6 +88,24 @@ class SpeeduinoProtocol(
             throw Exception("Legacy firmware info returned blank response")
         }
         return parsed
+    }
+
+    suspend fun getFirmwareInfoLegacyCandidates(): List<String> {
+        val candidates = mutableListOf<String>()
+        listOf('Q'.code.toByte(), 'S'.code.toByte()).forEach { cmd ->
+            val parsed = runCatching { queryLegacyString(cmd, "firmware info") }
+                .onFailure {
+                    Logger.w(
+                        "SpeeduinoProtocol",
+                        "Legacy firmware candidate cmd=${cmd.toInt().toChar()} failed: ${it.message}"
+                    )
+                }
+                .getOrNull()
+            if (!parsed.isNullOrBlank()) {
+                candidates += parsed
+            }
+        }
+        return candidates
     }
 
     /**
@@ -395,9 +418,16 @@ class SpeeduinoProtocol(
             return framedString
         }
 
-        val zeroIndex = response.indexOf(0)
-        val length = if (zeroIndex >= 0) zeroIndex else response.size
-        return String(response, 0, length, Charsets.US_ASCII).trim()
+        val directText = extractAsciiPrefix(response)
+        val printableText = extractPrintableAsciiText(response)
+        val knownFirmwareText = extractKnownFirmwareText(printableText)
+
+        return when {
+            !knownFirmwareText.isNullOrBlank() -> knownFirmwareText
+            isMeaningfulLegacyText(directText) -> directText
+            isMeaningfulLegacyText(printableText) -> printableText
+            else -> directText.ifBlank { printableText }
+        }
     }
 
     private fun parseModernFrameString(response: ByteArray, label: String): String? {
@@ -452,19 +482,37 @@ class SpeeduinoProtocol(
     }
 
     private fun queryStringCandidates(commands: List<Byte>, label: String): String {
-        commands.forEach { cmd ->
-            val modernValue = runCatching { queryModernString(cmd) }
-                .onFailure { Logger.w("SpeeduinoProtocol", "Modern $label cmd=${cmd.toInt().toChar()} failed: ${it.message}") }
-                .getOrNull()
-            if (!modernValue.isNullOrBlank()) {
-                return modernValue
-            }
+        val legacyFirst = connection.prefersLegacyProtocol()
 
-            val legacyValue = runCatching { queryLegacyString(cmd, label) }
-                .onFailure { Logger.w("SpeeduinoProtocol", "Legacy $label cmd=${cmd.toInt().toChar()} failed: ${it.message}") }
-                .getOrNull()
-            if (!legacyValue.isNullOrBlank() && !legacyValue.equals("Unknown", ignoreCase = true)) {
-                return legacyValue
+        commands.forEach { cmd ->
+            if (legacyFirst) {
+                val legacyValue = runCatching { queryLegacyString(cmd, label) }
+                    .onFailure { Logger.w("SpeeduinoProtocol", "Legacy $label cmd=${cmd.toInt().toChar()} failed: ${it.message}") }
+                    .getOrNull()
+                if (!legacyValue.isNullOrBlank() && !legacyValue.equals("Unknown", ignoreCase = true)) {
+                    return legacyValue
+                }
+
+                val modernValue = runCatching { queryModernString(cmd) }
+                    .onFailure { Logger.w("SpeeduinoProtocol", "Modern $label cmd=${cmd.toInt().toChar()} failed: ${it.message}") }
+                    .getOrNull()
+                if (!modernValue.isNullOrBlank()) {
+                    return modernValue
+                }
+            } else {
+                val modernValue = runCatching { queryModernString(cmd) }
+                    .onFailure { Logger.w("SpeeduinoProtocol", "Modern $label cmd=${cmd.toInt().toChar()} failed: ${it.message}") }
+                    .getOrNull()
+                if (!modernValue.isNullOrBlank()) {
+                    return modernValue
+                }
+
+                val legacyValue = runCatching { queryLegacyString(cmd, label) }
+                    .onFailure { Logger.w("SpeeduinoProtocol", "Legacy $label cmd=${cmd.toInt().toChar()} failed: ${it.message}") }
+                    .getOrNull()
+                if (!legacyValue.isNullOrBlank() && !legacyValue.equals("Unknown", ignoreCase = true)) {
+                    return legacyValue
+                }
             }
         }
 
@@ -472,14 +520,24 @@ class SpeeduinoProtocol(
     }
 
     private fun queryModernString(cmd: Byte): String? {
-        if (!isModernEnabled()) return null
+        if (!canAttemptModernFallback()) return null
 
         val response = sendModernCommand(cmd, byteArrayOf())
         if (response.isEmpty() || response[0] != SERIAL_RC_OK || response.size <= 1) {
             return null
         }
 
-        return String(response, 1, response.size - 1).trim().takeIf { it.isNotBlank() }
+        val payload = response.copyOfRange(1, response.size)
+        val directText = extractAsciiPrefix(payload)
+        val printableText = extractPrintableAsciiText(payload)
+        val knownFirmwareText = extractKnownFirmwareText(printableText)
+
+        return when {
+            !knownFirmwareText.isNullOrBlank() -> knownFirmwareText
+            isMeaningfulLegacyText(directText) -> directText
+            isMeaningfulLegacyText(printableText) -> printableText
+            else -> directText.ifBlank { printableText }
+        }.takeIf { it.isNotBlank() }
     }
 
     private fun queryLegacyString(cmd: Byte, label: String): String? {
@@ -490,6 +548,43 @@ class SpeeduinoProtocol(
         }
 
         return parseLegacyStringResponse(response, label).takeIf { it.isNotBlank() }
+    }
+
+    private fun extractAsciiPrefix(response: ByteArray): String {
+        val zeroIndex = response.indexOf(0)
+        val length = if (zeroIndex >= 0) zeroIndex else response.size
+        return String(response, 0, length, Charsets.US_ASCII).trim()
+    }
+
+    private fun extractPrintableAsciiText(response: ByteArray): String {
+        return response.map { byte ->
+            when (val value = byte.toInt() and 0xFF) {
+                0x09, 0x0A, 0x0D, 0x00 -> ' '
+                in 0x20..0x7E -> value.toChar()
+                else -> ' '
+            }
+        }.joinToString("")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun extractKnownFirmwareText(text: String): String? {
+        val patterns = listOf(
+            Regex("""(?i)\bspeeduino\s+20\d{4}(?:\.\d+)?\b"""),
+            Regex("""(?i)\bspeeduino\s+20\d{2}\.\d{2}\b"""),
+            Regex("""(?i)\bMS2Extra\s+MegaSpeed\b"""),
+            Regex("""(?i)\bMS2Extra\s+comms[0-9a-z]+\b"""),
+            Regex("""(?i)\bMS3\s+Format\s+[0-9]{4}\.[0-9]{2}[a-z]?\b"""),
+            Regex("""(?i)\brusEFI\s+[A-Za-z0-9._-]+\b(?:\.[A-Za-z0-9._-]+)*"""),
+        )
+
+        return patterns.firstNotNullOfOrNull { pattern ->
+            pattern.find(text)?.value?.trim()
+        }
+    }
+
+    private fun isMeaningfulLegacyText(text: String): Boolean {
+        return text.length >= 4 && text.any(Char::isLetterOrDigit)
     }
 
     private fun fallbackProtocolCapability(): SerialCapability {
@@ -512,7 +607,7 @@ class SpeeduinoProtocol(
         extraPayload: ByteArray,
         maxResponseSize: Int = 2048
     ): ByteArray {
-        if (!isModernEnabled()) {
+        if (!canAttemptModernFallback()) {
             throw Exception("Modern protocol disabled for this connection")
         }
         if (!connection.isConnected()) {

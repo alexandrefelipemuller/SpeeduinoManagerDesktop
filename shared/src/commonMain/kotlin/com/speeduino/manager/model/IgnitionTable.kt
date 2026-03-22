@@ -28,6 +28,7 @@ data class IgnitionTable(
 
     companion object {
         private const val MAP_LOAD_SCALE = 2
+        private const val TPS_LOAD_DIVISOR = 2
 
         /**
          * Create a default 16x16 Ignition table for testing
@@ -146,11 +147,11 @@ data class IgnitionTable(
         }
 
         private fun rawLoadToUser(rawValue: Int, loadType: LoadType): Int {
-            return if (loadType == LoadType.MAP) rawValue * MAP_LOAD_SCALE else rawValue
+            return if (loadType == LoadType.MAP) rawValue * MAP_LOAD_SCALE else rawValue / TPS_LOAD_DIVISOR
         }
 
         private fun userLoadToRaw(userValue: Int, loadType: LoadType): Int {
-            return if (loadType == LoadType.MAP) userValue / MAP_LOAD_SCALE else userValue
+            return if (loadType == LoadType.MAP) userValue / MAP_LOAD_SCALE else userValue * TPS_LOAD_DIVISOR
         }
 
         /**
@@ -216,6 +217,15 @@ data class IgnitionTable(
         val newLoadBins = loadBins.toMutableList()
         newLoadBins[index] = newLoad.coerceIn(0, maxLoadForType())
         return copy(loadBins = newLoadBins)
+    }
+
+    fun withLoadType(newLoadType: LoadType): IgnitionTable {
+        if (loadType == newLoadType) return this
+        val convertedLoadBins = loadBins.map { load ->
+            val rawLoad = userLoadToRaw(load, loadType)
+            rawLoadToUser(rawLoad, newLoadType)
+        }
+        return copy(loadBins = convertedLoadBins, loadType = newLoadType)
     }
 
     /**
@@ -286,6 +296,6 @@ data class IgnitionTable(
     }
 
     private fun maxLoadForType(): Int {
-        return if (loadType == LoadType.MAP) MAP_LOAD_SCALE * 255 else 255
+        return if (loadType == LoadType.MAP) MAP_LOAD_SCALE * 255 else 100
     }
 }

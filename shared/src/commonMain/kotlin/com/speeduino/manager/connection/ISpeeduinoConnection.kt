@@ -55,6 +55,26 @@ interface ISpeeduinoConnection {
     fun supportsModernProtocol(): Boolean = true
 
     /**
+     * Indica se, mesmo com caminho principal legacy, podemos tentar Modern como fallback.
+     */
+    fun supportsModernProtocolFallback(): Boolean = false
+
+    /**
+     * Indica se deve priorizar Legacy e usar Modern apenas como fallback.
+     */
+    fun prefersLegacyProtocol(): Boolean = false
+
+    /**
+     * Número de tentativas legacy para o primeiro handshake de firmware.
+     */
+    fun legacyFirmwareHandshakeAttempts(): Int = 1
+
+    /**
+     * Intervalo entre tentativas legacy do primeiro handshake de firmware.
+     */
+    fun legacyFirmwareHandshakeRetryDelayMs(): Long = 0L
+
+    /**
      * Callback para mudança de estado de conexão
      */
     fun setOnConnectionStateChanged(callback: (Boolean) -> Unit)

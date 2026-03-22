@@ -12,6 +12,7 @@ data class EngineConstants(
 
     // Engine & Injection Parameters (Offset 36, 37)
     val algorithm: Algorithm,         // Control algorithm (Speed Density / Alpha-N)
+    val ignitionAlgorithm: Algorithm = algorithm,
     val squirtsPerCycle: Int,         // Offset 25: divider (1, 2, 4)
     val injectorStaging: InjectorStaging, // Offset 26 bit 0: Alternating/Simultaneous
     val engineStroke: EngineStroke,   // Offset 36 bit 2: Four-stroke/Two-stroke
@@ -42,6 +43,7 @@ data class EngineConstants(
          */
         fun fromPage1(data: ByteArray): EngineConstants {
             require(data.size >= 128) { "Page 1 deve ter 128 bytes" }
+            val pinLayoutInfo = PinLayoutDetector.fromPage1(data)
 
             // Offset 24: reqFuel (U08, scale 0.1)
             val reqFuel = (data[24].toInt() and 0xFF) * 0.1f
@@ -50,7 +52,9 @@ data class EngineConstants(
             val divider = data[25].toInt() and 0xFF
 
             // Offset 26: alternate (bit 0)
-            val alternate = (data[26].toInt() and 0x01) != 0
+            val configPage2 = data[26].toInt() and 0xFF
+            val alternate = (configPage2 and 0x01) != 0
+            val ignitionAlgorithmBits = (configPage2 shr 4) and 0x07
 
             // Offset 36: Config1 byte
             val config1 = data[36].toInt() and 0xFF
@@ -75,12 +79,14 @@ data class EngineConstants(
             return EngineConstants(
                 reqFuel = reqFuel,
                 algorithm = Algorithm.fromBits(algorithmBits),
+                ignitionAlgorithm = Algorithm.fromBits(ignitionAlgorithmBits),
                 squirtsPerCycle = divider,
                 injectorStaging = if (alternate) InjectorStaging.ALTERNATING else InjectorStaging.SIMULTANEOUS,
                 engineStroke = if (twoStroke) EngineStroke.TWO_STROKE else EngineStroke.FOUR_STROKE,
                 numberOfCylinders = mapCylinders(nCylinders),
                 injectorPortType = if (injType) InjectorPortType.THROTTLE_BODY else InjectorPortType.PORT,
                 numberOfInjectors = mapInjectors(nInjectors),
+                boardLayout = pinLayoutInfo.name ?: "Speeduino v0.4",
                 stoichiometricRatio = stoich,
                 mapSampleMethod = MapSampleMethod.fromBits(mapSample),
                 channel2Angle = oddfire2,
@@ -127,6 +133,7 @@ data class EngineConstants(
                 reqFuel = reqFuel,
                 batteryVoltage = batteryVoltage,
                 algorithm = Algorithm.fromMs2Bits(algorithmBits),
+                ignitionAlgorithm = Algorithm.fromMs2Bits(algorithmBits),
                 squirtsPerCycle = divider.coerceAtLeast(1),
                 injectorStaging = if (alternating) InjectorStaging.ALTERNATING else InjectorStaging.SIMULTANEOUS,
                 engineStroke = if (strokeBits == 1) EngineStroke.TWO_STROKE else EngineStroke.FOUR_STROKE,
@@ -176,6 +183,7 @@ data class EngineConstants(
                 reqFuel = 0f,
                 batteryVoltage = 12.0f,
                 algorithm = Algorithm.SPEED_DENSITY,
+                ignitionAlgorithm = Algorithm.SPEED_DENSITY,
                 squirtsPerCycle = 1,
                 injectorStaging = if (injectionModeIndex == 0) {
                     InjectorStaging.SIMULTANEOUS
@@ -428,9 +436,11 @@ data class EngineConstants(
         // Offset 25: divider (squirts per cycle)
         data[25] = squirtsPerCycle.coerceIn(0, 255).toByte()
 
-        // Offset 26: alternate (bit 0)
+        // Offset 26: staging (bit 0) + ignition load source (bits 4-6)
         val stagingBit = if (injectorStaging == InjectorStaging.ALTERNATING) 0x01 else 0x00
-        data[26] = ((data[26].toInt() and 0xFE) or stagingBit).toByte()
+        val configPage2Base = data[26].toInt() and 0xFF
+        val configPage2 = (configPage2Base and 0x8E) or stagingBit or (ignitionAlgorithm.toBits() shl 4)
+        data[26] = configPage2.toByte()
 
         // Offset 36: Config1 byte
         var config1 = 0
@@ -449,6 +459,11 @@ data class EngineConstants(
 
         // Offset 50: stoich (U08, scale 0.1)
         data[50] = (stoichiometricRatio / 0.1f).toInt().coerceIn(0, 255).toByte()
+
+        // Offset 15: pinLayout index (U08)
+        PinLayoutDetector.findIndexByName(boardLayout)?.let { layoutIndex ->
+            data[15] = (layoutIndex and 0xFF).toByte()
+        }
 
         // Offset 51-56: oddfire angles (U16 little-endian)
         data[51] = (channel2Angle and 0xFF).toByte()
@@ -501,6 +516,18 @@ data class EngineConstants(
 
         return data
     }
+}
+
+fun EngineConstants.fuelTableLoadType(): VeTable.LoadType {
+    return if (algorithm == Algorithm.ALPHA_N) VeTable.LoadType.TPS else VeTable.LoadType.MAP
+}
+
+fun EngineConstants.ignitionTableLoadType(): IgnitionTable.LoadType {
+    return if (ignitionAlgorithm == Algorithm.ALPHA_N) IgnitionTable.LoadType.TPS else IgnitionTable.LoadType.MAP
+}
+
+fun EngineConstants.afrTableLoadType(isLegacyFormat: Boolean = false): AfrTable.LoadType {
+    return if (isLegacyFormat && algorithm == Algorithm.ALPHA_N) AfrTable.LoadType.TPS else AfrTable.LoadType.MAP
 }
 
 // Enums

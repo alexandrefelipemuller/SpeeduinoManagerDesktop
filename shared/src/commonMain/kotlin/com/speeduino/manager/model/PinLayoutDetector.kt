@@ -20,6 +20,17 @@ data class PinLayoutInfo(
 )
 
 object PinLayoutDetector {
+    private val knownStm32LayoutNames = setOf(
+        "NO2C",
+        "UA4C",
+        "BlitzboxBL49sp",
+        "DIY-EFI CORE4 v1.0",
+        "JUICEBOX",
+        "Drop Bear",
+        "DropBear",
+        "Black STM32F407VET6 V0.1"
+    ).map(::normalizeLayoutKey).toSet()
+
     private val pinLayouts = listOf(
         "INVALID",
         "Speeduino v0.2",
@@ -101,10 +112,12 @@ object PinLayoutDetector {
             ?.takeIf { it.isNotBlank() }
             ?.takeIf { !it.equals("INVALID", ignoreCase = true) }
             ?.takeIf { !it.startsWith("\$invalid", ignoreCase = true) }
+        val normalizedName = cleanedName?.let(::normalizeLayoutKey)
 
         val family = when {
             rawName?.contains("Teensy", ignoreCase = true) == true -> McuFamily.TEENSY
             rawName?.contains("STM32", ignoreCase = true) == true -> McuFamily.STM32
+            normalizedName != null && normalizedName in knownStm32LayoutNames -> McuFamily.STM32
             cleanedName != null -> McuFamily.AVR
             else -> McuFamily.UNKNOWN
         }
@@ -114,5 +127,21 @@ object PinLayoutDetector {
             name = cleanedName,
             mcuFamily = family
         )
+    }
+
+    fun findIndexByName(layoutName: String): Int? {
+        val wanted = normalizeLayoutKey(layoutName)
+        return pinLayouts.indexOfFirst { candidate ->
+            candidate.isNotBlank() &&
+                !candidate.equals("INVALID", ignoreCase = true) &&
+                !candidate.startsWith("\$invalid", ignoreCase = true) &&
+                normalizeLayoutKey(candidate) == wanted
+        }.takeIf { it >= 0 }
+    }
+
+    private fun normalizeLayoutKey(value: String): String {
+        return value
+            .lowercase()
+            .filter { it.isLetterOrDigit() }
     }
 }

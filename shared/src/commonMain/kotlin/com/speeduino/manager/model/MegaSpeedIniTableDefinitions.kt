@@ -124,7 +124,13 @@ object MegaSpeedIniTableDefinitions {
         )
     }
 
-    fun parseVeTable(layout: TableLayout, valuesData: ByteArray, rpmAxisData: ByteArray, loadAxisData: ByteArray): VeTable {
+    fun parseVeTable(
+        layout: TableLayout,
+        valuesData: ByteArray,
+        rpmAxisData: ByteArray,
+        loadAxisData: ByteArray,
+        loadType: VeTable.LoadType = VeTable.LoadType.MAP,
+    ): VeTable {
         val rows = layout.metadata.valuesShape.first
         val cols = layout.metadata.valuesShape.second
         val values = List(rows) { row ->
@@ -137,7 +143,7 @@ object MegaSpeedIniTableDefinitions {
             rpmBins = parseAxis(layout.rpmAxis, rpmAxisData),
             loadBins = parseAxis(layout.loadAxis, loadAxisData),
             values = values,
-            loadType = VeTable.LoadType.MAP,
+            loadType = loadType,
         )
     }
 
@@ -170,7 +176,13 @@ object MegaSpeedIniTableDefinitions {
         )
     }
 
-    fun parseIgnitionTable(layout: TableLayout, valuesData: ByteArray, rpmAxisData: ByteArray, loadAxisData: ByteArray): IgnitionTable {
+    fun parseIgnitionTable(
+        layout: TableLayout,
+        valuesData: ByteArray,
+        rpmAxisData: ByteArray,
+        loadAxisData: ByteArray,
+        loadType: IgnitionTable.LoadType = IgnitionTable.LoadType.MAP,
+    ): IgnitionTable {
         val rows = layout.metadata.valuesShape.first
         val cols = layout.metadata.valuesShape.second
         val elementSize = dataTypeSize(layout.metadata.valueType)
@@ -189,7 +201,7 @@ object MegaSpeedIniTableDefinitions {
             rpmBins = parseAxis(layout.rpmAxis, rpmAxisData),
             loadBins = parseAxis(layout.loadAxis, loadAxisData),
             values = values,
-            loadType = IgnitionTable.LoadType.MAP,
+            loadType = loadType,
         )
     }
 
@@ -224,7 +236,13 @@ object MegaSpeedIniTableDefinitions {
         )
     }
 
-    fun parseAfrTable(layout: TableLayout, valuesData: ByteArray, rpmAxisData: ByteArray, loadAxisData: ByteArray): AfrTable {
+    fun parseAfrTable(
+        layout: TableLayout,
+        valuesData: ByteArray,
+        rpmAxisData: ByteArray,
+        loadAxisData: ByteArray,
+        loadType: AfrTable.LoadType = AfrTable.LoadType.MAP,
+    ): AfrTable {
         val rows = layout.metadata.valuesShape.first
         val cols = layout.metadata.valuesShape.second
         val values = List(rows) { row ->
@@ -237,7 +255,7 @@ object MegaSpeedIniTableDefinitions {
             rpmBins = parseAxis(layout.rpmAxis, rpmAxisData),
             loadBins = parseAxis(layout.loadAxis, loadAxisData),
             values = values,
-            loadType = AfrTable.LoadType.MAP,
+            loadType = loadType,
         )
     }
 
@@ -411,4 +429,3 @@ object MegaSpeedIniTableDefinitions {
         }
     }
 }
-
