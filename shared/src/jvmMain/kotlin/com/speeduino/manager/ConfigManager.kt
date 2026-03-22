@@ -1,11 +1,13 @@
 package com.speeduino.manager
 
-import com.speeduino.manager.model.Algorithm
-import com.speeduino.manager.model.afrTableLoadType
+import com.speeduino.manager.model.AfrTable
+import com.speeduino.manager.model.EcuFamily
 import com.speeduino.manager.model.EngineConstants
-import com.speeduino.manager.model.fuelTableLoadType
-import com.speeduino.manager.model.ignitionTableLoadType
+import com.speeduino.manager.model.IgnitionTable
+import com.speeduino.manager.model.TriggerSettings
+import com.speeduino.manager.model.VeTable
 import com.speeduino.manager.protocol.SerialCapability
+import com.speeduino.manager.sync.SessionTableParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -188,6 +190,20 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
         }
     }
 
+    private suspend fun readSessionPagesInt(sessionDir: File): Map<Int, ByteArray> {
+        return loadConfig(sessionDir).mapKeys { (page, _) -> page.toInt() and 0xFF }
+    }
+
+    private fun resolveSessionEcuFamily(sessionDir: File): EcuFamily {
+        val infoFile = File(sessionDir, "info.txt")
+        if (!infoFile.exists()) return EcuFamily.SPEEDUINO
+
+        val familyLine = infoFile.readLines().firstOrNull { it.startsWith("ECU Family:", ignoreCase = true) }
+            ?: return EcuFamily.SPEEDUINO
+        val familyValue = familyLine.substringAfter(':').trim()
+        return runCatching { EcuFamily.valueOf(familyValue) }.getOrDefault(EcuFamily.SPEEDUINO)
+    }
+
     fun deleteConfig(sessionDir: File): Boolean {
         return sessionDir.deleteRecursively()
     }
@@ -233,12 +249,18 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
         return sessionDir
     }
 
-    suspend fun loadVeTable(mapIndex: Int = 1): com.speeduino.manager.model.VeTable? = withContext(Dispatchers.IO) {
+    suspend fun loadVeTable(mapIndex: Int = 1): VeTable? = withContext(Dispatchers.IO) {
         val latestSession = listSavedConfigs().firstOrNull() ?: return@withContext null
         return@withContext loadVeTable(latestSession, mapIndex)
     }
 
-    suspend fun loadVeTable(sessionDir: File, mapIndex: Int = 1): com.speeduino.manager.model.VeTable? = withContext(Dispatchers.IO) {
+    suspend fun loadVeTable(sessionDir: File, mapIndex: Int = 1): VeTable? = withContext(Dispatchers.IO) {
+        val ecuFamily = resolveSessionEcuFamily(sessionDir)
+        if (mapIndex == 1) {
+            val pages = readSessionPagesInt(sessionDir)
+            return@withContext SessionTableParser.parseVeTable(ecuFamily, pages)
+        }
+
         val candidates = when (mapIndex) {
             2 -> listOf(7)
             3 -> listOf(8)
@@ -246,19 +268,26 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
             else -> listOf(2, 1)
         }
         val pageFile = findPageFile(sessionDir, candidates) ?: return@withContext null
-
         val data = pageFile.readBytes()
         val constants = resolveEngineConstantsModel(sessionDir)
-        val loadType = constants?.fuelTableLoadType() ?: com.speeduino.manager.model.VeTable.LoadType.MAP
-        com.speeduino.manager.model.VeTable.fromPageData(data, loadType = loadType)
+        return@withContext VeTable.fromPageData(
+            data,
+            loadType = com.speeduino.manager.tables.TableDomainFacade.resolveVeLoadType(constants),
+        )
     }
 
-    suspend fun loadIgnitionTable(mapIndex: Int = 1): com.speeduino.manager.model.IgnitionTable? = withContext(Dispatchers.IO) {
+    suspend fun loadIgnitionTable(mapIndex: Int = 1): IgnitionTable? = withContext(Dispatchers.IO) {
         val latestSession = listSavedConfigs().firstOrNull() ?: return@withContext null
         return@withContext loadIgnitionTable(latestSession, mapIndex)
     }
 
-    suspend fun loadIgnitionTable(sessionDir: File, mapIndex: Int = 1): com.speeduino.manager.model.IgnitionTable? = withContext(Dispatchers.IO) {
+    suspend fun loadIgnitionTable(sessionDir: File, mapIndex: Int = 1): IgnitionTable? = withContext(Dispatchers.IO) {
+        val ecuFamily = resolveSessionEcuFamily(sessionDir)
+        if (mapIndex == 1) {
+            val pages = readSessionPagesInt(sessionDir)
+            return@withContext SessionTableParser.parseIgnitionTable(ecuFamily, pages)
+        }
+
         val candidates = when (mapIndex) {
             2 -> listOf(10)
             3 -> listOf(11)
@@ -266,26 +295,23 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
             else -> listOf(3)
         }
         val pageFile = findPageFile(sessionDir, candidates) ?: return@withContext null
-
         val data = pageFile.readBytes()
         val constants = resolveEngineConstantsModel(sessionDir)
-        val loadType = constants?.ignitionTableLoadType() ?: com.speeduino.manager.model.IgnitionTable.LoadType.MAP
-        com.speeduino.manager.model.IgnitionTable.fromPageData(data, loadType = loadType)
+        return@withContext IgnitionTable.fromPageData(
+            data,
+            loadType = com.speeduino.manager.tables.TableDomainFacade.resolveIgnitionLoadType(constants),
+        )
     }
 
-    suspend fun loadAfrTable(): com.speeduino.manager.model.AfrTable? = withContext(Dispatchers.IO) {
+    suspend fun loadAfrTable(): AfrTable? = withContext(Dispatchers.IO) {
         val latestSession = listSavedConfigs().firstOrNull() ?: return@withContext null
         return@withContext loadAfrTable(latestSession)
     }
 
-    suspend fun loadAfrTable(sessionDir: File): com.speeduino.manager.model.AfrTable? = withContext(Dispatchers.IO) {
-        val pageFile = findPageFile(sessionDir, listOf(5)) ?: return@withContext null
-
-        val data = pageFile.readBytes()
-        val constants = resolveEngineConstantsModel(sessionDir)
-        val loadType = constants?.afrTableLoadType(isLegacyFormat = data.size >= 304)
-            ?: com.speeduino.manager.model.AfrTable.LoadType.MAP
-        com.speeduino.manager.model.AfrTable.fromPageData(data, loadType = loadType)
+    suspend fun loadAfrTable(sessionDir: File): AfrTable? = withContext(Dispatchers.IO) {
+        val ecuFamily = resolveSessionEcuFamily(sessionDir)
+        val pages = readSessionPagesInt(sessionDir)
+        SessionTableParser.parseAfrTable(ecuFamily, pages)
     }
 
     suspend fun loadEngineConstants(sessionDir: File): EngineConstants? = withContext(Dispatchers.IO) {
@@ -297,10 +323,10 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
         }
     }
 
-    suspend fun loadTriggerSettings(sessionDir: File): com.speeduino.manager.model.TriggerSettings? = withContext(Dispatchers.IO) {
-        val pageFile = findPageFile(sessionDir, listOf(com.speeduino.manager.model.TriggerSettings.PAGE_NUMBER)) ?: return@withContext null
+    suspend fun loadTriggerSettings(sessionDir: File): TriggerSettings? = withContext(Dispatchers.IO) {
+        val pageFile = findPageFile(sessionDir, listOf(TriggerSettings.PAGE_NUMBER)) ?: return@withContext null
         return@withContext try {
-            com.speeduino.manager.model.TriggerSettings.fromPageData(pageFile.readBytes())
+            TriggerSettings.fromPageData(pageFile.readBytes())
         } catch (_: Exception) {
             null
         }

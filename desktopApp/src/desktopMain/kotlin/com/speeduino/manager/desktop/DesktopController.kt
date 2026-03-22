@@ -14,19 +14,19 @@ import com.speeduino.manager.connection.SpeeduinoTcpConnection
 import com.speeduino.manager.model.AfrTable
 import com.speeduino.manager.model.EngineConstants
 import com.speeduino.manager.model.IgnitionTable
-import com.speeduino.manager.model.Page6Validator
 import com.speeduino.manager.model.TriggerSettings
 import com.speeduino.manager.model.VeTable
 import com.speeduino.manager.model.basemap.GeneratedBaseMap
 import com.speeduino.manager.model.logging.LiveLogRecorder
 import com.speeduino.manager.model.logging.LiveLogSnapshot
+import com.speeduino.manager.sync.ConfigSyncService
+import com.speeduino.manager.sync.SessionSyncPrompt
 import com.speeduino.manager.tuning.AnalyzerResult
 import com.speeduino.manager.tuning.TuningAssistantAnalyzer
 import com.speeduino.manager.tuning.TuningStrategy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +35,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.util.zip.CRC32
 
 internal class DesktopSpeeduinoController(
     private val scope: CoroutineScope
@@ -122,6 +121,7 @@ internal class DesktopSpeeduinoController(
     private var localSessionDir: File? = null
     private var ecuSessionDir: File? = null
     private val beforeAfterComparator = BeforeAfterLogComparator()
+    private val syncService = ConfigSyncService(configManager)
 
     fun connectTcp(host: String, port: Int) {
         connectInternal(SpeeduinoTcpConnection(host, port))
@@ -213,7 +213,12 @@ internal class DesktopSpeeduinoController(
                     message = "Restaurando sessão local..."
                 )
                 try {
-                    restoreConfigToEcu(prompt.localSessionDir, stopOnRangeErr = true)
+                    syncService.restoreConfigToEcu(
+                        client = client ?: throw IllegalStateException("ECU não conectada"),
+                        sessionDir = prompt.localSessionDir,
+                        stopOnRangeErr = true,
+                        restartStreamIntervalMs = _streamIntervalMs.value,
+                    )
                     ecuSessionDir = prompt.localSessionDir
                     localSessionDir = prompt.localSessionDir
                     loadTablesFromSession(prompt.localSessionDir)
@@ -493,12 +498,7 @@ internal class DesktopSpeeduinoController(
             message = "Iniciando download..."
         )
 
-        val wasStreaming = activeClient.isStreaming()
-        if (wasStreaming) {
-            activeClient.pauseLiveDataStream()
-        }
-
-        val result = configManager.downloadAllConfigs(activeClient) { current, total, message ->
+        val (result, decision) = syncService.downloadAndResolveSync(activeClient, localSessionDir) { current, total, message ->
             val progress = if (total > 0) (current * 100) / total else 0
             _configState.value = _configState.value.copy(
                 progressPercent = progress,
@@ -516,17 +516,14 @@ internal class DesktopSpeeduinoController(
                 lastSessionDir = sessionDir
             )
             val localDir = localSessionDir
-            if (localDir == null && sessionDir != null) {
-                localSessionDir = sessionDir
-                loadTablesFromSession(sessionDir)
-            } else if (localDir != null && sessionDir != null) {
-                val ecuSignature = sessionSignature(sessionDir)
-                val localSignature = sessionSignature(localDir)
-                if (ecuSignature != localSignature) {
-                    _syncPrompt.value = SyncPrompt(localDir, sessionDir)
-                } else {
-                    localSessionDir = sessionDir
-                    loadTablesFromSession(sessionDir)
+            val resolvedSession = decision.sessionDir
+            if (resolvedSession != null) {
+                localSessionDir = resolvedSession
+                loadTablesFromSession(resolvedSession)
+            } else if (localDir != null) {
+                val prompt = decision.prompt
+                if (prompt != null) {
+                    _syncPrompt.value = prompt.toDesktop()
                 }
             }
         } else {
@@ -536,161 +533,18 @@ internal class DesktopSpeeduinoController(
             )
         }
 
-        if (autoRestartStream && wasStreaming && _connectionState.value.isConnected) {
-            activeClient.startLiveDataStream(_streamIntervalMs.value)
-        }
-
         return@withContext result.success
     }
 
     private suspend fun loadTablesFromSession(sessionDir: File) {
-        _veTable.value = configManager.loadVeTable(sessionDir, 1)
-        _veTable2.value = configManager.loadVeTable(sessionDir, 2)
-        _ignitionTable.value = configManager.loadIgnitionTable(sessionDir, 1)
-        _ignitionTable2.value = configManager.loadIgnitionTable(sessionDir, 2)
-        _afrTable.value = configManager.loadAfrTable(sessionDir)
-        _engineConstants.value = configManager.loadEngineConstants(sessionDir)
-        _triggerSettings.value = configManager.loadTriggerSettings(sessionDir)
-    }
-
-    private suspend fun sessionSignature(sessionDir: File): Map<Byte, Long> {
-        val pages = runCatching { configManager.loadConfig(sessionDir) }.getOrDefault(emptyMap())
-        return pages.mapValues { (_, data) ->
-            val crc = CRC32()
-            crc.update(data)
-            crc.value
-        }
-    }
-
-    private suspend fun restoreConfigToEcu(
-        sessionDir: File,
-        skipPages: Set<Byte> = emptySet(),
-        stopOnRangeErr: Boolean = false,
-        applyTriggerFix: Boolean = false
-    ): RestoreOutcome = withContext(Dispatchers.IO) {
-        val activeClient = client ?: throw IllegalStateException("ECU não conectada")
-        val wasStreaming = activeClient.isStreaming()
-        if (wasStreaming) {
-            activeClient.pauseLiveDataStream()
-        }
-
-        val pages = configManager.loadConfig(sessionDir)
-        if (pages.isEmpty()) {
-            throw IllegalStateException("Backup sem páginas válidas")
-        }
-
-        val errors = mutableListOf<String>()
-        val warnings = mutableListOf<String>()
-        val inconsistentPages = mutableListOf<Byte>()
-        var wroteAnyPage = false
-        val restoreSkipPages = skipPages + 0.toByte()
-        var stopDueToRangeErr = false
-
-        pageLoop@ for ((pageNum, pageSize) in ConfigManager.PAGE_SIZES) {
-            if (restoreSkipPages.contains(pageNum)) {
-                val reason = when (pageNum.toInt()) {
-                    0 -> "read-only/status"
-                    else -> "compatibilidade"
-                }
-                warnings.add("Página $pageNum ignorada no restore ($reason)")
-                continue
-            }
-            val data = pages[pageNum]
-            if (data == null) {
-                warnings.add("Página $pageNum ausente no backup")
-                continue
-            }
-            if (data.size != pageSize) {
-                errors.add("Página $pageNum com tamanho inesperado (${data.size} != $pageSize)")
-                continue
-            }
-
-            var attempt = 0
-            var success = false
-            while (attempt < 3 && !success) {
-                attempt++
-                try {
-                    activeClient.writeRawPageWithoutBurn(pageNum, data)
-                    wroteAnyPage = true
-                    success = true
-                } catch (e: Exception) {
-                    val errorText = e.message ?: "Erro desconhecido"
-                    if (errorText.contains("RANGE_ERR")) {
-                        if (pageNum.toInt() == 6) {
-                            val sanitized = Page6Validator.sanitize(data)
-                            if (sanitized.changed) {
-                                try {
-                                    activeClient.writeRawPageWithoutBurn(pageNum, sanitized.data)
-                                    wroteAnyPage = true
-                                    warnings.add("Página 6 corrigida (sanitização)")
-                                    success = true
-                                    break
-                                } catch (sanitizeError: Exception) {
-                                    warnings.add("Falha ao corrigir página 6: ${sanitizeError.message}")
-                                }
-                            }
-                        }
-
-                        warnings.add("Página $pageNum rejeitada (RANGE_ERR)")
-                        if (stopOnRangeErr) {
-                            inconsistentPages.add(pageNum)
-                            stopDueToRangeErr = true
-                            break
-                        }
-                        success = true
-                        break
-                    }
-                    val message = "Falha ao gravar página $pageNum (tentativa $attempt): $errorText"
-                    if (attempt >= 3) {
-                        errors.add(message)
-                    } else {
-                        delay(400)
-                    }
-                }
-            }
-            if (stopDueToRangeErr) {
-                break@pageLoop
-            }
-            delay(150)
-        }
-
-        if (!stopDueToRangeErr && applyTriggerFix) {
-            val triggerPage = pages[TriggerSettings.PAGE_NUMBER.toByte()]
-            if (triggerPage != null) {
-                try {
-                    val triggerSettings = TriggerSettings.fromPageData(triggerPage)
-                    activeClient.writeTriggerSettings(triggerSettings, burn = false)
-                    wroteAnyPage = true
-                    warnings.add("Página ${TriggerSettings.PAGE_NUMBER} corrigida (Trigger Settings)")
-                } catch (e: Exception) {
-                    warnings.add("Falha ao corrigir página ${TriggerSettings.PAGE_NUMBER}: ${e.message}")
-                }
-            } else {
-                warnings.add("Página ${TriggerSettings.PAGE_NUMBER} ausente no backup")
-            }
-        }
-
-        if (!stopDueToRangeErr && wroteAnyPage) {
-            try {
-                activeClient.burnConfigs()
-            } catch (e: Exception) {
-                errors.add("Falha ao executar burn: ${e.message}")
-            }
-        }
-
-        if (errors.isNotEmpty()) {
-            throw IllegalStateException(errors.joinToString(" | "))
-        }
-
-        if (wasStreaming && _connectionState.value.isConnected) {
-            activeClient.startLiveDataStream(_streamIntervalMs.value)
-        }
-
-        return@withContext RestoreOutcome(
-            warnings = warnings,
-            inconsistentPages = inconsistentPages,
-            completed = !stopDueToRangeErr
-        )
+        val snapshot = syncService.loadTablesFromSession(sessionDir)
+        _veTable.value = snapshot.veTable
+        _veTable2.value = snapshot.veTable2
+        _ignitionTable.value = snapshot.ignitionTable
+        _ignitionTable2.value = snapshot.ignitionTable2
+        _afrTable.value = snapshot.afrTable
+        _engineConstants.value = snapshot.engineConstants
+        _triggerSettings.value = snapshot.triggerSettings
     }
 
     private fun ensureLocalSessionDir(): File? {
@@ -1004,4 +858,11 @@ internal class DesktopSpeeduinoController(
             }
         }
     }
+}
+
+private fun SessionSyncPrompt.toDesktop(): SyncPrompt {
+    return SyncPrompt(
+        localSessionDir = localSessionDir,
+        ecuSessionDir = ecuSessionDir,
+    )
 }

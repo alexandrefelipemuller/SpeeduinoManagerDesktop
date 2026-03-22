@@ -5,6 +5,8 @@ import com.speeduino.manager.definition.IniFieldKind
 import com.speeduino.manager.shared.Logger
 import com.speeduino.manager.connection.ConnectionTrace
 import com.speeduino.manager.connection.ISpeeduinoConnection
+import com.speeduino.manager.ecu.FirmwareConsensus
+import com.speeduino.manager.ecu.FirmwareHandshakeDomain
 import com.speeduino.manager.model.FirmwareEra
 import com.speeduino.manager.model.EngineConstants
 import com.speeduino.manager.model.Algorithm
@@ -261,13 +263,8 @@ class SpeeduinoClient(
     }
 
     private fun shouldUseLegacyHandshakeCore(): Boolean {
-        return !connection.supportsModernProtocol()
+        return FirmwareHandshakeDomain.shouldUseLegacyHandshakeCore(connection.supportsModernProtocol())
     }
-
-    private data class FirmwareConsensus(
-        val signature: String?,
-        val consensusHits: Int
-    )
 
     private suspend fun readFirmwareSignatureSamples(maxAttempts: Int = 3): List<String> {
         val samples = mutableListOf<String>()
@@ -276,7 +273,7 @@ class SpeeduinoClient(
         repeat(maxAttempts) { attempt ->
             try {
                 val raw = protocol.getFirmwareInfo()
-                val sanitized = sanitizeFirmwareSignature(raw)
+                val sanitized = FirmwareHandshakeDomain.sanitizeSignature(raw)
                 if (sanitized.isNotBlank()) {
                     samples.add(sanitized)
                 }
@@ -298,14 +295,7 @@ class SpeeduinoClient(
     }
 
     private fun resolveFirmwareConsensus(samples: List<String>): FirmwareConsensus {
-        val normalized = samples.mapNotNull { normalizeFirmwareSignature(it) }
-        if (normalized.isEmpty()) {
-            return FirmwareConsensus(signature = null, consensusHits = 0)
-        }
-
-        val grouped = normalized.groupingBy { it }.eachCount()
-        val best = grouped.maxByOrNull { it.value }
-        return FirmwareConsensus(signature = best?.key, consensusHits = best?.value ?: 0)
+        return FirmwareHandshakeDomain.resolveConsensus(samples)
     }
 
     private suspend fun readLegacyFirmwareSignatureSamples(): List<String> {
@@ -324,13 +314,13 @@ class SpeeduinoClient(
                 }
 
                 val candidates = protocol.getFirmwareInfoLegacyCandidates()
-                val selectedSample = selectBestFirmwareSample(candidates)
+                val selectedSample = FirmwareHandshakeDomain.selectBestCandidate(candidates)
                 if (!selectedSample.isNullOrBlank()) {
                     return listOf(selectedSample)
                 }
 
                 val cleanedCandidates = candidates
-                    .map(::sanitizeFirmwareSignature)
+                    .map(FirmwareHandshakeDomain::sanitizeSignature)
                     .filter(String::isNotBlank)
                 val detail = if (cleanedCandidates.isEmpty()) {
                     "no readable legacy candidates"
@@ -347,121 +337,17 @@ class SpeeduinoClient(
         throw (lastError ?: UnsupportedFirmwareException("Unable to read legacy firmware signature"))
     }
 
-    private fun sanitizeFirmwareSignature(raw: String): String {
-        val asciiOnly = raw.map { ch ->
-            when {
-                ch == '\t' || ch == '\n' || ch == '\r' -> ' '
-                ch in ' '..'~' -> ch
-                else -> ' '
-            }
-        }.joinToString("")
-
-        return asciiOnly
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
-
-    private fun normalizeFirmwareSignature(signature: String): String? {
-        val sanitized = sanitizeFirmwareSignature(signature)
-        if (sanitized.isBlank()) return null
-
-        // Canonical Speeduino signature.
-        val canonical = Regex(
-            """(?i)^speeduino\s+(\d{6})(?:\.\d+)?$"""
-        ).find(sanitized)
-        if (canonical != null) {
-            return "speeduino ${canonical.groupValues[1]}"
-        }
-
-        val canonicalAlt = Regex(
-            """(?i)^speeduino\s+(\d{4})\.(\d{2})$"""
-        ).find(sanitized)
-        if (canonicalAlt != null) {
-            return "speeduino ${canonicalAlt.groupValues[1]}${canonicalAlt.groupValues[2]}"
-        }
-
-        val ms3Canonical = Regex(
-            """(?i)^ms3\s+format\s+([0-9]{4}\.[0-9]{2}[a-z]?)$"""
-        ).find(sanitized)
-        if (ms3Canonical != null) {
-            return "MS3 Format ${ms3Canonical.groupValues[1].uppercase(Locale.US)}"
-        }
-
-        val ms2Canonical = Regex(
-            """(?i)^ms2extra\s+comms([0-9a-z]+)$"""
-        ).find(sanitized)
-        if (ms2Canonical != null) {
-            return "MS2Extra comms${ms2Canonical.groupValues[1].lowercase(Locale.US)}"
-        }
-
-        val megaSpeedCanonical = Regex(
-            """(?i)^ms2extra\s+megaspeed(?:\s+.*)?$"""
-        ).find(sanitized)
-        if (megaSpeedCanonical != null) {
-            return "MS2Extra MegaSpeed"
-        }
-
-        if (sanitized.startsWith("rusEFI", ignoreCase = true)) {
-            return sanitized
-        }
-
-        // Resilient path: tolerate corrupted prefix if we still have a "...duino" token + valid version.
-        val hasDuinoToken = Regex("""(?i)\b[a-z]*duino\b""").containsMatchIn(sanitized)
-        val v6 = Regex("""\b(20\d{4})\b""").find(sanitized)?.groupValues?.getOrNull(1)
-        if (hasDuinoToken && !v6.isNullOrBlank()) {
-            return "speeduino $v6"
-        }
-
-        val dotted = Regex("""\b(20\d{2})\.(\d{2})\b""").find(sanitized)
-        if (hasDuinoToken && dotted != null) {
-            return "speeduino ${dotted.groupValues[1]}${dotted.groupValues[2]}"
-        }
-
-        return null
-    }
-
-    private fun selectBestFirmwareSample(candidates: List<String>): String? {
-        val sanitizedCandidates = candidates
-            .map(::sanitizeFirmwareSignature)
-            .filter(String::isNotBlank)
-
-        sanitizedCandidates.firstNotNullOfOrNull(::normalizeFirmwareSignature)?.let { return it }
-
-        return sanitizedCandidates.firstOrNull(::looksLikeFirmwareSample)
-    }
-
-    private fun looksLikeFirmwareSample(signature: String): Boolean {
-        val lower = signature.lowercase(Locale.US)
-        val hasVersionDigits = signature.count(Char::isDigit) >= 4
-        return (lower.contains("speeduino") && hasVersionDigits) ||
-            lower.startsWith("ms2extra ") ||
-            lower.startsWith("ms3 format ") ||
-            lower.startsWith("rusefi ")
-    }
-
     private fun validateFirmwareConsensus(
         consensus: FirmwareConsensus,
         samples: List<String>
     ) {
-        val signature = consensus.signature
-        if (signature != null && (samples.size == 1 || consensus.consensusHits >= 2)) {
-            return
-        }
-
         connection.disconnect()
-        val errorMessage = buildString {
-            appendLine("❌ Assinatura de firmware inválida/ilegível")
-            appendLine()
-            appendLine("Amostras recebidas:")
-            samples.forEach { sample ->
-                appendLine("- $sample")
-            }
-            appendLine()
-            appendLine("Isso costuma indicar problema no canal (ruído, baud incorreto, cabo/adaptador, timeout).")
-            append("Tente reconectar e verificar a conexão.")
+        try {
+            FirmwareHandshakeDomain.validateConsensus(consensus, samples)
+        } catch (e: UnsupportedFirmwareException) {
+            Logger.e(TAG, e.message ?: "Invalid firmware consensus")
+            throw e
         }
-        Logger.e(TAG, errorMessage)
-        throw UnsupportedFirmwareException(errorMessage)
     }
 
     private suspend fun preloadPinLayoutInfoIfPossible() {
@@ -618,8 +504,7 @@ class SpeeduinoClient(
     }
 
     fun setManualFirmwareProfile(signature: String, readOnly: Boolean = true) {
-        val normalized = normalizeFirmwareSignature(signature)
-            ?: throw UnsupportedFirmwareException("Invalid manual firmware profile: $signature")
+        val normalized = FirmwareHandshakeDomain.normalizeManualProfile(signature)
         manualFirmwareProfile = normalized
         readOnlySafeModeEnabled = readOnly
         Logger.w(TAG, "Perfil manual configurado: $normalized (readOnly=$readOnly)")
