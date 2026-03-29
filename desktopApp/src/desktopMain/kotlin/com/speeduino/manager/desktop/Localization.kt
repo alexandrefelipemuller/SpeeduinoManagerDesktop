@@ -2,11 +2,7 @@ package com.speeduino.manager.desktop
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.flow.MutableStateFlow
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.Locale
-import java.util.Properties
 
 enum class AppLanguage(val code: String) {
     EN("en"),
@@ -1950,50 +1946,13 @@ object Translations {
     }
 }
 
-object AppSettings {
-    private val settingsDir: Path = Paths.get(
-        System.getProperty("user.home"),
-        ".speeduino-manager-desktop"
-    )
-    private val settingsFile: Path = settingsDir.resolve("settings.properties")
-
-    fun loadLanguage(): AppLanguage {
-        if (!Files.exists(settingsFile)) {
-            return AppLanguage.PT
-        }
-
-        val properties = Properties()
-        return try {
-            Files.newInputStream(settingsFile).use { input ->
-                properties.load(input)
-            }
-            AppLanguage.fromCode(properties.getProperty("language"))
-        } catch (_: Exception) {
-            AppLanguage.PT
-        }
-    }
-
-    fun saveLanguage(language: AppLanguage) {
-        val properties = Properties()
-        properties.setProperty("language", language.code)
-        try {
-            Files.createDirectories(settingsDir)
-            Files.newOutputStream(settingsFile).use { output ->
-                properties.store(output, "SpeeduinoManager Desktop Settings")
-            }
-        } catch (_: Exception) {
-            // Ignore settings persistence errors.
-        }
-    }
-}
-
 object LocalizationManager {
-    val language = MutableStateFlow(AppSettings.loadLanguage())
+    val language = MutableStateFlow(DesktopSettingsStore.loadLanguage())
 
     fun setLanguage(language: AppLanguage) {
         if (this.language.value == language) return
         this.language.value = language
-        AppSettings.saveLanguage(language)
+        DesktopSettingsStore.saveLanguage(language)
     }
 
     fun currentStrings(): Strings {

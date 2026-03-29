@@ -3,6 +3,8 @@ package com.speeduino.manager.desktop
 import com.speeduino.manager.ConfigManager
 import com.speeduino.manager.SpeeduinoClient
 import com.speeduino.manager.SpeeduinoLiveData
+import com.speeduino.manager.definition.IniCatalogEntry
+import com.speeduino.manager.definition.IniDefinition
 import com.speeduino.manager.compare.BeforeAfterLogComparator
 import com.speeduino.manager.compare.LogCompareException
 import com.speeduino.manager.compare.LogCompareReason
@@ -86,6 +88,24 @@ internal class DesktopSpeeduinoController(
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError = _lastError.asStateFlow()
 
+    private val _desktopSettings = MutableStateFlow(DesktopSettingsStore.loadSettings())
+    val desktopSettings = _desktopSettings.asStateFlow()
+
+    private val _availableIniDefinitions = MutableStateFlow<List<IniCatalogEntry>>(emptyList())
+    val availableIniDefinitions = _availableIniDefinitions.asStateFlow()
+
+    private val _importedIniDefinitions = MutableStateFlow<List<ImportedIniDefinition>>(emptyList())
+    val importedIniDefinitions = _importedIniDefinitions.asStateFlow()
+
+    private val _activeIniDefinition = MutableStateFlow<IniDefinition?>(null)
+    val activeIniDefinition = _activeIniDefinition.asStateFlow()
+
+    private val _activeIniCatalogEntry = MutableStateFlow<IniCatalogEntry?>(null)
+    val activeIniCatalogEntry = _activeIniCatalogEntry.asStateFlow()
+
+    private val _readOnlySafeMode = MutableStateFlow(false)
+    val readOnlySafeMode = _readOnlySafeMode.asStateFlow()
+
     private val _serialPorts = MutableStateFlow<List<SerialPortInfo>>(emptyList())
     val serialPorts = _serialPorts.asStateFlow()
 
@@ -132,6 +152,11 @@ internal class DesktopSpeeduinoController(
     private var ecuSessionDir: File? = null
     private val beforeAfterComparator = BeforeAfterLogComparator()
     private val syncService = ConfigSyncService(configManager)
+    private val definitionRepository = DesktopDefinitionRepository()
+
+    init {
+        refreshIniDefinitions()
+    }
 
     fun connectTcp(host: String, port: Int) {
         connectInternal(SpeeduinoTcpConnection(host, port))
@@ -168,11 +193,21 @@ internal class DesktopSpeeduinoController(
 
         pollingJob = scope.launch(Dispatchers.IO) {
             try {
-                client?.connect()
-                _firmwareInfo.value = client?.getFirmwareInfoCached()
-                _productString.value = client?.getProductString()
-                _connectionInfo.value = client?.getConnectionInfo()
-                client?.startLiveDataStream(_streamIntervalMs.value)
+                val activeClient = client ?: return@launch
+                val settings = _desktopSettings.value
+                if (!settings.manualFirmwareProfile.isNullOrBlank()) {
+                    activeClient.setManualFirmwareProfile(settings.manualFirmwareProfile, readOnly = true)
+                } else {
+                    activeClient.clearManualFirmwareProfile()
+                }
+
+                activeClient.connect()
+                _firmwareInfo.value = activeClient.getFirmwareInfoCached()
+                _productString.value = activeClient.getProductString()
+                _connectionInfo.value = activeClient.getConnectionInfo()
+                _readOnlySafeMode.value = activeClient.isReadOnlySafeMode()
+                applyConfiguredIniDefinition(activeClient)
+                activeClient.startLiveDataStream(_streamIntervalMs.value)
                 downloadAllConfigs(autoRestartStream = true)
             } catch (e: Exception) {
                 _lastError.value = e.message
@@ -206,6 +241,9 @@ internal class DesktopSpeeduinoController(
             _closedLoopCorrections.value = null
         }
         _syncPrompt.value = null
+        _readOnlySafeMode.value = false
+        _activeIniDefinition.value = null
+        _activeIniCatalogEntry.value = null
         if (_connectionState.value.isConnected) {
             _connectionState.value = ConnectionState(ConnectionStatus.Disconnected)
         }
@@ -270,6 +308,41 @@ internal class DesktopSpeeduinoController(
         val ports = SpeeduinoSerialConnection.listPorts()
         _serialPorts.value = ports.map { port ->
             SerialPortInfo(port, port)
+        }
+    }
+
+    fun saveDesktopSettings(settings: DesktopSettingsState) {
+        _desktopSettings.value = settings
+        DesktopSettingsStore.saveSettings(settings)
+    }
+
+    fun refreshIniDefinitions(forceCatalogRefresh: Boolean = false) {
+        scope.launch(Dispatchers.IO) {
+            val catalog = runCatching {
+                definitionRepository.loadCatalog(forceRefresh = forceCatalogRefresh)
+            }.getOrDefault(emptyList())
+            val imported = runCatching {
+                definitionRepository.listImportedDefinitions()
+            }.getOrDefault(emptyList())
+            _availableIniDefinitions.value = catalog
+            _importedIniDefinitions.value = imported
+        }
+    }
+
+    fun importIniDefinition(sourceFile: File) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val definition = definitionRepository.importDefinition(sourceFile)
+                _importedIniDefinitions.value = definitionRepository.listImportedDefinitions()
+                val updatedSettings = _desktopSettings.value.copy(
+                    iniSelectionMode = IniSelectionMode.MANUAL,
+                    iniSelectionSource = IniSelectionSource.IMPORTED,
+                    iniDefinitionId = definition.sourceName,
+                )
+                saveDesktopSettings(updatedSettings)
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
         }
     }
 
@@ -961,6 +1034,89 @@ internal class DesktopSpeeduinoController(
             } catch (e: Exception) {
                 _lastError.value = e.message
             }
+        }
+    }
+
+    private fun applyConfiguredIniDefinition(activeClient: SpeeduinoClient) {
+        val signature = activeClient.getFirmwareInfoCached()?.signature?.trim().orEmpty()
+        if (signature.isBlank()) return
+
+        val settings = _desktopSettings.value
+        if (settings.iniSelectionMode == IniSelectionMode.AUTOMATIC) {
+            val cachedDefinitionId = DesktopSettingsStore.loadCachedRemoteIniId(signature)
+            if (!cachedDefinitionId.isNullOrBlank() && definitionRepository.hasCachedDefinitionById(cachedDefinitionId)) {
+                val cachedDefinition = definitionRepository.loadCachedDefinitionById(cachedDefinitionId)
+                _activeIniCatalogEntry.value = _availableIniDefinitions.value.firstOrNull { it.id == cachedDefinitionId }
+                _activeIniDefinition.value = cachedDefinition
+                if (!activeClient.applyIniDefinition(cachedDefinition)) {
+                    _lastError.value = "Falha ao aplicar definicao .ini em cache $cachedDefinitionId"
+                }
+                return
+            }
+        }
+
+        val definition = when {
+            settings.iniSelectionMode == IniSelectionMode.MANUAL &&
+                settings.iniSelectionSource == IniSelectionSource.IMPORTED &&
+                !settings.iniDefinitionId.isNullOrBlank() -> {
+                _activeIniCatalogEntry.value = null
+                definitionRepository.loadImportedDefinition(settings.iniDefinitionId)
+            }
+
+            else -> {
+                val entry = resolveCatalogEntryForSignature(signature, settings) ?: return
+                _activeIniCatalogEntry.value = entry
+                val wasCached = definitionRepository.isDefinitionCached(entry)
+                val loaded = definitionRepository.loadDefinition(entry)
+                DesktopSettingsStore.persistCachedRemoteIniId(signature, entry.id)
+                if (!wasCached) {
+                    _availableIniDefinitions.value = runCatching {
+                        definitionRepository.loadCatalog(forceRefresh = false)
+                    }.getOrDefault(_availableIniDefinitions.value)
+                }
+                loaded
+            }
+        }
+
+        _activeIniDefinition.value = definition
+        if (!activeClient.applyIniDefinition(definition)) {
+            _lastError.value = "Falha ao aplicar definicao .ini ${definition.sourceName}"
+        }
+    }
+
+    private fun resolveCatalogEntryForSignature(
+        signature: String,
+        settings: DesktopSettingsState,
+    ): IniCatalogEntry? {
+        if (settings.iniSelectionMode == IniSelectionMode.AUTOMATIC) {
+            val cachedDefinitionId = DesktopSettingsStore.loadCachedRemoteIniId(signature)
+            if (!cachedDefinitionId.isNullOrBlank() && definitionRepository.hasCachedDefinitionById(cachedDefinitionId)) {
+                val cachedCatalogEntry = _availableIniDefinitions.value.firstOrNull { it.id == cachedDefinitionId }
+                if (cachedCatalogEntry != null) {
+                    return cachedCatalogEntry
+                }
+            }
+        }
+
+        val preferred = if (
+            settings.iniSelectionMode == IniSelectionMode.MANUAL &&
+            settings.iniSelectionSource == IniSelectionSource.CATALOG &&
+            !settings.iniDefinitionId.isNullOrBlank()
+        ) {
+            definitionRepository.loadCatalog(forceRefresh = false).firstOrNull { it.id == settings.iniDefinitionId }
+        } else {
+            definitionRepository.findMatchingEntry(signature, forceCatalogRefresh = false)
+        }
+        if (preferred != null) return preferred
+
+        return if (
+            settings.iniSelectionMode == IniSelectionMode.MANUAL &&
+            settings.iniSelectionSource == IniSelectionSource.CATALOG &&
+            !settings.iniDefinitionId.isNullOrBlank()
+        ) {
+            definitionRepository.loadCatalog(forceRefresh = true).firstOrNull { it.id == settings.iniDefinitionId }
+        } else {
+            definitionRepository.findMatchingEntry(signature, forceCatalogRefresh = true)
         }
     }
 
