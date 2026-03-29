@@ -238,7 +238,9 @@ object SessionTableParser {
 
     private fun ByteArray.sliceRange(offset: Int, length: Int): ByteArray {
         val endIndex = (offset + length).coerceAtMost(size)
-        if (offset >= endIndex) return ByteArray(0)
+        if (offset < 0 || offset >= size || endIndex <= offset) {
+            return ByteArray(0)
+        }
         return copyOfRange(offset, endIndex)
     }
 }

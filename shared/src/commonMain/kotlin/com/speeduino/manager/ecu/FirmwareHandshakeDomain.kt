@@ -128,7 +128,7 @@ object FirmwareHandshakeDomain {
     }
 }
 
-data class FirmwareDomainInfo(
+data class FirmwareInfo(
     val signature: String,
     val productString: String,
     val era: FirmwareEra,

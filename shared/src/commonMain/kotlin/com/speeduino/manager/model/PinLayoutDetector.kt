@@ -20,6 +20,10 @@ data class PinLayoutInfo(
 )
 
 object PinLayoutDetector {
+    /**
+     * Layout names known to run on STM32 that do not always contain the literal "STM32".
+     * Derived from the official Speeduino pinLayouts list in reference INIs.
+     */
     private val knownStm32LayoutNames = setOf(
         "NO2C",
         "UA4C",

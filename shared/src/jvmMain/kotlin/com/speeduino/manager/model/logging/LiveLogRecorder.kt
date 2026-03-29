@@ -63,6 +63,7 @@ class LiveLogRecorder(
      */
     fun record(liveData: SpeeduinoLiveData) {
         val session = synchronized(lock) { currentSession } ?: return
+        if (session.stoppedAtMs != null) return
 
         val entry = LiveLogEntry.fromLiveData(
             liveData = liveData,
@@ -70,6 +71,7 @@ class LiveLogRecorder(
         )
 
         synchronized(lock) {
+            if (session.stoppedAtMs != null) return
             session.append(entry, maxSamples)
             _state.update {
                 it.copy(

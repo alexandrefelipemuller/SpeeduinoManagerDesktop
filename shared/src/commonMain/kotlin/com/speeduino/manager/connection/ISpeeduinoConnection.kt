@@ -50,6 +50,11 @@ interface ISpeeduinoConnection {
     fun getConnectionInfo(): String
 
     /**
+     * Identificador curto do perfil/runtime strategy ativo, quando aplicável.
+     */
+    fun getConnectionProfileTag(): String? = null
+
+    /**
      * Indica se a conexão suporta o protocolo modern (CRC32-based)
      */
     fun supportsModernProtocol(): Boolean = true
@@ -88,6 +93,17 @@ interface ISpeeduinoConnection {
      * Limpa bytes pendentes no buffer de entrada, se suportado pelo transporte.
      */
     fun clearInputBuffer() {}
+
+    /**
+     * Permite ao transporte ajustar o perfil físico antes de uma nova tentativa de handshake.
+     * Retorna true quando houve mudança relevante (ex: reopen com outro perfil).
+     */
+    suspend fun prepareHandshakeRetry(attempt: Int): Boolean = false
+
+    /**
+     * Notifica o transporte de que o handshake inicial concluiu com sucesso.
+     */
+    fun markHandshakeSuccess() {}
 
     /**
      * Limpa recursos da conexao.

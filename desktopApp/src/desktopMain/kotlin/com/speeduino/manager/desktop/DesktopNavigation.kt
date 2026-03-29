@@ -172,6 +172,8 @@ internal fun ScreenHost(
         DesktopRoute.BaseMapWizard -> BaseMapWizardScreenDesktop(controller)
         DesktopRoute.EngineConstants -> EngineConstantsScreenDesktop(controller)
         DesktopRoute.TriggerSettings -> TriggerSettingsScreenDesktop(controller)
+        DesktopRoute.IdleControl -> IdleControlScreenDesktop(controller)
+        DesktopRoute.ClosedLoopCorrections -> ClosedLoopCorrectionsScreenDesktop(controller)
         DesktopRoute.SensorsConfig -> SensorsConfigScreenDesktop()
         DesktopRoute.EngineProtection -> EngineProtectionScreenDesktop()
         DesktopRoute.RealTimeMonitor -> RealTimeMonitorScreenDesktop(controller, liveData)
@@ -207,6 +209,8 @@ internal fun navSections(): List<NavSection> {
             routes = listOf(
                 DesktopRoute.EngineConstants,
                 DesktopRoute.TriggerSettings,
+                DesktopRoute.IdleControl,
+                DesktopRoute.ClosedLoopCorrections,
                 DesktopRoute.SensorsConfig,
                 DesktopRoute.EngineProtection
             )

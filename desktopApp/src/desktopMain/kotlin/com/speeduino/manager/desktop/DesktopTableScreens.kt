@@ -69,9 +69,16 @@ internal fun PlaceholderScreen(title: String, message: String) {
 internal fun VeTableScreenDesktop(controller: DesktopSpeeduinoController, mapIndex: Int) {
     val table by controller.veTableState(mapIndex).collectAsState()
     val strings = LocalStrings.current
+    val description = buildString {
+        append(strings["label.mapVe"])
+        table?.let {
+            append(" Load axis: ")
+            append(if (it.loadType == VeTable.LoadType.TPS) "TPS %" else "MAP kPa")
+        }
+    }
     MapTableScreen(
         title = if (mapIndex == 1) strings["route.veTable"] else strings["route.veTable2"],
-        description = strings["label.mapVe"],
+        description = description,
         table = table,
         onLoad = { controller.loadVeTable(mapIndex) },
         onSave = { controller.saveVeTable(it, mapIndex) },
@@ -79,6 +86,7 @@ internal fun VeTableScreenDesktop(controller: DesktopSpeeduinoController, mapInd
         parseValue = { it.toIntOrNull() },
         valueRange = 0..255,
         cellColor = { VeTable.getColorForValue(it).toComposeColor() },
+        loadAxisLabel = { if (it.loadType == VeTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },
@@ -92,9 +100,16 @@ internal fun VeTableScreenDesktop(controller: DesktopSpeeduinoController, mapInd
 internal fun IgnitionTableScreenDesktop(controller: DesktopSpeeduinoController, mapIndex: Int) {
     val table by controller.ignitionTableState(mapIndex).collectAsState()
     val strings = LocalStrings.current
+    val description = buildString {
+        append(strings["label.mapIgnition"])
+        table?.let {
+            append(" Load axis: ")
+            append(if (it.loadType == IgnitionTable.LoadType.TPS) "TPS %" else "MAP kPa")
+        }
+    }
     MapTableScreen(
         title = if (mapIndex == 1) strings["route.ignitionTable"] else strings["route.ignitionTable2"],
-        description = strings["label.mapIgnition"],
+        description = description,
         table = table,
         onLoad = { controller.loadIgnitionTable(mapIndex) },
         onSave = { controller.saveIgnitionTable(it, mapIndex) },
@@ -102,6 +117,7 @@ internal fun IgnitionTableScreenDesktop(controller: DesktopSpeeduinoController, 
         parseValue = { it.toIntOrNull() },
         valueRange = -40..70,
         cellColor = { IgnitionTable.getColorForValue(it).toComposeColor() },
+        loadAxisLabel = { if (it.loadType == IgnitionTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },
@@ -115,9 +131,16 @@ internal fun IgnitionTableScreenDesktop(controller: DesktopSpeeduinoController, 
 internal fun AfrTableScreenDesktop(controller: DesktopSpeeduinoController) {
     val table by controller.afrTable.collectAsState()
     val strings = LocalStrings.current
+    val description = buildString {
+        append(strings["label.mapAfr"])
+        table?.let {
+            append(" Load axis: ")
+            append(if (it.loadType == AfrTable.LoadType.TPS) "TPS %" else "MAP kPa")
+        }
+    }
     MapTableScreen(
         title = strings["route.afrTable"],
-        description = strings["label.mapAfr"],
+        description = description,
         table = table,
         onLoad = controller::loadAfrTable,
         onSave = controller::saveAfrTable,
@@ -125,6 +148,7 @@ internal fun AfrTableScreenDesktop(controller: DesktopSpeeduinoController) {
         parseValue = { parseAfrValue(it) },
         valueRange = 100..200,
         cellColor = { AfrTable.getColorForValue(it).toComposeColor() },
+        loadAxisLabel = { if (it.loadType == AfrTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },
@@ -145,6 +169,7 @@ private fun <T> MapTableScreen(
     parseValue: (String) -> Int?,
     valueRange: IntRange,
     cellColor: (Int) -> Color,
+    loadAxisLabel: (T) -> String,
     rpmBins: (T) -> List<Int>,
     loadBins: (T) -> List<Int>,
     values: (T) -> List<List<Int>>,
@@ -236,7 +261,7 @@ private fun <T> MapTableScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            HeaderCell(strings["label.loadRpm"])
+                            HeaderCell(workingTable?.let(loadAxisLabel) ?: strings["label.loadRpm"])
                             rpm.forEachIndexed { index, value ->
                                 HeaderCell(value.toString()) {
                                     editTarget = TableEditTarget.Rpm(index)

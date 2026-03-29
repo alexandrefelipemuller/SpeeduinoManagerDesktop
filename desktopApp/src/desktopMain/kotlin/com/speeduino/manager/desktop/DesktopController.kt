@@ -1,7 +1,6 @@
 package com.speeduino.manager.desktop
 
 import com.speeduino.manager.ConfigManager
-import com.speeduino.manager.FirmwareInfo
 import com.speeduino.manager.SpeeduinoClient
 import com.speeduino.manager.SpeeduinoLiveData
 import com.speeduino.manager.compare.BeforeAfterLogComparator
@@ -11,8 +10,13 @@ import com.speeduino.manager.compare.LogCompareResult
 import com.speeduino.manager.connection.ISpeeduinoConnection
 import com.speeduino.manager.connection.SpeeduinoSerialConnection
 import com.speeduino.manager.connection.SpeeduinoTcpConnection
+import com.speeduino.manager.ecu.FirmwareInfo
 import com.speeduino.manager.model.AfrTable
+import com.speeduino.manager.model.ClosedLoopCorrectionConfig
+import com.speeduino.manager.model.ClosedLoopCorrectionMapper
 import com.speeduino.manager.model.EngineConstants
+import com.speeduino.manager.model.FirmwareEra
+import com.speeduino.manager.model.IdleControlSettings
 import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.TriggerSettings
 import com.speeduino.manager.model.VeTable
@@ -63,6 +67,12 @@ internal class DesktopSpeeduinoController(
 
     private val _afrTable = MutableStateFlow<AfrTable?>(null)
     val afrTable = _afrTable.asStateFlow()
+
+    private val _idleControlSettings = MutableStateFlow<IdleControlSettings?>(null)
+    val idleControlSettings = _idleControlSettings.asStateFlow()
+
+    private val _closedLoopCorrections = MutableStateFlow<ClosedLoopCorrectionConfig?>(null)
+    val closedLoopCorrections = _closedLoopCorrections.asStateFlow()
 
     private val _firmwareInfo = MutableStateFlow<FirmwareInfo?>(null)
     val firmwareInfo = _firmwareInfo.asStateFlow()
@@ -192,6 +202,8 @@ internal class DesktopSpeeduinoController(
             _ignitionTable.value = null
             _ignitionTable2.value = null
             _afrTable.value = null
+            _idleControlSettings.value = null
+            _closedLoopCorrections.value = null
         }
         _syncPrompt.value = null
         if (_connectionState.value.isConnected) {
@@ -417,6 +429,67 @@ internal class DesktopSpeeduinoController(
         }
     }
 
+    fun loadIdleControlSettings() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val activeClient = client
+                _idleControlSettings.value = if (activeClient != null && _connectionState.value.isConnected) {
+                    activeClient.readIdleControlSettings()
+                } else {
+                    loadIdleControlSettingsFromSession(localSessionDir)
+                }
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    fun saveIdleControlSettings(settings: IdleControlSettings) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val activeClient = client
+                if (activeClient != null && _connectionState.value.isConnected) {
+                    activeClient.writeIdleControlSettings(settings)
+                }
+                updateLocalIdleControlSettings(settings)
+                _idleControlSettings.value = settings
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    fun loadClosedLoopCorrections() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val activeClient = client
+                _closedLoopCorrections.value = if (activeClient != null && _connectionState.value.isConnected) {
+                    activeClient.readClosedLoopCorrectionConfig()
+                } else {
+                    loadClosedLoopCorrectionsFromSession(localSessionDir)
+                }
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    fun saveClosedLoopCorrections(config: ClosedLoopCorrectionConfig) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val normalized = ClosedLoopCorrectionMapper.syncFromAfr(config)
+                val activeClient = client
+                if (activeClient != null && _connectionState.value.isConnected) {
+                    activeClient.writeClosedLoopCorrectionConfig(normalized)
+                }
+                updateLocalClosedLoopCorrections(normalized)
+                _closedLoopCorrections.value = normalized
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
     fun downloadAllConfigs() {
         scope.launch(Dispatchers.IO) {
             downloadAllConfigs(autoRestartStream = true)
@@ -545,6 +618,8 @@ internal class DesktopSpeeduinoController(
         _afrTable.value = snapshot.afrTable
         _engineConstants.value = snapshot.engineConstants
         _triggerSettings.value = snapshot.triggerSettings
+        _idleControlSettings.value = loadIdleControlSettingsFromSession(sessionDir)
+        _closedLoopCorrections.value = loadClosedLoopCorrectionsFromSession(sessionDir)
     }
 
     private fun ensureLocalSessionDir(): File? {
@@ -576,6 +651,36 @@ internal class DesktopSpeeduinoController(
         }
         val data = settings.toPageData(basePage)
         pageFile.writeBytes(data)
+    }
+
+    private fun updateLocalIdleControlSettings(settings: IdleControlSettings) {
+        val sessionDir = ensureLocalSessionDir() ?: return
+        val page4File = File(sessionDir, "page_${IdleControlSettings.PAGE_NUMBER}.bin")
+        val page7File = File(sessionDir, "page_${IdleControlSettings.TARGET_PAGE_NUMBER}.bin")
+        val basePage4 = if (page4File.exists() && page4File.length() >= IdleControlSettings.PAGE_LENGTH) {
+            page4File.readBytes()
+        } else {
+            ByteArray(IdleControlSettings.PAGE_LENGTH)
+        }
+        val basePage7 = if (page7File.exists() && page7File.length() >= IdleControlSettings.TARGET_PAGE_LENGTH) {
+            page7File.readBytes()
+        } else {
+            ByteArray(IdleControlSettings.TARGET_PAGE_LENGTH)
+        }
+        page4File.writeBytes(settings.applyToPage4(basePage4))
+        page7File.writeBytes(settings.applyTargetRpmToPage7(basePage7))
+    }
+
+    private fun updateLocalClosedLoopCorrections(config: ClosedLoopCorrectionConfig) {
+        val sessionDir = ensureLocalSessionDir() ?: return
+        val pageFile = File(sessionDir, "page_${ClosedLoopCorrectionMapper.PAGE_NUMBER}.bin")
+        val basePage = if (pageFile.exists() && pageFile.length() >= ClosedLoopCorrectionMapper.PAGE_SIZE) {
+            pageFile.readBytes()
+        } else {
+            ByteArray(ClosedLoopCorrectionMapper.PAGE_SIZE)
+        }
+        val era = _firmwareInfo.value?.era ?: FirmwareEra.MODERN_2025
+        pageFile.writeBytes(ClosedLoopCorrectionMapper.applyToPage(basePage, config, era))
     }
 
     private fun updateLocalVeTable(table: VeTable, mapIndex: Int = 1) {
@@ -857,6 +962,37 @@ internal class DesktopSpeeduinoController(
                 _lastError.value = e.message
             }
         }
+    }
+
+    private fun loadIdleControlSettingsFromSession(sessionDir: File?): IdleControlSettings? {
+        if (sessionDir == null) return null
+        val page4File = File(sessionDir, "page_${IdleControlSettings.PAGE_NUMBER}.bin")
+        val page7File = File(sessionDir, "page_${IdleControlSettings.TARGET_PAGE_NUMBER}.bin")
+        if (!page4File.exists() || !page7File.exists()) return null
+
+        val page4 = page4File.readBytes()
+        val page7 = page7File.readBytes()
+        if (page4.size < IdleControlSettings.PAGE_LENGTH || page7.size < IdleControlSettings.TARGET_PAGE_LENGTH) {
+            return null
+        }
+
+        return IdleControlSettings.fromPage4(page4).copy(
+            idleTargetRpm = IdleControlSettings.readTargetRpmFromPage7(page7)
+        )
+    }
+
+    private fun loadClosedLoopCorrectionsFromSession(sessionDir: File?): ClosedLoopCorrectionConfig? {
+        if (sessionDir == null) return null
+        val pageFile = File(sessionDir, "page_${ClosedLoopCorrectionMapper.PAGE_NUMBER}.bin")
+        if (!pageFile.exists()) return null
+
+        val pageData = pageFile.readBytes()
+        if (pageData.size < ClosedLoopCorrectionMapper.PAGE_SIZE) return null
+
+        val era = _firmwareInfo.value?.era ?: FirmwareEra.MODERN_2025
+        return runCatching {
+            ClosedLoopCorrectionMapper.fromPage(pageData, era)
+        }.getOrNull()
     }
 }
 

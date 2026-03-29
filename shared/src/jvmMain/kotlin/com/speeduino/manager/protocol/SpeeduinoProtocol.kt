@@ -64,6 +64,12 @@ class SpeeduinoProtocol(
             (connection.supportsModernProtocol() || connection.supportsModernProtocolFallback())
     }
 
+    private fun requireModernCommandSupport(operation: String) {
+        if (!canAttemptModernFallback()) {
+            throw Exception("Modern protocol unavailable for $operation on this connection")
+        }
+    }
+
     /**
      * Obtém informações do firmware (comando 'Q')
      */
@@ -90,6 +96,11 @@ class SpeeduinoProtocol(
         return parsed
     }
 
+    /**
+     * Consulta legacy resiliente para assinatura de firmware.
+     * Alguns ECUs/transportes devolvem melhor resposta em 'S' do que em 'Q',
+     * ou misturam bytes espúrios no mesmo burst.
+     */
     suspend fun getFirmwareInfoLegacyCandidates(): List<String> {
         val candidates = mutableListOf<String>()
         listOf('Q'.code.toByte(), 'S'.code.toByte()).forEach { cmd ->
@@ -236,9 +247,7 @@ class SpeeduinoProtocol(
     }
 
     suspend fun readTable(tableId: Int, offset: Int, length: Int, family: EcuFamily): ByteArray {
-        if (!isModernEnabled()) {
-            throw Exception("Modern protocol disabled for table read")
-        }
+        requireModernCommandSupport("table read")
 
         val response = if (family == EcuFamily.RUSEFI) {
             val payload = byteArrayOf(
@@ -310,9 +319,7 @@ class SpeeduinoProtocol(
      *          0x72  0x00    0x30    0x0000        0x007F (127 bytes)
      */
     suspend fun readLiveDataModern(length: Int): ByteArray {
-        if (!isModernEnabled()) {
-            throw Exception("Modern protocol disabled for this connection")
-        }
+        requireModernCommandSupport("modern live data")
         require(length > 0) { "Live data length inválido: $length" }
 
         val lengthLsb = (length and 0xFF).toByte()
@@ -340,9 +347,7 @@ class SpeeduinoProtocol(
     }
 
     suspend fun readRusefiOutputChannels(length: Int, offset: Int = 0): ByteArray {
-        if (!isModernEnabled()) {
-            throw Exception("Modern protocol disabled for rusEFI output channels")
-        }
+        requireModernCommandSupport("rusEFI output channels")
         require(length > 0) { "rusEFI output length inválido: $length" }
 
         val payload = byteArrayOf(
@@ -773,9 +778,7 @@ class SpeeduinoProtocol(
     }
 
     suspend fun writeTable(tableId: Int, offset: Int, data: ByteArray, family: EcuFamily) {
-        if (!isModernEnabled()) {
-            throw Exception("Modern protocol disabled for table write")
-        }
+        requireModernCommandSupport("table write")
 
         val response = if (family == EcuFamily.RUSEFI) {
             val payload = ByteArray(6 + data.size)
@@ -816,9 +819,7 @@ class SpeeduinoProtocol(
     }
 
     suspend fun burnTable(tableId: Int, family: EcuFamily) {
-        if (!isModernEnabled()) {
-            throw Exception("Modern protocol disabled for table burn")
-        }
+        requireModernCommandSupport("table burn")
 
         val response = if (family == EcuFamily.RUSEFI) {
             val payload = byteArrayOf(

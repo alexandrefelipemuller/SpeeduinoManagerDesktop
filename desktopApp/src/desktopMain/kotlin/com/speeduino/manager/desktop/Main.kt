@@ -81,7 +81,6 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.speeduino.manager.ConfigManager
-import com.speeduino.manager.FirmwareInfo
 import com.speeduino.manager.SpeeduinoLiveData
 import com.speeduino.manager.SpeeduinoClient
 import com.speeduino.manager.connection.SpeeduinoTcpConnection
@@ -92,6 +91,7 @@ import com.speeduino.manager.compare.LogCompareException
 import com.speeduino.manager.compare.LogCompareReason
 import com.speeduino.manager.compare.LogCompareResult
 import com.speeduino.manager.compare.LogHeatCellState
+import com.speeduino.manager.ecu.FirmwareInfo
 import com.speeduino.manager.model.AfrTable
 import com.speeduino.manager.model.Algorithm
 import com.speeduino.manager.model.Color as SharedColor
@@ -2423,7 +2423,7 @@ internal fun BaseMapWizardScreenDesktop(controller: DesktopSpeeduinoController) 
 }
 
 @Composable
-private fun DropdownField(
+internal fun DropdownField(
     label: String,
     value: String,
     options: List<String>,
@@ -2476,7 +2476,7 @@ private fun DropdownField(
 }
 
 @Composable
-private fun NumberField(
+internal fun NumberField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
@@ -2494,7 +2494,7 @@ private fun NumberField(
 }
 
 @Composable
-private fun ToggleField(
+internal fun ToggleField(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit

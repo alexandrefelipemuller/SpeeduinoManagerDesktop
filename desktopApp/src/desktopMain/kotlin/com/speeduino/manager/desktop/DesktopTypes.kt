@@ -65,6 +65,8 @@ internal enum class DesktopRoute(val labelKey: String, val titleKey: String) {
     BaseMapWizard("route.baseMapWizard", "route.baseMapWizard"),
     EngineConstants("route.engineConstants", "route.engineConstants"),
     TriggerSettings("route.triggerSettings", "route.triggerSettings"),
+    IdleControl("route.idleControl", "route.idleControl"),
+    ClosedLoopCorrections("route.closedLoopCorrections", "route.closedLoopCorrections"),
     SensorsConfig("route.sensorsConfig", "route.sensorsConfig"),
     EngineProtection("route.engineProtection", "route.engineProtection"),
     RealTimeMonitor("route.realTimeMonitor", "route.realTimeMonitor"),

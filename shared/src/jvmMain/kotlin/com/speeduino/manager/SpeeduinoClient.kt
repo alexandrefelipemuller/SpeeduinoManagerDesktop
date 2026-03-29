@@ -2,11 +2,12 @@ package com.speeduino.manager
 
 import com.speeduino.manager.definition.IniDefinition
 import com.speeduino.manager.definition.IniFieldKind
+import com.speeduino.manager.ecu.FirmwareConsensus
+import com.speeduino.manager.ecu.FirmwareHandshakeDomain
+import com.speeduino.manager.ecu.FirmwareInfo
 import com.speeduino.manager.shared.Logger
 import com.speeduino.manager.connection.ConnectionTrace
 import com.speeduino.manager.connection.ISpeeduinoConnection
-import com.speeduino.manager.ecu.FirmwareConsensus
-import com.speeduino.manager.ecu.FirmwareHandshakeDomain
 import com.speeduino.manager.model.FirmwareEra
 import com.speeduino.manager.model.EngineConstants
 import com.speeduino.manager.model.Algorithm
@@ -19,6 +20,8 @@ import com.speeduino.manager.model.SpeeduinoOutputChannels
 import com.speeduino.manager.model.SpeeduinoTableDefinitions
 import com.speeduino.manager.model.EngineProtectionConfig
 import com.speeduino.manager.model.EngineProtectionMapper
+import com.speeduino.manager.model.ClosedLoopCorrectionConfig
+import com.speeduino.manager.model.ClosedLoopCorrectionMapper
 import com.speeduino.manager.model.MegaSpeedIniTableDefinitions
 import com.speeduino.manager.model.Ms2TableDefinitions
 import com.speeduino.manager.model.PinLayoutDetector
@@ -31,6 +34,7 @@ import com.speeduino.manager.model.ValidationException
 import com.speeduino.manager.model.SecondarySerialConfig
 import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.AfrTable
+import com.speeduino.manager.model.IdleControlSettings
 import com.speeduino.manager.model.Ms3TableDefinitions
 import com.speeduino.manager.model.PressureCalibration
 import com.speeduino.manager.model.RusefiF407DiscoveryDefinitions
@@ -48,6 +52,7 @@ import com.speeduino.manager.model.fuelTableLoadType
 import com.speeduino.manager.model.ignitionTableLoadType
 import com.speeduino.manager.protocol.SerialCapability
 import com.speeduino.manager.protocol.SpeeduinoProtocol
+import com.speeduino.manager.tables.TableDomainFacade
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,6 +89,9 @@ class SpeeduinoClient(
     companion object {
         private const val TAG = "SpeeduinoClient"
         private const val LIVE_DATA_FAULT_REPORT_INTERVAL_MS = 30_000L
+        private const val LIVE_DATA_FAULT_CONSECUTIVE_THRESHOLD = 3
+        private const val LIVE_DATA_FAULT_RECOVERY_INTERVAL_MS = 10_000L
+        private const val LIVE_DATA_STREAM_WARMUP_MS = 10_000L
         private const val LIVE_STREAM_RECOVERABLE_TIMEOUT_LIMIT = 3
         private val PARTIAL_TIMEOUT_REGEX = Regex("""Timeout: expected (\d+) bytes, received (\d+)""")
     }
@@ -107,8 +115,12 @@ class SpeeduinoClient(
     private var pinLayoutInfo: PinLayoutInfo? = null
     private val connectMutex = Mutex()
     private var liveDataSampleCounter = 0
+    private var consecutiveFaultyLiveDataSamples = 0
     private var manualFirmwareProfile: String? = null
     private var readOnlySafeModeEnabled = false
+    private var lastLiveDataStreamStartedAtMs = 0L
+    private var pendingLiveDataRecoveryReason: String? = null
+    private var lastFaultRecoveryAtMs = 0L
 
     init {
         connection.setOnConnectionStateChanged(onConnectionStateChanged)
@@ -182,10 +194,7 @@ class SpeeduinoClient(
             // 3. Validar compatibilidade e carregar definitions
             try {
                 if (manualFirmwareProfile == null) {
-                    validateFirmwareConsensus(
-                        firmwareConsensus ?: resolveFirmwareConsensus(firmwareSamples),
-                        firmwareSamples
-                    )
+                    validateFirmwareConsensus(firmwareConsensus, firmwareSamples)
                 }
                 val resolvedDefinition = EcuDefinitionRegistry.resolve(
                     signature = effectiveFirmwareSignature,
@@ -230,6 +239,8 @@ class SpeeduinoClient(
                 if (readOnlySafeModeEnabled) {
                     Logger.w(TAG, "⚠️ Safe mode read-only habilitado (perfil manual)")
                 }
+
+                connection.markHandshakeSuccess()
 
             } catch (e: UnsupportedFirmwareException) {
                 // Desconectar se firmware incompatível
@@ -305,13 +316,14 @@ class SpeeduinoClient(
 
         repeat(maxAttempts) { attempt ->
             try {
-                connection.clearInputBuffer()
                 if (attempt > 0) {
+                    connection.prepareHandshakeRetry(attempt)
                     Logger.w(TAG, "Retry legacy firmware handshake (${attempt + 1}/$maxAttempts)")
                     if (retryDelayMs > 0L) {
                         delay(retryDelayMs)
                     }
                 }
+                connection.clearInputBuffer()
 
                 val candidates = protocol.getFirmwareInfoLegacyCandidates()
                 val selectedSample = FirmwareHandshakeDomain.selectBestCandidate(candidates)
@@ -336,17 +348,16 @@ class SpeeduinoClient(
 
         throw (lastError ?: UnsupportedFirmwareException("Unable to read legacy firmware signature"))
     }
-
     private fun validateFirmwareConsensus(
         consensus: FirmwareConsensus,
         samples: List<String>
     ) {
-        connection.disconnect()
         try {
             FirmwareHandshakeDomain.validateConsensus(consensus, samples)
-        } catch (e: UnsupportedFirmwareException) {
-            Logger.e(TAG, e.message ?: "Invalid firmware consensus")
-            throw e
+        } catch (error: UnsupportedFirmwareException) {
+            connection.disconnect()
+            Logger.e(TAG, error.message.orEmpty())
+            throw error
         }
     }
 
@@ -554,6 +565,8 @@ class SpeeduinoClient(
      * Obtém informações da conexão
      */
     fun getConnectionInfo(): String = connection.getConnectionInfo()
+
+    fun getConnectionProfileTag(): String? = connection.getConnectionProfileTag()
 
     // ==================== Protocol Commands ====================
 
@@ -780,6 +793,40 @@ class SpeeduinoClient(
     }
 
     /**
+     * Lê as configurações básicas de controle de marcha lenta do Speeduino.
+     */
+    suspend fun readIdleControlSettings(): IdleControlSettings = withContext(Dispatchers.IO) {
+        if (firmwareInfo?.family != EcuFamily.SPEEDUINO) {
+            throw UnsupportedOperationException("Controle de marcha lenta simplificado disponível apenas para Speeduino")
+        }
+        val basePage = readPage(pageNum = IdleControlSettings.PAGE_NUMBER, offset = 0, length = IdleControlSettings.PAGE_LENGTH)
+        val targetPage = readPage(pageNum = IdleControlSettings.TARGET_PAGE_NUMBER, offset = 0, length = IdleControlSettings.TARGET_PAGE_LENGTH)
+        IdleControlSettings.fromPage4(basePage).copy(
+            idleTargetRpm = IdleControlSettings.readTargetRpmFromPage7(targetPage),
+        )
+    }
+
+    /**
+     * Grava as configurações básicas de controle de marcha lenta no Speeduino.
+     */
+    suspend fun writeIdleControlSettings(settings: IdleControlSettings, burn: Boolean = true) = withContext(Dispatchers.IO) {
+        ensureWritable("writeIdleControlSettings")
+        if (firmwareInfo?.family != EcuFamily.SPEEDUINO) {
+            throw UnsupportedOperationException("Controle de marcha lenta simplificado disponível apenas para Speeduino")
+        }
+        val basePage = readPage(pageNum = IdleControlSettings.PAGE_NUMBER, offset = 0, length = IdleControlSettings.PAGE_LENGTH)
+        val targetPage = readPage(pageNum = IdleControlSettings.TARGET_PAGE_NUMBER, offset = 0, length = IdleControlSettings.TARGET_PAGE_LENGTH)
+        val page4Data = settings.applyToPage4(basePage)
+        val page7Data = settings.applyTargetRpmToPage7(targetPage)
+        protocol.writePage(pageNum = IdleControlSettings.PAGE_NUMBER.toByte(), offset = 0, data = page4Data)
+        protocol.writePage(pageNum = IdleControlSettings.TARGET_PAGE_NUMBER.toByte(), offset = 0, data = page7Data)
+        if (burn) {
+            delay(300)
+            protocol.burnConfig()
+        }
+    }
+
+    /**
      * Lê Trigger Settings (Page 4 - 128 bytes)
      */
     suspend fun readTriggerSettings(): TriggerSettings {
@@ -876,6 +923,23 @@ class SpeeduinoClient(
     }
 
     /**
+     * Lê correções AFR/O2 em malha fechada (Page 6)
+     */
+    suspend fun readClosedLoopCorrectionConfig(): ClosedLoopCorrectionConfig {
+        val era = firmwareInfo?.era ?: FirmwareEra.MODERN_2025
+        if (!ClosedLoopCorrectionMapper.isSupported(era)) {
+            throw UnsupportedOperationException("Correcoes AFR/O2 requerem firmware Speeduino moderno")
+        }
+        Logger.d(TAG, "Lendo Closed Loop Corrections (Page 6)...")
+        val pageData = readPage(
+            pageNum = ClosedLoopCorrectionMapper.PAGE_NUMBER.toByte(),
+            offset = 0,
+            length = ClosedLoopCorrectionMapper.PAGE_SIZE
+        )
+        return ClosedLoopCorrectionMapper.fromPage(pageData, era)
+    }
+
+    /**
      * Grava Engine Protection/Limiters (Page 6) + Burn
      */
     suspend fun writeEngineProtectionConfig(config: EngineProtectionConfig, burn: Boolean = true) {
@@ -902,6 +966,36 @@ class SpeeduinoClient(
             Logger.d(TAG, "Engine Protection gravado e burn executado")
         } else {
             Logger.d(TAG, "Engine Protection gravado (sem burn)")
+        }
+    }
+
+    /**
+     * Grava correções AFR/O2 em malha fechada (Page 6) + Burn
+     */
+    suspend fun writeClosedLoopCorrectionConfig(config: ClosedLoopCorrectionConfig, burn: Boolean = true) {
+        ensureWritable("writeClosedLoopCorrectionConfig")
+        val era = firmwareInfo?.era ?: FirmwareEra.MODERN_2025
+        if (!ClosedLoopCorrectionMapper.isSupported(era)) {
+            throw UnsupportedOperationException("Correcoes AFR/O2 requerem firmware Speeduino moderno")
+        }
+        Logger.d(TAG, "Gravando Closed Loop Corrections (Page 6)...")
+        val basePage = readPage(
+            pageNum = ClosedLoopCorrectionMapper.PAGE_NUMBER.toByte(),
+            offset = 0,
+            length = ClosedLoopCorrectionMapper.PAGE_SIZE
+        )
+        val updatedData = ClosedLoopCorrectionMapper.applyToPage(basePage, config, era)
+        protocol.writePage(
+            pageNum = ClosedLoopCorrectionMapper.PAGE_NUMBER.toByte(),
+            offset = 0,
+            data = updatedData
+        )
+        if (burn) {
+            delay(300)
+            protocol.burnConfig()
+            Logger.d(TAG, "Closed Loop Corrections gravadas e burn executado")
+        } else {
+            Logger.d(TAG, "Closed Loop Corrections gravadas (sem burn)")
         }
     }
 
@@ -1024,7 +1118,10 @@ class SpeeduinoClient(
             )
         }
 
-        Logger.d(TAG, "Lendo VE Table $mapIndex (Page ${metadata.page}, offset ${metadata.offset}, ${metadata.totalSize} bytes)...")
+        Logger.d(
+            TAG,
+            "Lendo VE Table $mapIndex (Page ${metadata.page}, offset ${metadata.offset}, ${metadata.totalSize} bytes)..."
+        )
         val pageData = readPage(
             pageNum = metadata.page.toByte(),
             offset = metadata.offset,
@@ -1074,7 +1171,10 @@ class SpeeduinoClient(
             )
         }
 
-        Logger.d(TAG, "Lendo Ignition Table $mapIndex (Page ${metadata.page}, offset ${metadata.offset}, ${metadata.totalSize} bytes)...")
+        Logger.d(
+            TAG,
+            "Lendo Ignition Table $mapIndex (Page ${metadata.page}, offset ${metadata.offset}, ${metadata.totalSize} bytes)..."
+        )
         val pageData = readPage(
             pageNum = metadata.page.toByte(),
             offset = metadata.offset,
@@ -1220,26 +1320,7 @@ class SpeeduinoClient(
         }
         Logger.d(TAG, "Gravando VE Table $mapIndex (Page ${metadata.page})...")
 
-        val validator = TableValidator(metadata)
-        val validationResult = validator.validateBeforeWrite(veTable)
-
-        if (!validationResult.isValid) {
-            Logger.e(TAG, "❌ VE Table validation FAILED!")
-            throw ValidationException(validationResult)
-        }
-
-        if (validationResult.warnings.isNotEmpty()) {
-            Logger.w(TAG, "⚠️  VE Table has ${validationResult.warnings.size} warnings - proceeding anyway")
-        }
-
-        val storageFormat = VeTable.StorageFormat.fromTotalSize(metadata.totalSize)
-
-        // 2. Convert model to bytes usando formato correto
-        val pageData = if (storageFormat != null) {
-            veTable.toByteArray(storageFormat)
-        } else {
-            veTable.toByteArray()
-        }
+        val pageData = TableDomainFacade.prepareVeWrite(metadata, veTable).data
         Logger.d(TAG, "VE Table serializada: ${pageData.size} bytes")
 
         // 3. Write to ECU using dynamic page number (fire-and-forget, não aguarda resposta)
@@ -1297,29 +1378,7 @@ class SpeeduinoClient(
         }
         Logger.d(TAG, "Gravando Ignition Table $mapIndex (Page ${metadata.page})...")
 
-        val validator = TableValidator(metadata)
-        val validationResult = validator.validateBeforeWrite(ignitionTable)
-
-        if (!validationResult.isValid) {
-            Logger.e(TAG, "❌ Ignition Table validation FAILED!")
-            Logger.e(TAG, "🚨 NOT writing to ECU - dangerous ignition advance detected!")
-            throw ValidationException(validationResult)
-        }
-
-        if (validationResult.warnings.isNotEmpty()) {
-            Logger.w(TAG, "⚠️  Ignition Table has ${validationResult.warnings.size} warnings")
-            validationResult.warnings.forEach { Logger.w(TAG, "    - $it") }
-            Logger.w(TAG, "⚠️  Proceeding with write - MONITOR ENGINE FOR KNOCK!")
-        }
-
-        val storageFormat = IgnitionTable.StorageFormat.fromTotalSize(metadata.totalSize)
-
-        // 2. Convert model to bytes usando formato correto
-        val pageData = if (storageFormat != null) {
-            ignitionTable.toByteArray(storageFormat)
-        } else {
-            ignitionTable.toByteArray()
-        }
+        val pageData = TableDomainFacade.prepareIgnitionWrite(metadata, ignitionTable).data
         Logger.d(TAG, "Ignition Table serializada: ${pageData.size} bytes")
 
         // 3. Write to ECU (fire-and-forget, não aguarda resposta)
@@ -1682,14 +1741,7 @@ class SpeeduinoClient(
 
         Logger.d(TAG, "Gravando AFR Table (Page ${metadata.page})...")
 
-        val storageFormat = AfrTable.StorageFormat.fromTotalSize(metadata.totalSize)
-
-        // Convert model to bytes (respecting firmware layout)
-        val pageData = if (storageFormat != null) {
-            afrTable.toByteArray(storageFormat)
-        } else {
-            afrTable.toByteArray()
-        }
+        val pageData = TableDomainFacade.prepareAfrWrite(metadata, afrTable).data
         Logger.d(TAG, "AFR Table serializada: ${pageData.size} bytes")
 
         // Write to ECU using dynamic page number
@@ -1944,16 +1996,19 @@ class SpeeduinoClient(
 
     /**
      * Lê dados em tempo real
-     * Tenta Modern Protocol ('n') primeiro, fallback para Legacy ('A') se falhar
+     * Em conexões legacy-first (USB/Bluetooth), tenta Legacy primeiro e Modern como fallback.
+     * Nas demais, tenta Modern primeiro e faz fallback para Legacy.
      */
     suspend fun readLiveData(): SpeeduinoLiveData = withContext(Dispatchers.IO) {
         val ecuFamily = firmwareInfo?.family ?: EcuFamily.UNKNOWN
         val outputSize = ecuDefinition?.runtime?.blockSize ?: tableDefinitions?.ochBlockSize ?: 0
         val isModernEra = firmwareInfo?.era?.isModern() == true
-        val canUseModern = ecuFamily == EcuFamily.SPEEDUINO &&
-            connection.supportsModernProtocol() &&
+        val canTryModern = ecuFamily == EcuFamily.SPEEDUINO &&
+            (connection.supportsModernProtocol() || connection.supportsModernProtocolFallback()) &&
             outputSize > 0 &&
             isModernEra
+        val preferLegacyFirst = connection.prefersLegacyProtocol()
+        var usedModernRead = false
 
         val data = if (ecuFamily == EcuFamily.RUSEFI) {
             try {
@@ -1964,7 +2019,42 @@ class SpeeduinoClient(
                 }
                 throw e
             }
-        } else if (canUseModern) {
+        } else if (canTryModern && preferLegacyFirst) {
+            try {
+                protocol.readLiveData(outputSize.takeIf { it > 0 } ?: 128)
+            } catch (legacyError: Exception) {
+                if (!connection.isConnected()) {
+                    Logger.e(TAG, "Conexão perdida durante fallback para modern live data")
+                    throw Exception("Não conectado")
+                }
+
+                Logger.w(TAG, "Legacy live data falhou, tentando modern fallback: ${legacyError.message}")
+                connection.clearInputBuffer()
+                val maxAttempts = 2
+                var attempt = 0
+                var modernData: ByteArray? = null
+                var lastModernError: Exception? = null
+
+                while (attempt < maxAttempts && modernData == null) {
+                    attempt++
+                    try {
+                        modernData = protocol.readLiveDataModern(outputSize)
+                        usedModernRead = true
+                    } catch (modernError: Exception) {
+                        lastModernError = modernError
+                        Logger.w(TAG, "Modern fallback falhou (tentativa $attempt/$maxAttempts): ${modernError.message}")
+                        if (attempt < maxAttempts) {
+                            connection.clearInputBuffer()
+                            delay(25)
+                        }
+                    }
+                }
+
+                modernData ?: throw Exception(
+                    "Legacy live data falhou (${legacyError.message}); modern fallback também falhou (${lastModernError?.message})"
+                )
+            }
+        } else if (canTryModern) {
             var lastError: Exception? = null
             val maxAttempts = 2
             var attempt = 0
@@ -1975,6 +2065,7 @@ class SpeeduinoClient(
                 try {
                     // ✅ Tenta Modern Protocol primeiro (Speeduino 2020+)
                     modernData = protocol.readLiveDataModern(outputSize)
+                    usedModernRead = true
                 } catch (e: Exception) {
                     if (!connection.isConnected()) {
                         Logger.e(TAG, "Conexão perdida durante leitura de live data")
@@ -2002,13 +2093,13 @@ class SpeeduinoClient(
         }
 
         if (outputSize > 0 && data.size != outputSize) {
-            val mode = if (canUseModern) "modern_or_fallback" else "legacy"
+            val mode = if (canTryModern) "modern_or_fallback" else "legacy"
             val message = "oc_mismatch family=${ecuFamily.name} mode=$mode expected=$outputSize actual=${data.size}"
             Logger.w(TAG, "⚠ $message")
             ConnectionTrace.info("live_data", message)
         }
 
-        val isModernData = canUseModern && data.size == outputSize
+        val isModernData = usedModernRead && data.size == outputSize
         val liveData = when {
             ecuFamily == EcuFamily.RUSEFI && data.size >= outputSize && outputSize > 0 -> {
                 RusefiLiveDataParser.fromOutputChannels(data)
@@ -2051,10 +2142,16 @@ class SpeeduinoClient(
         // Cancelar job anterior se existir
         streamJob?.cancel()
         _isStreaming = true
+        lastLiveDataStreamStartedAtMs = System.currentTimeMillis()
+        consecutiveFaultyLiveDataSamples = 0
+        pendingLiveDataRecoveryReason = null
 
         streamJob = scope.launch {
+            val intervalNs = intervalMs.coerceAtLeast(1L) * 1_000_000L
+            var nextTickNs = System.nanoTime()
             var packetCount = 0
             var recoverableReadTimeouts = 0
+            var restartReason: String? = null
             while (_isStreaming && connection.isConnected()) {
                 try {
                     val liveData = readLiveData()
@@ -2062,12 +2159,29 @@ class SpeeduinoClient(
                     onDataReceived(liveData)
                     packetCount++
 
+                    val recoveryReason = consumePendingLiveDataRecoveryReason()
+                    if (recoveryReason != null) {
+                        val reason = recoveryReason
+                        restartReason = reason
+                        Logger.w(TAG, "Reiniciando stream após amostras inválidas: $reason")
+                        ConnectionTrace.info("live_data", "recovering stream after $reason")
+                        connection.clearInputBuffer()
+                        break
+                    }
+
                     // Log a cada 50 pacotes (~5 segundos com intervalo de 100ms)
                     if (packetCount % 50 == 0) {
                         Logger.d(TAG, "Stream ativo: $packetCount pacotes recebidos (RPM: ${liveData.rpm})")
                     }
 
-                    delay(intervalMs)
+                    nextTickNs += intervalNs
+                    val remainingNs = nextTickNs - System.nanoTime()
+                    if (remainingNs > 0L) {
+                        delay(remainingNs / 1_000_000L)
+                    } else {
+                        // Se a leitura ficou mais lenta que o alvo, realinha o relógio sem acumular drift.
+                        nextTickNs = System.nanoTime()
+                    }
                 } catch (_: CancellationException) {
                     // Stream cancelado por troca de fluxo (pause/restart/disconnect).
                     // Isso não é erro de protocolo/transporte.
@@ -2120,6 +2234,13 @@ class SpeeduinoClient(
             }
             Logger.d(TAG, "Stream finalizado (total: $packetCount pacotes)")
             _isStreaming = false
+            if (streamJob === coroutineContext[Job]) {
+                streamJob = null
+            }
+            if (restartReason != null && connection.isConnected()) {
+                delay(150)
+                startLiveDataStream(intervalMs)
+            }
         }
     }
 
@@ -2139,6 +2260,7 @@ class SpeeduinoClient(
     fun stopLiveDataStream() {
         Logger.d(TAG, "Parando live data stream...")
         _isStreaming = false
+        pendingLiveDataRecoveryReason = null
         streamJob?.cancel()
         streamJob = null
     }
@@ -2148,7 +2270,7 @@ class SpeeduinoClient(
             try {
                 readEngineConstants()
             } catch (e: Exception) {
-                Logger.w(TAG, "Nao foi possivel ler Engine Constants para detectar loadType: ${e.message}")
+                Logger.w(TAG, "NÇœo foi possÇðvel ler Engine Constants para detectar loadType: ${e.message}")
                 null
             }
         }
@@ -2186,40 +2308,29 @@ class SpeeduinoClient(
     }
 
     private suspend fun resolveVeLoadType(mapIndex: Int = 1): VeTable.LoadType {
+        val engineConstants = resolveEngineConstantsOrNull()
         if (mapIndex > 1) {
             val algorithmBits = readIniFieldNumericValue("fuel${mapIndex}Algorithm")
-            if (algorithmBits != null) {
-                return if (Algorithm.fromBits(algorithmBits and 0x07) == Algorithm.ALPHA_N) {
-                    VeTable.LoadType.TPS
-                } else {
-                    VeTable.LoadType.MAP
-                }
-            }
+            return TableDomainFacade.resolveVeLoadType(engineConstants, algorithmBits)
         }
-        return resolveEngineConstantsOrNull()?.fuelTableLoadType() ?: VeTable.LoadType.MAP
+        return TableDomainFacade.resolveVeLoadType(engineConstants)
     }
 
     private suspend fun resolveIgnitionLoadType(mapIndex: Int = 1): IgnitionTable.LoadType {
+        val engineConstants = resolveEngineConstantsOrNull()
         if (mapIndex > 1) {
             val algorithmBits = readIniFieldNumericValue("spark${mapIndex}Algorithm")
-            if (algorithmBits != null) {
-                return if (Algorithm.fromBits(algorithmBits and 0x07) == Algorithm.ALPHA_N) {
-                    IgnitionTable.LoadType.TPS
-                } else {
-                    IgnitionTable.LoadType.MAP
-                }
-            }
+            return TableDomainFacade.resolveIgnitionLoadType(engineConstants, algorithmBits)
         }
-        return resolveEngineConstantsOrNull()?.ignitionTableLoadType() ?: IgnitionTable.LoadType.MAP
+        return TableDomainFacade.resolveIgnitionLoadType(engineConstants)
     }
 
     private suspend fun resolveAfrLoadType(isLegacyFormat: Boolean = false): AfrTable.LoadType {
-        return resolveEngineConstantsOrNull()?.afrTableLoadType(isLegacyFormat) ?: AfrTable.LoadType.MAP
+        return TableDomainFacade.resolveAfrLoadType(resolveEngineConstantsOrNull(), isLegacyFormat)
     }
 
     private suspend fun isMapLoad(): Boolean {
-        val constants = resolveEngineConstantsOrNull()
-        return constants?.algorithm != Algorithm.ALPHA_N
+        return TableDomainFacade.isMapLoad(resolveEngineConstantsOrNull())
     }
 
     private fun findIniFieldByName(name: String) =
@@ -2268,30 +2379,14 @@ class SpeeduinoClient(
     ): TableMetadata {
         val field = tableNames.firstNotNullOfOrNull { findIniFieldByName(it) } ?: return fallback
         val shape = field.shape
-        val rows = shape?.rows ?: fallback.valuesShape.first
-        val cols = shape?.columns ?: fallback.valuesShape.second
-        val valueSize = when (field.dataType.trim().uppercase(Locale.US)) {
-            "U16", "S16" -> 2
-            else -> 1
-        }
-        val valuesBytes = rows * cols * valueSize
-        val axisBytes = if (rows == 16 && cols == 16) 32 else (rows + cols) * valueSize
-        val totalSize = valuesBytes + axisBytes
-        return fallback.copy(
-            name = displayName,
-            page = field.page ?: fallback.page,
-            offset = field.offset ?: fallback.offset,
-            totalSize = totalSize,
-            valuesShape = rows to cols,
-            valuesOffset = 0,
-            rpmBinsOffset = valuesBytes,
-            loadBinsOffset = valuesBytes + (cols * valueSize),
-            valueType = when (field.dataType.trim().uppercase(Locale.US)) {
-                "S08" -> com.speeduino.manager.model.DataType.S08
-                "U16" -> com.speeduino.manager.model.DataType.U16
-                "S16" -> com.speeduino.manager.model.DataType.S16
-                else -> com.speeduino.manager.model.DataType.U08
-            }
+        return TableDomainFacade.resolveSpeeduinoTableMetadata(
+            fieldDataType = field.dataType,
+            fieldPage = field.page,
+            fieldOffset = field.offset,
+            fieldRows = shape?.rows,
+            fieldColumns = shape?.columns,
+            fallback = fallback,
+            displayName = displayName,
         )
     }
 
@@ -2355,6 +2450,7 @@ class SpeeduinoClient(
         }
 
         streamJob = null
+        pendingLiveDataRecoveryReason = null
         connection.clearInputBuffer()
     }
 
@@ -2419,25 +2515,65 @@ class SpeeduinoClient(
         if (!com.speeduino.manager.connection.ConnectionTrace.enabled) {
             return
         }
+        val now = System.currentTimeMillis()
+        val (shouldReport, score) = shouldReportLiveDataIssue(liveData)
+        if (!shouldReport || isWithinLiveDataWarmupWindow(now)) {
+            consecutiveFaultyLiveDataSamples = 0
+            return
+        }
+
+        consecutiveFaultyLiveDataSamples += 1
+        if (consecutiveFaultyLiveDataSamples < LIVE_DATA_FAULT_CONSECUTIVE_THRESHOLD) {
+            return
+        }
+
+        maybeScheduleLiveDataRecovery(now, score)
+
         liveDataSampleCounter += 1
         if (liveDataSampleCounter % 25 != 0) {
             return
         }
-
-        val (shouldReport, score) = shouldReportLiveDataIssue(liveData)
-        if (!shouldReport) {
-            return
-        }
-
-        val now = System.currentTimeMillis()
         if (now - lastFaultSampleAtMs < LIVE_DATA_FAULT_REPORT_INTERVAL_MS) {
             return
         }
         lastFaultSampleAtMs = now
 
         val hex = data.joinToString(" ") { "%02X".format(it) }
-        val message = buildLiveDataFaultMessage(data, liveData, isModern, score, hex)
+        val message = buildLiveDataFaultMessage(
+            data = data,
+            liveData = liveData,
+            isModern = isModern,
+            score = score,
+            hexPayload = hex,
+            faultCount = consecutiveFaultyLiveDataSamples
+        )
         com.speeduino.manager.connection.ConnectionTrace.info("live_data", message)
+    }
+
+    private fun isWithinLiveDataWarmupWindow(now: Long = System.currentTimeMillis()): Boolean {
+        val startedAt = lastLiveDataStreamStartedAtMs
+        return startedAt <= 0L || now - startedAt < LIVE_DATA_STREAM_WARMUP_MS
+    }
+
+    private fun maybeScheduleLiveDataRecovery(now: Long, score: Int) {
+        if (!_isStreaming || !connection.isConnected()) {
+            return
+        }
+        if (pendingLiveDataRecoveryReason != null) {
+            return
+        }
+        if (now - lastFaultRecoveryAtMs < LIVE_DATA_FAULT_RECOVERY_INTERVAL_MS) {
+            return
+        }
+        lastFaultRecoveryAtMs = now
+        pendingLiveDataRecoveryReason =
+            "faulty_sample score=$score count=$consecutiveFaultyLiveDataSamples"
+    }
+
+    private fun consumePendingLiveDataRecoveryReason(): String? {
+        val pending = pendingLiveDataRecoveryReason
+        pendingLiveDataRecoveryReason = null
+        return pending
     }
 
     private fun shouldReportLiveDataIssue(liveData: SpeeduinoLiveData): Pair<Boolean, Int> {
@@ -2450,11 +2586,13 @@ class SpeeduinoClient(
         liveData: SpeeduinoLiveData,
         isModern: Boolean,
         score: Int,
-        hexPayload: String
+        hexPayload: String,
+        faultCount: Int
     ): String {
         val batteryStr = String.format(Locale.US, "%.1f", liveData.batteryVoltage)
         return buildString {
             append("faulty sample score=$score")
+            append(" count=$faultCount")
             append(" ${if (isModern) "modern" else "legacy"}")
             append(" len=${data.size}")
             append(" rpm=${liveData.rpm}")
@@ -2466,21 +2604,3 @@ class SpeeduinoClient(
         }
     }
 }
-
-/**
- * Data class para dados em tempo real do Speeduino
- */
-data class FirmwareInfo(
-    val signature: String,
-    val productString: String,
-    val era: FirmwareEra,
-    val family: EcuFamily = EcuFamily.SPEEDUINO,
-    val capabilities: EcuCapabilities = EcuCapabilities(
-        supportsModernProtocol = true,
-        supportsLegacyProtocol = true,
-        supportsPageRead = true,
-        supportsPageWrite = true,
-        supportsBurn = true,
-        supportsLiveData = true
-    )
-)
