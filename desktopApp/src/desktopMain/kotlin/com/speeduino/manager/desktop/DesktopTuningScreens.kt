@@ -45,6 +45,10 @@ import com.speeduino.manager.model.SecondarySerialConfig
 import com.speeduino.manager.model.SecondarySerialProtocol
 import com.speeduino.manager.tuning.CellRef
 import com.speeduino.manager.tuning.TuningStrategy
+import com.speeduino.manager.desktop.feature.configs.EngineConstantsScreenDesktop
+import com.speeduino.manager.desktop.feature.configs.EngineProtectionScreenDesktop
+import com.speeduino.manager.desktop.ui.DropdownField
+import com.speeduino.manager.desktop.ui.InfoRow
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File

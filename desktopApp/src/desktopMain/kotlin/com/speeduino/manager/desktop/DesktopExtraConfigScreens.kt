@@ -26,6 +26,9 @@ import com.speeduino.manager.model.ClosedLoopSensorType
 import com.speeduino.manager.model.ClosedLoopStrategy
 import com.speeduino.manager.model.IdleControlMode
 import com.speeduino.manager.model.IdleControlSettings
+import com.speeduino.manager.desktop.ui.DropdownField
+import com.speeduino.manager.desktop.ui.NumberField
+import com.speeduino.manager.desktop.ui.ToggleField
 
 @Composable
 internal fun IdleControlScreenDesktop(controller: DesktopSpeeduinoController) {

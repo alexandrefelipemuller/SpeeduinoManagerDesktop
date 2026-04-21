@@ -1055,6 +1055,13 @@ internal class DesktopSpeeduinoController(
                                 "advance" -> entry.advanceDeg.toString()
                                 "afr" -> entry.o2.toString()
                                 "afr_target" -> ""
+                                "candidate_speed" -> entry.candidateSpeedKph?.toString() ?: ""
+                                "candidate_pedal" -> entry.candidateAccelPedalPosPct?.toString() ?: ""
+                                "candidate_gear" -> entry.candidateGear?.toString() ?: ""
+                                "candidate_throttle_angle" -> entry.candidateThrottleAngleDeg?.toString() ?: ""
+                                "candidate_ignition_advance" -> entry.candidateIgnitionAdvanceDeg?.toString() ?: ""
+                                "candidate_injection_ms" -> entry.candidateInjectionDurationMs?.toString() ?: ""
+                                "candidate_injection_mirror_ms" -> entry.candidateInjectionDurationMirrorMs?.toString() ?: ""
                                 else -> ""
                             }
                         }
