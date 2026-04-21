@@ -117,6 +117,8 @@ import com.speeduino.manager.tuning.AnalyzerResult
 import com.speeduino.manager.tuning.CellRef
 import com.speeduino.manager.tuning.TuningAssistantAnalyzer
 import com.speeduino.manager.tuning.TuningStrategy
+import com.speeduino.manager.units.UnitSystem
+import com.speeduino.manager.units.resolveEffectiveUnitSystem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -202,16 +204,21 @@ fun main() = application {
 
 @Composable
 private fun DesktopApp() {
-    var host by remember { mutableStateOf("127.0.0.1") }
-    var port by remember { mutableStateOf("5555") }
-    var currentRoute by remember { mutableStateOf(DesktopRoute.Connection) }
-    var connectionType by remember { mutableStateOf(ConnectionType.TCP) }
-    var serialPort by remember { mutableStateOf("") }
-    var baudRate by remember { mutableStateOf("115200") }
-    val strings = LocalStrings.current
-
     val scope = rememberCoroutineScope()
     val controller = remember { DesktopSpeeduinoController(scope) }
+    val desktopSettings by controller.desktopSettings.collectAsState()
+    var host by remember(desktopSettings.lastTcpHost) { mutableStateOf(desktopSettings.lastTcpHost ?: "127.0.0.1") }
+    var port by remember(desktopSettings.lastTcpPort) { mutableStateOf(desktopSettings.lastTcpPort?.toString() ?: "5555") }
+    var currentRoute by remember { mutableStateOf(DesktopRoute.Connection) }
+    var connectionType by remember(desktopSettings.lastConnectionType) {
+        mutableStateOf(desktopSettings.lastConnectionType ?: ConnectionType.TCP)
+    }
+    var serialPort by remember(desktopSettings.lastSerialPort) { mutableStateOf(desktopSettings.lastSerialPort.orEmpty()) }
+    var baudRate by remember(desktopSettings.lastSerialBaudRate) {
+        mutableStateOf(desktopSettings.lastSerialBaudRate?.toString() ?: "115200")
+    }
+    val strings = LocalStrings.current
+
     val connectionState by controller.connectionState.collectAsState()
     val liveData by controller.liveData.collectAsState()
 
@@ -285,7 +292,7 @@ private fun DesktopApp() {
                                         ConnectionType.BLUETOOTH -> {
                                             val baud = baudRate.toIntOrNull() ?: 115200
                                             if (serialPort.isNotBlank()) {
-                                                controller.connectSerial(serialPort, baud)
+                                                controller.connectSerial(serialPort, baud, connectionType)
                                             }
                                         }
                                     }
@@ -293,7 +300,33 @@ private fun DesktopApp() {
                                     controller.disconnect()
                                 }
                             },
-                            onOpenSettings = { currentRoute = DesktopRoute.Settings }
+                            onOpenSettings = { currentRoute = DesktopRoute.Settings },
+                            onOpenInstitutional = { currentRoute = DesktopRoute.Institutional },
+                            onOpenConnectionSettings = { currentRoute = DesktopRoute.ConnectionSettings },
+                            onOpenConnection = { currentRoute = DesktopRoute.Connection },
+                            onOpenBluetoothConnection = { currentRoute = DesktopRoute.BluetoothConnection },
+                            onOpenUsbSerialConnection = { currentRoute = DesktopRoute.UsbSerialConnection },
+                            onOpenVeTable = { currentRoute = DesktopRoute.VeTable },
+                            onOpenVeTable2 = { currentRoute = DesktopRoute.VeTable2 },
+                            onOpenIgnitionTable = { currentRoute = DesktopRoute.IgnitionTable },
+                            onOpenIgnitionTable2 = { currentRoute = DesktopRoute.IgnitionTable2 },
+                            onOpenAfrTable = { currentRoute = DesktopRoute.AfrTable },
+                            onOpenBaseMapWizard = { currentRoute = DesktopRoute.BaseMapWizard },
+                            onOpenEngineConstants = { currentRoute = DesktopRoute.EngineConstants },
+                            onOpenTriggerSettings = { currentRoute = DesktopRoute.TriggerSettings },
+                            onOpenIdleControl = { currentRoute = DesktopRoute.IdleControl },
+                            onOpenInputOutputConfig = { currentRoute = DesktopRoute.InputOutputConfig },
+                            onOpenSensorCalibration = { currentRoute = DesktopRoute.SensorsConfig },
+                            onOpenEngineProtection = { currentRoute = DesktopRoute.EngineProtection },
+                            onOpenClosedLoopCorrections = { currentRoute = DesktopRoute.ClosedLoopCorrections },
+                            onOpenInjectorConfig = { currentRoute = DesktopRoute.InjectorConfig },
+                            onOpenRevLimiterConfig = { currentRoute = DesktopRoute.RevLimiterConfig },
+                            onOpenSecondarySerial = { currentRoute = DesktopRoute.SecondarySerial },
+                            onOpenTuningAssistant = { currentRoute = DesktopRoute.TuningAssistant },
+                            onOpenLogsEcuTools = { currentRoute = DesktopRoute.LogsEcuTools },
+                            onOpenLogViewer = { currentRoute = DesktopRoute.LogViewer },
+                            onOpenRealTimeMonitor = { currentRoute = DesktopRoute.RealTimeMonitor },
+                            onOpenBeforeAfter = { currentRoute = DesktopRoute.BeforeAfter }
                         )
                     }
                     VerticalScrollbar(
@@ -371,7 +404,12 @@ internal fun DiagnosticScreen(
     onConnectionTypeChange: (ConnectionType) -> Unit,
     onSerialPortChange: (String) -> Unit,
     onBaudRateChange: (String) -> Unit,
-    onToggleConnection: () -> Unit
+    onToggleConnection: () -> Unit,
+    onOpenConnectionSettings: () -> Unit = {},
+    onOpenBluetoothConnection: () -> Unit = {},
+    onOpenUsbSerialConnection: () -> Unit = {},
+    onOpenLogsEcuTools: () -> Unit = {},
+    onOpenInstitutional: () -> Unit = {}
 ) {
     val strings = LocalStrings.current
     val firmwareInfo by controller.firmwareInfo.collectAsState()
@@ -406,6 +444,59 @@ internal fun DiagnosticScreen(
             onBaudRateChange = onBaudRateChange,
             onToggleConnection = onToggleConnection
         )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Connection shortcuts",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilledTonalButton(onClick = onOpenConnectionSettings) {
+                        Text("Connection Settings")
+                    }
+                    FilledTonalButton(onClick = onOpenBluetoothConnection) {
+                        Text("Bluetooth")
+                    }
+                    FilledTonalButton(onClick = onOpenUsbSerialConnection) {
+                        Text("USB Serial")
+                    }
+                }
+            }
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "More tools",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilledTonalButton(onClick = onOpenLogsEcuTools) {
+                        Text("Logs & ECU Tools")
+                    }
+                    FilledTonalButton(onClick = onOpenInstitutional) {
+                        Text("Institutional")
+                    }
+                }
+            }
+        }
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
@@ -541,6 +632,10 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
         AppLanguage.ZH to strings["app.languageChinese"]
     )
     var draftSettings by remember(desktopSettings) { mutableStateOf(desktopSettings) }
+    var shiftLightRpmText by remember(desktopSettings.shiftLightRpm) {
+        mutableStateOf(desktopSettings.shiftLightRpm.toString())
+    }
+    val effectiveUnitSystem = resolveEffectiveUnitSystem(draftSettings.unitSystem)
     val selectedLabel = languageOptions.firstOrNull { it.first == language }?.second
         ?: strings["app.languageEnglish"]
 
@@ -586,6 +681,91 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                         ?: AppLanguage.EN
                     LocalizationManager.setLanguage(selected)
                 }
+
+                DropdownField(
+                    label = "Protocol",
+                    value = when (draftSettings.protocol) {
+                        AppProtocol.MS_PROTOCOL -> "Speeduino / MS"
+                        AppProtocol.ELM327_OBD2 -> "ELM327 OBD2"
+                    },
+                    options = listOf("Speeduino / MS", "ELM327 OBD2")
+                ) { label ->
+                    draftSettings = draftSettings.copy(
+                        protocol = if (label == "ELM327 OBD2") AppProtocol.ELM327_OBD2 else AppProtocol.MS_PROTOCOL
+                    )
+                }
+
+                DropdownField(
+                    label = "Unit system",
+                    value = when (draftSettings.unitSystem) {
+                        UnitSystem.AUTO -> "Automatic"
+                        UnitSystem.METRIC -> "Metric"
+                        UnitSystem.IMPERIAL -> "Imperial"
+                    },
+                    options = listOf("Automatic", "Metric", "Imperial")
+                ) { label ->
+                    draftSettings = draftSettings.copy(
+                        unitSystem = when (label) {
+                            "Metric" -> UnitSystem.METRIC
+                            "Imperial" -> UnitSystem.IMPERIAL
+                            else -> UnitSystem.AUTO
+                        }
+                    )
+                }
+                Text(
+                    text = "Effective unit system: " + when (effectiveUnitSystem) {
+                        UnitSystem.AUTO -> "Automatic"
+                        UnitSystem.METRIC -> "Metric"
+                        UnitSystem.IMPERIAL -> "Imperial"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Auto-connect on start",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "Reconnects the last successful endpoint when the app opens.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = draftSettings.autoConnectOnStart,
+                        onCheckedChange = { checked ->
+                            draftSettings = draftSettings.copy(autoConnectOnStart = checked)
+                        }
+                    )
+                }
+
+                NumberField(
+                    label = "Shift light RPM",
+                    value = shiftLightRpmText,
+                    onValueChange = { value ->
+                        val filtered = value.filter(Char::isDigit)
+                        if (filtered.isNotBlank()) {
+                            shiftLightRpmText = filtered
+                            filtered.toIntOrNull()?.let { parsed ->
+                                draftSettings = draftSettings.copy(
+                                    shiftLightRpm = parsed.coerceIn(SHIFT_LIGHT_RPM_MIN, SHIFT_LIGHT_RPM_MAX)
+                                )
+                            }
+                        }
+                    }
+                )
+                Text(
+                    text = "Range: $SHIFT_LIGHT_RPM_MIN - $SHIFT_LIGHT_RPM_MAX RPM",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         Surface(
@@ -2846,7 +3026,7 @@ private fun StatusPill(connectionState: ConnectionState) {
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+internal fun InfoRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,

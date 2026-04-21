@@ -1,12 +1,19 @@
 package com.speeduino.manager.sync
 
 import com.speeduino.manager.model.AfrTable
+import com.speeduino.manager.model.ClosedLoopCorrectionConfig
+import com.speeduino.manager.model.ClosedLoopCorrectionMapper
 import com.speeduino.manager.model.EcuFamily
 import com.speeduino.manager.model.EngineConstants
+import com.speeduino.manager.model.EngineProtectionConfig
+import com.speeduino.manager.model.EngineProtectionMapper
+import com.speeduino.manager.model.FirmwareEra
+import com.speeduino.manager.model.IdleControlSettings
 import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.Ms2TableDefinitions
 import com.speeduino.manager.model.Ms3TableDefinitions
 import com.speeduino.manager.model.RusefiTableDefinitions
+import com.speeduino.manager.model.TriggerSettings
 import com.speeduino.manager.model.VeTable
 import com.speeduino.manager.tables.TableDomainFacade
 
@@ -234,6 +241,63 @@ object SessionTableParser {
                 AfrTable.fromPageData(data, loadType = loadType)
             }
         }
+    }
+
+    fun parseTriggerSettings(
+        ecuFamily: EcuFamily,
+        pages: Map<Int, ByteArray>,
+    ): TriggerSettings? {
+        return when (ecuFamily) {
+            EcuFamily.MS2,
+            EcuFamily.MEGASPEED -> {
+                val page = pages[TriggerSettings.MS2_PAGE_NUMBER.toInt() and 0xFF] ?: pages[4] ?: return null
+                TriggerSettings.fromMs2PageData(page)
+            }
+
+            EcuFamily.RUSEFI -> {
+                val page = pages[0x0000] ?: return null
+                TriggerSettings.fromRusefiMainPage(page)
+            }
+
+            else -> pages[TriggerSettings.PAGE_NUMBER]?.let(TriggerSettings::fromPageData)
+        }
+    }
+
+    fun parseIdleControlSettings(
+        ecuFamily: EcuFamily,
+        pages: Map<Int, ByteArray>,
+    ): IdleControlSettings? {
+        if (ecuFamily != EcuFamily.SPEEDUINO) return null
+
+        val page4 = pages[IdleControlSettings.PAGE_NUMBER] ?: return null
+        val baseSettings = IdleControlSettings.fromPage4(page4)
+        val targetRpm = pages[IdleControlSettings.TARGET_PAGE_NUMBER]
+            ?.let(IdleControlSettings::readTargetRpmFromPage7)
+            ?: baseSettings.idleTargetRpm
+
+        return baseSettings.copy(idleTargetRpm = targetRpm)
+    }
+
+    fun parseEngineProtectionConfig(
+        ecuFamily: EcuFamily,
+        pages: Map<Int, ByteArray>,
+        firmwareEra: FirmwareEra,
+    ): EngineProtectionConfig? {
+        if (ecuFamily != EcuFamily.SPEEDUINO) return null
+        val page = pages[EngineProtectionMapper.PAGE_NUMBER] ?: return null
+        return EngineProtectionMapper.fromPage(page, firmwareEra)
+    }
+
+    fun parseClosedLoopCorrectionConfig(
+        ecuFamily: EcuFamily,
+        pages: Map<Int, ByteArray>,
+        firmwareEra: FirmwareEra,
+    ): ClosedLoopCorrectionConfig? {
+        if (ecuFamily != EcuFamily.SPEEDUINO || !ClosedLoopCorrectionMapper.isSupported(firmwareEra)) {
+            return null
+        }
+        val page = pages[ClosedLoopCorrectionMapper.PAGE_NUMBER] ?: return null
+        return ClosedLoopCorrectionMapper.fromPage(page, firmwareEra)
     }
 
     private fun ByteArray.sliceRange(offset: Int, length: Int): ByteArray {

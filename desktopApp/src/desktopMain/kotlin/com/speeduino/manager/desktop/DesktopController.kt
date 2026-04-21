@@ -22,6 +22,8 @@ import com.speeduino.manager.model.IdleControlSettings
 import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.TriggerSettings
 import com.speeduino.manager.model.VeTable
+import com.speeduino.manager.model.RusefiInputOutputSnapshot
+import com.speeduino.manager.model.SecondarySerialConfig
 import com.speeduino.manager.model.basemap.GeneratedBaseMap
 import com.speeduino.manager.model.logging.LiveLogRecorder
 import com.speeduino.manager.model.logging.LiveLogSnapshot
@@ -30,6 +32,17 @@ import com.speeduino.manager.sync.SessionSyncPrompt
 import com.speeduino.manager.tuning.AnalyzerResult
 import com.speeduino.manager.tuning.TuningAssistantAnalyzer
 import com.speeduino.manager.tuning.TuningStrategy
+import com.speeduino.manager.telemetry.DiagnosticsFlags
+import com.speeduino.manager.telemetry.Obd2InvestigationRecorder
+import com.speeduino.manager.transport.AutoDetectEcuTransport
+import com.speeduino.manager.transport.EcuTransport
+import com.speeduino.manager.transport.Obd2OptimizationProfileStore
+import com.speeduino.manager.transport.Obd2Transport
+import com.speeduino.manager.transport.PsaConnectionSessionStore
+import com.speeduino.manager.transport.PsaTransport
+import com.speeduino.manager.transport.PromotingObd2Transport
+import com.speeduino.manager.transport.RenaultTransport
+import com.speeduino.manager.transport.VagTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -75,6 +88,9 @@ internal class DesktopSpeeduinoController(
 
     private val _closedLoopCorrections = MutableStateFlow<ClosedLoopCorrectionConfig?>(null)
     val closedLoopCorrections = _closedLoopCorrections.asStateFlow()
+
+    private val _tuningConfigState = MutableStateFlow(TuningConfigState())
+    val tuningConfigState = _tuningConfigState.asStateFlow()
 
     private val _firmwareInfo = MutableStateFlow<FirmwareInfo?>(null)
     val firmwareInfo = _firmwareInfo.asStateFlow()
@@ -128,6 +144,8 @@ internal class DesktopSpeeduinoController(
     val analyzerBusy = _analyzerBusy.asStateFlow()
     private val _analyzerError = MutableStateFlow<String?>(null)
     val analyzerError = _analyzerError.asStateFlow()
+    private val _analyzerUndoVeTable = MutableStateFlow<VeTable?>(null)
+    val analyzerUndoAvailable = _analyzerUndoVeTable.asStateFlow()
     private val _beforeAfterBeforeLogPath = MutableStateFlow<String?>(null)
     val beforeAfterBeforeLogPath = _beforeAfterBeforeLogPath.asStateFlow()
     private val _beforeAfterAfterLogPath = MutableStateFlow<String?>(null)
@@ -147,7 +165,7 @@ internal class DesktopSpeeduinoController(
 
     private var pollingJob: Job? = null
     private var connection: ISpeeduinoConnection? = null
-    private var client: SpeeduinoClient? = null
+    private var client: EcuTransport? = null
     private var localSessionDir: File? = null
     private var ecuSessionDir: File? = null
     private val beforeAfterComparator = BeforeAfterLogComparator()
@@ -156,39 +174,81 @@ internal class DesktopSpeeduinoController(
 
     init {
         refreshIniDefinitions()
+        maybeAutoConnect()
     }
 
     fun connectTcp(host: String, port: Int) {
+        saveConnectionProfile(
+            connectionType = ConnectionType.TCP,
+            tcpHost = host,
+            tcpPort = port
+        )
         connectInternal(SpeeduinoTcpConnection(host, port))
     }
 
-    fun connectSerial(portDescriptor: String, baudRate: Int) {
+    fun connectSerial(portDescriptor: String, baudRate: Int, connectionType: ConnectionType = ConnectionType.USB) {
+        saveConnectionProfile(
+            connectionType = connectionType,
+            serialPort = portDescriptor,
+            serialBaudRate = baudRate
+        )
         connectInternal(SpeeduinoSerialConnection(portDescriptor, baudRate))
+    }
+
+    fun saveConnectionProfile(
+        connectionType: ConnectionType,
+        tcpHost: String? = null,
+        tcpPort: Int? = null,
+        serialPort: String? = null,
+        serialBaudRate: Int? = null,
+    ) {
+        val current = _desktopSettings.value
+        saveDesktopSettings(
+            current.copy(
+                lastConnectionType = connectionType,
+                lastTcpHost = tcpHost ?: current.lastTcpHost,
+                lastTcpPort = tcpPort ?: current.lastTcpPort,
+                lastSerialPort = serialPort ?: current.lastSerialPort,
+                lastSerialBaudRate = serialBaudRate ?: current.lastSerialBaudRate,
+            )
+        )
+    }
+
+    private fun maybeAutoConnect() {
+        val settings = _desktopSettings.value
+        if (!settings.autoConnectOnStart || _connectionState.value.isConnected) {
+            return
+        }
+
+        when (settings.lastConnectionType) {
+            ConnectionType.TCP -> {
+                val host = settings.lastTcpHost
+                val port = settings.lastTcpPort
+                if (!host.isNullOrBlank() && port != null) {
+                    connectTcp(host, port)
+                }
+            }
+            ConnectionType.USB,
+            ConnectionType.BLUETOOTH -> {
+                val portDescriptor = settings.lastSerialPort
+                val baudRate = settings.lastSerialBaudRate
+                if (!portDescriptor.isNullOrBlank() && baudRate != null) {
+                    connectSerial(
+                        portDescriptor = portDescriptor,
+                        baudRate = baudRate,
+                        connectionType = settings.lastConnectionType
+                    )
+                }
+            }
+            null -> Unit
+        }
     }
 
     private fun connectInternal(newConnection: ISpeeduinoConnection) {
         disconnect()
 
         connection = newConnection
-        client = SpeeduinoClient(
-            connection = checkNotNull(connection),
-            onDataReceived = { data ->
-                _liveData.value = data
-                if (logRecorder.state.value.isRecording) {
-                    logRecorder.record(data)
-                }
-            },
-            onConnectionStateChanged = { isConnected ->
-                _connectionState.value = if (isConnected) {
-                    ConnectionState(ConnectionStatus.Connected)
-                } else {
-                    ConnectionState(ConnectionStatus.Disconnected)
-                }
-            },
-            onError = { error ->
-                _lastError.value = error
-            }
-        )
+        client = createTransport(checkNotNull(connection))
         _connectionState.value = ConnectionState(ConnectionStatus.Connecting)
 
         pollingJob = scope.launch(Dispatchers.IO) {
@@ -216,8 +276,95 @@ internal class DesktopSpeeduinoController(
                     detail = e.message
                 )
                 disconnect()
-            }
+                }
         }
+    }
+
+    private fun createTransport(connection: ISpeeduinoConnection): EcuTransport {
+        val callbacks = transportCallbacks()
+        val profileStore = Obd2OptimizationProfileStore()
+        val sessionStore = PsaConnectionSessionStore()
+        val investigationRecorder = Obd2InvestigationRecorder()
+        return when (_desktopSettings.value.protocol) {
+            AppProtocol.ELM327_OBD2 -> {
+                val obd2Transport = Obd2Transport(
+                    connection = connection,
+                    onDataReceived = callbacks.onDataReceived,
+                    onConnectionStateChanged = callbacks.onConnectionStateChanged,
+                    onError = callbacks.onError,
+                    profileStore = profileStore,
+                    investigationRecorder = investigationRecorder,
+                )
+                val psaTransport = PsaTransport(
+                    connection = connection,
+                    onDataReceived = callbacks.onDataReceived,
+                    onConnectionStateChanged = callbacks.onConnectionStateChanged,
+                    onError = callbacks.onError,
+                    obd2ProfileStore = profileStore,
+                    sessionStore = sessionStore,
+                    investigationRecorder = investigationRecorder,
+                    enableInvestigationCampaign = DiagnosticsFlags.ENABLE_ECU_INVESTIGATION,
+                )
+                val renaultTransport = RenaultTransport(
+                    connection = connection,
+                    onDataReceived = callbacks.onDataReceived,
+                    onConnectionStateChanged = callbacks.onConnectionStateChanged,
+                    onError = callbacks.onError,
+                    obd2ProfileStore = profileStore,
+                    investigationRecorder = investigationRecorder,
+                )
+                val vagTransport = VagTransport(
+                    connection = connection,
+                    onDataReceived = callbacks.onDataReceived,
+                    onConnectionStateChanged = callbacks.onConnectionStateChanged,
+                    onError = callbacks.onError,
+                    investigationRecorder = investigationRecorder,
+                )
+                val promotingObd2Transport = PromotingObd2Transport(
+                    genericTransport = obd2Transport,
+                    psaTransport = psaTransport,
+                )
+                val renaultPsaTransport = AutoDetectEcuTransport(
+                    primaryTransport = renaultTransport,
+                    obd2FallbackTransport = psaTransport,
+                )
+                val vagRenaultPsaTransport = AutoDetectEcuTransport(
+                    primaryTransport = vagTransport,
+                    obd2FallbackTransport = renaultPsaTransport,
+                )
+                AutoDetectEcuTransport(
+                    primaryTransport = promotingObd2Transport,
+                    obd2FallbackTransport = vagRenaultPsaTransport,
+                )
+            }
+            AppProtocol.MS_PROTOCOL -> SpeeduinoClient(
+                connection = connection,
+                onDataReceived = callbacks.onDataReceived,
+                onConnectionStateChanged = callbacks.onConnectionStateChanged,
+                onError = callbacks.onError,
+            )
+        }
+    }
+
+    private fun transportCallbacks(): TransportCallbacks {
+        return TransportCallbacks(
+            onDataReceived = { data ->
+                _liveData.value = data
+                if (logRecorder.state.value.isRecording) {
+                    logRecorder.record(data)
+                }
+            },
+            onConnectionStateChanged = { isConnected ->
+                _connectionState.value = if (isConnected) {
+                    ConnectionState(ConnectionStatus.Connected)
+                } else {
+                    ConnectionState(ConnectionStatus.Disconnected)
+                }
+            },
+            onError = { error ->
+                _lastError.value = error
+            }
+        )
     }
 
     fun disconnect() {
@@ -557,6 +704,54 @@ internal class DesktopSpeeduinoController(
                 }
                 updateLocalClosedLoopCorrections(normalized)
                 _closedLoopCorrections.value = normalized
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    fun loadRusefiInputOutputSnapshot() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val activeClient = client
+                if (activeClient != null && _connectionState.value.isConnected) {
+                    _tuningConfigState.value = _tuningConfigState.value.copy(
+                        rusefiSnapshot = activeClient.readRusefiInputOutputSnapshot()
+                    )
+                } else {
+                    _lastError.value = "RuseFI input/output snapshot requires an active connection."
+                }
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    fun loadSecondarySerialConfig() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val activeClient = client
+                if (activeClient != null && _connectionState.value.isConnected) {
+                    _tuningConfigState.value = _tuningConfigState.value.copy(
+                        secondarySerialConfig = activeClient.readSecondarySerialConfig()
+                    )
+                } else {
+                    _lastError.value = "Secondary serial config requires an active connection."
+                }
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    fun saveSecondarySerialConfig(config: SecondarySerialConfig) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val activeClient = client
+                if (activeClient != null && _connectionState.value.isConnected) {
+                    activeClient.writeSecondarySerialConfig(config, burn = true)
+                }
+                _tuningConfigState.value = _tuningConfigState.value.copy(secondarySerialConfig = config)
             } catch (e: Exception) {
                 _lastError.value = e.message
             }
@@ -984,6 +1179,7 @@ internal class DesktopSpeeduinoController(
             _analyzerBusy.value = true
             _analyzerError.value = null
             try {
+                _analyzerUndoVeTable.value = ve
                 val allClusterIds = result.clusters.map { it.id }.toSet()
                 val updated = TuningAssistantAnalyzer.applyClustersToVe(
                     veTable = ve,
@@ -1016,6 +1212,27 @@ internal class DesktopSpeeduinoController(
         }
     }
 
+    fun undoLastAnalyzerApply() {
+        scope.launch(Dispatchers.IO) {
+            val previous = _analyzerUndoVeTable.value ?: return@launch
+            try {
+                val activeClient = client
+                if (activeClient != null && _connectionState.value.isConnected) {
+                    activeClient.writeVeTable(previous)
+                }
+                updateLocalVeTable(previous)
+                _veTable.value = previous
+                _analyzerUndoVeTable.value = null
+            } catch (e: Exception) {
+                _analyzerError.value = e.message
+            }
+        }
+    }
+
+    fun reloadAnalyzerVeTable() {
+        loadVeTable(1)
+    }
+
     fun applyGeneratedBaseMap(map: GeneratedBaseMap, writeTables: Boolean = true, writeConstants: Boolean = true) {
         scope.launch(Dispatchers.IO) {
             try {
@@ -1037,7 +1254,7 @@ internal class DesktopSpeeduinoController(
         }
     }
 
-    private fun applyConfiguredIniDefinition(activeClient: SpeeduinoClient) {
+    private fun applyConfiguredIniDefinition(activeClient: EcuTransport) {
         val signature = activeClient.getFirmwareInfoCached()?.signature?.trim().orEmpty()
         if (signature.isBlank()) return
 

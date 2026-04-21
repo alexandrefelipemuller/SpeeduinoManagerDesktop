@@ -7,6 +7,7 @@ import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.TriggerSettings
 import com.speeduino.manager.model.VeTable
 import com.speeduino.manager.protocol.SerialCapability
+import com.speeduino.manager.transport.EcuTransport
 import com.speeduino.manager.sync.SessionTableParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -58,7 +59,7 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
      * Baixa todas as configurações do Speeduino.
      */
     suspend fun downloadAllConfigs(
-        client: SpeeduinoClient,
+        client: EcuTransport,
         onProgress: (Int, Int, String) -> Unit
     ): ConfigDownloadResult = withContext(Dispatchers.IO) {
         try {
@@ -99,7 +100,7 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
                         64
                     }
 
-                    val pageData = client.readFullPage(pageNum, pageSize, blockSize)
+                    val pageData = client.readFullPage(pageNum.toInt() and 0xFF, pageSize, blockSize)
 
                     val pageFile = File(sessionDir, "page_$pageNum.bin")
                     pageFile.writeBytes(pageData)

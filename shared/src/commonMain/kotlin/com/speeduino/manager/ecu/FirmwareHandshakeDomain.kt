@@ -38,7 +38,7 @@ object FirmwareHandshakeDomain {
             .find(sanitized)
             ?.let { return "speeduino ${it.groupValues[1]}${it.groupValues[2]}" }
 
-        Regex("""(?i)^ms3\s+format\s+([0-9]{4}\.[0-9]{2}[a-z]?)$""")
+        Regex("""(?i)^ms3\s*format\s*([0-9]{4}\.[0-9]{2}[a-z]?)$""")
             .find(sanitized)
             ?.let { return "MS3 Format ${it.groupValues[1].uppercase(Locale.US)}" }
 
@@ -123,6 +123,7 @@ object FirmwareHandshakeDomain {
         val hasVersionDigits = signature.count(Char::isDigit) >= 4
         return (lower.contains("speeduino") && hasVersionDigits) ||
             lower.startsWith("ms2extra ") ||
+            lower.contains("ms3format") ||
             lower.startsWith("ms3 format ") ||
             lower.startsWith("rusefi ")
     }

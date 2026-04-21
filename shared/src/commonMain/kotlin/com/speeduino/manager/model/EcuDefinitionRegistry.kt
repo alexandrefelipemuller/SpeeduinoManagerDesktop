@@ -25,6 +25,8 @@ object EcuDefinitionRegistry {
         "speeduino YYYYMM",
         "MS2Extra MegaSpeed",
         "MS2Extra comms342h2",
+        "MS3 Format 0566.05",
+        "MS3 Format 0592.12",
         "MS3 Format 0523.15",
         "rusEFI master.YYYY.MM.DD.board.hash",
     )

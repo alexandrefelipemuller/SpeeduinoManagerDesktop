@@ -44,6 +44,7 @@ import com.speeduino.manager.model.RusefiInputOutputConfig
 import com.speeduino.manager.model.RusefiInputOutputSnapshot
 import com.speeduino.manager.model.RusefiIniUiParsers
 import com.speeduino.manager.model.SpeeduinoIniDefinitions
+import com.speeduino.manager.transport.MapSelectionSupport
 import com.speeduino.manager.model.TpsCalibration
 import com.speeduino.manager.model.VeTable
 import com.speeduino.manager.model.TriggerSettings
@@ -53,6 +54,7 @@ import com.speeduino.manager.model.ignitionTableLoadType
 import com.speeduino.manager.protocol.SerialCapability
 import com.speeduino.manager.protocol.SpeeduinoProtocol
 import com.speeduino.manager.tables.TableDomainFacade
+import com.speeduino.manager.transport.EcuTransport
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -80,12 +82,7 @@ class SpeeduinoClient(
     private val onDataReceived: (SpeeduinoLiveData) -> Unit,
     private val onConnectionStateChanged: (Boolean) -> Unit,
     private val onError: (String) -> Unit
-) {
-    data class MapSelectionSupport(
-        val veMapIndices: List<Int> = listOf(1),
-        val ignitionMapIndices: List<Int> = listOf(1),
-    )
-
+) : EcuTransport {
     companion object {
         private const val TAG = "SpeeduinoClient"
         private const val LIVE_DATA_FAULT_REPORT_INTERVAL_MS = 30_000L
@@ -132,7 +129,7 @@ class SpeeduinoClient(
      *
      * @throws UnsupportedFirmwareException se firmware não for suportado
      */
-    suspend fun connect() {
+    override suspend fun connect() {
         connectMutex.withLock {
             if (connection.isConnected()) {
                 Logger.d(TAG, "Conexao ja estabelecida, ignorando novo connect")
@@ -389,7 +386,7 @@ class SpeeduinoClient(
      * Obtém informações do firmware conectado
      * @return FirmwareInfo ou null se não conectado
      */
-    fun getFirmwareInfoCached(): FirmwareInfo? = firmwareInfo
+    override fun getFirmwareInfoCached(): FirmwareInfo? = firmwareInfo
 
     /**
      * Obtém definição genérica da ECU conectada.
@@ -399,22 +396,22 @@ class SpeeduinoClient(
     /**
      * Obtém a família da ECU conectada.
      */
-    fun getEcuFamily(): EcuFamily = firmwareInfo?.family ?: EcuFamily.UNKNOWN
+    override fun getEcuFamily(): EcuFamily = firmwareInfo?.family ?: EcuFamily.UNKNOWN
 
     /**
      * Obtém capacidades declaradas da ECU conectada.
      */
-    fun getEcuCapabilities(): EcuCapabilities? = firmwareInfo?.capabilities
+    override fun getEcuCapabilities(): EcuCapabilities? = firmwareInfo?.capabilities
 
     /**
      * Obtém informações do pin layout detectado (Page 1).
      */
-    fun getPinLayoutInfoCached(): PinLayoutInfo? = pinLayoutInfo
+    override fun getPinLayoutInfoCached(): PinLayoutInfo? = pinLayoutInfo
 
     /**
      * Permite cachear pin layout detectado fora do fluxo padrão.
      */
-    fun cachePinLayoutInfo(info: PinLayoutInfo?) {
+    override fun cachePinLayoutInfo(info: PinLayoutInfo?) {
         pinLayoutInfo = info
     }
 
@@ -422,7 +419,7 @@ class SpeeduinoClient(
      * Obtém table definitions carregadas
      * @return TableDefinitions ou null se não conectado
      */
-    fun getTableDefinitions(): TableDefinitions? = tableDefinitions
+    override fun getTableDefinitions(): TableDefinitions? = tableDefinitions
 
     /**
      * Obtém output channel fields carregados
@@ -430,7 +427,7 @@ class SpeeduinoClient(
      */
     fun getOutputChannelFields(): List<OutputField>? = outputChannelFields
 
-    fun applyIniDefinition(definition: IniDefinition): Boolean {
+    override fun applyIniDefinition(definition: IniDefinition): Boolean {
         activeIniDefinition = definition
 
         if (firmwareInfo?.family == EcuFamily.SPEEDUINO) {
@@ -514,26 +511,26 @@ class SpeeduinoClient(
         return false
     }
 
-    fun setManualFirmwareProfile(signature: String, readOnly: Boolean = true) {
+    override fun setManualFirmwareProfile(signature: String, readOnly: Boolean) {
         val normalized = FirmwareHandshakeDomain.normalizeManualProfile(signature)
         manualFirmwareProfile = normalized
         readOnlySafeModeEnabled = readOnly
         Logger.w(TAG, "Perfil manual configurado: $normalized (readOnly=$readOnly)")
     }
 
-    fun clearManualFirmwareProfile() {
+    override fun clearManualFirmwareProfile() {
         manualFirmwareProfile = null
         readOnlySafeModeEnabled = false
     }
 
     fun getManualFirmwareProfile(): String? = manualFirmwareProfile
 
-    fun isReadOnlySafeMode(): Boolean = readOnlySafeModeEnabled
+    override fun isReadOnlySafeMode(): Boolean = readOnlySafeModeEnabled
 
     /**
      * Desconecta do Speeduino
      */
-    fun disconnect() {
+    override fun disconnect() {
         stopLiveDataStream()
         connection.disconnect()
         // NÃO cancelar o scope - apenas o job do stream
@@ -554,40 +551,40 @@ class SpeeduinoClient(
     /**
      * Verifica se está conectado
      */
-    fun isConnected(): Boolean = connection.isConnected()
+    override fun isConnected(): Boolean = connection.isConnected()
 
     /**
      * Verifica se o stream de dados está ativo
      */
-    fun isStreaming(): Boolean = _isStreaming
+    override fun isStreaming(): Boolean = _isStreaming
 
     /**
      * Obtém informações da conexão
      */
-    fun getConnectionInfo(): String = connection.getConnectionInfo()
+    override fun getConnectionInfo(): String = connection.getConnectionInfo()
 
-    fun getConnectionProfileTag(): String? = connection.getConnectionProfileTag()
+    override fun getConnectionProfileTag(): String? = connection.getConnectionProfileTag()
 
     // ==================== Protocol Commands ====================
 
     /**
      * Obtém informações do firmware (comando 'Q')
      */
-    suspend fun getFirmwareInfo(): String {
+    override suspend fun getFirmwareInfo(): String {
         return protocol.getFirmwareInfo()
     }
 
     /**
      * Obtém string do produto (comando 'S')
      */
-    suspend fun getProductString(): String {
-        return protocol.getProductString()
+    override fun getProductString(): String {
+        return firmwareInfo?.productString ?: "Unknown"
     }
 
     /**
      * Obtém capacidades seriais (comando 'f')
      */
-    suspend fun getSerialCapability(): SerialCapability {
+    override suspend fun getSerialCapability(): SerialCapability {
         return when (getEcuFamily()) {
             EcuFamily.SPEEDUINO -> {
                 protocol.getSerialCapability()
@@ -637,11 +634,20 @@ class SpeeduinoClient(
     }
 
     suspend fun readConfigChunk(pageId: Int, offset: Int, length: Int): ByteArray {
-        return when (firmwareInfo?.family ?: EcuFamily.UNKNOWN) {
-            EcuFamily.MS2, EcuFamily.MEGASPEED -> protocol.readTable(pageId, offset, length, EcuFamily.MS2)
-            EcuFamily.MS3 -> protocol.readTable(pageId, offset, length, EcuFamily.MS3)
-            EcuFamily.RUSEFI -> protocol.readTable(pageId, offset, length, EcuFamily.RUSEFI)
-            else -> readPage(pageId, offset, length)
+        val pageLabel = formatPageId(pageId)
+        val family = firmwareInfo?.family ?: EcuFamily.UNKNOWN
+        return try {
+            when (family) {
+                EcuFamily.MS2, EcuFamily.MEGASPEED -> protocol.readTable(pageId, offset, length, EcuFamily.MS2)
+                EcuFamily.MS3 -> protocol.readTable(pageId, offset, length, EcuFamily.MS3)
+                EcuFamily.RUSEFI -> protocol.readTable(pageId, offset, length, EcuFamily.RUSEFI)
+                else -> readPage(pageId, offset, length)
+            }
+        } catch (e: Exception) {
+            throw Exception(
+                "Config chunk read failed page=$pageLabel family=${family.name} offset=$offset length=$length detail=${e.message ?: "unknown"}",
+                e
+            )
         }
     }
 
@@ -652,16 +658,28 @@ class SpeeduinoClient(
     /**
      * Lê página completa em blocos (para páginas grandes)
      */
-    suspend fun readFullPage(pageNum: Int, pageSize: Int, blockSize: Int): ByteArray = withContext(Dispatchers.IO) {
+    override suspend fun readFullPage(pageNum: Int, pageSize: Int, blockSize: Int): ByteArray = withContext(Dispatchers.IO) {
         val pageLabel = formatPageId(pageNum)
         val pageData = ByteArray(pageSize)
         var offset = 0
 
         while (offset < pageSize) {
             val chunkSize = minOf(blockSize, pageSize - offset)
-            val chunk = readConfigChunk(pageNum, offset, chunkSize)
+            val chunkStart = offset
+            val chunkIndex = (chunkStart / blockSize) + 1
+            val totalChunks = (pageSize + blockSize - 1) / blockSize
+            val chunk = try {
+                readConfigChunk(pageNum, chunkStart, chunkSize)
+            } catch (e: Exception) {
+                throw Exception(
+                    "Full page read failed page=$pageLabel pageSize=$pageSize blockSize=$blockSize chunk=$chunkIndex/$totalChunks offset=$chunkStart length=$chunkSize detail=${e.message ?: "unknown"}",
+                    e
+                )
+            }
             if (chunk.isEmpty()) {
-                break
+                throw IllegalStateException(
+                    "Full page read returned empty chunk page=$pageLabel chunk=$chunkIndex/$totalChunks offset=$chunkStart length=$chunkSize"
+                )
             }
 
             val bytesToCopy = minOf(chunk.size, pageSize - offset)
@@ -669,34 +687,28 @@ class SpeeduinoClient(
             offset += bytesToCopy
 
             if (chunk.size < chunkSize) {
-                Logger.w(
-                    TAG,
-                    "Leitura parcial da página $pageLabel: solicitado $chunkSize bytes, recebido ${chunk.size} no offset $offset"
+                throw IllegalStateException(
+                    "Short page chunk page=$pageLabel chunk=$chunkIndex/$totalChunks offset=$chunkStart expected=$chunkSize received=${chunk.size}"
                 )
-                break
             }
 
             // Small delay to avoid overwhelming the ECU
             delay(10)
         }
 
-        if (offset == pageSize) {
-            pageData
-        } else {
-            pageData.copyOf(offset)
-        }
+        pageData
     }
 
     suspend fun readFullPage(pageNum: Byte, pageSize: Int, blockSize: Int): ByteArray {
         return readFullPage(pageNum.toInt() and 0xFF, pageSize, blockSize)
     }
 
-    fun getEcuPageCatalog() = ecuDefinition?.pageCatalog ?: emptyList()
+    override fun getEcuPageCatalog() = ecuDefinition?.pageCatalog ?: emptyList()
 
     /**
      * Lê Engine Constants (Page 1 - 128 bytes)
      */
-    suspend fun readEngineConstants(): EngineConstants {
+    override suspend fun readEngineConstants(): EngineConstants {
         val rusefiSchemaId = ecuDefinition?.runtime?.schemaId ?: "rusefi-main"
         val constants = when (firmwareInfo?.family) {
             EcuFamily.MS2, EcuFamily.MEGASPEED -> {
@@ -735,7 +747,7 @@ class SpeeduinoClient(
     /**
      * Lê calibração de pressão (MAP/Baro/EMAP) em Page 1.
      */
-    suspend fun readPressureCalibration(): PressureCalibration = withContext(Dispatchers.IO) {
+    override suspend fun readPressureCalibration(): PressureCalibration = withContext(Dispatchers.IO) {
         val pageData = readPage(pageNum = 1, offset = 0, length = 128)
         PressureCalibration(
             mapMin = readS8(pageData, 46),
@@ -750,7 +762,7 @@ class SpeeduinoClient(
     /**
      * Grava calibração de pressão (MAP/Baro/EMAP) em Page 1 + burn.
      */
-    suspend fun writePressureCalibration(calibration: PressureCalibration, burn: Boolean = true) = withContext(Dispatchers.IO) {
+    override suspend fun writePressureCalibration(calibration: PressureCalibration, burn: Boolean) = withContext(Dispatchers.IO) {
         ensureWritable("writePressureCalibration")
         val basePage = readPage(pageNum = 1, offset = 0, length = 128)
         writeS8(basePage, 46, calibration.mapMin)
@@ -769,7 +781,7 @@ class SpeeduinoClient(
     /**
      * Lê calibração de TPS em Page 1.
      */
-    suspend fun readTpsCalibration(): TpsCalibration = withContext(Dispatchers.IO) {
+    override suspend fun readTpsCalibration(): TpsCalibration = withContext(Dispatchers.IO) {
         val pageData = readPage(pageNum = 1, offset = 0, length = 128)
         TpsCalibration(
             tpsMin = readU8(pageData, 44),
@@ -780,7 +792,7 @@ class SpeeduinoClient(
     /**
      * Grava calibração de TPS em Page 1 + burn.
      */
-    suspend fun writeTpsCalibration(calibration: TpsCalibration, burn: Boolean = true) = withContext(Dispatchers.IO) {
+    override suspend fun writeTpsCalibration(calibration: TpsCalibration, burn: Boolean) = withContext(Dispatchers.IO) {
         ensureWritable("writeTpsCalibration")
         val basePage = readPage(pageNum = 1, offset = 0, length = 128)
         writeU8(basePage, 44, calibration.tpsMin)
@@ -795,7 +807,7 @@ class SpeeduinoClient(
     /**
      * Lê as configurações básicas de controle de marcha lenta do Speeduino.
      */
-    suspend fun readIdleControlSettings(): IdleControlSettings = withContext(Dispatchers.IO) {
+    override suspend fun readIdleControlSettings(): IdleControlSettings = withContext(Dispatchers.IO) {
         if (firmwareInfo?.family != EcuFamily.SPEEDUINO) {
             throw UnsupportedOperationException("Controle de marcha lenta simplificado disponível apenas para Speeduino")
         }
@@ -809,7 +821,7 @@ class SpeeduinoClient(
     /**
      * Grava as configurações básicas de controle de marcha lenta no Speeduino.
      */
-    suspend fun writeIdleControlSettings(settings: IdleControlSettings, burn: Boolean = true) = withContext(Dispatchers.IO) {
+    override suspend fun writeIdleControlSettings(settings: IdleControlSettings, burn: Boolean) = withContext(Dispatchers.IO) {
         ensureWritable("writeIdleControlSettings")
         if (firmwareInfo?.family != EcuFamily.SPEEDUINO) {
             throw UnsupportedOperationException("Controle de marcha lenta simplificado disponível apenas para Speeduino")
@@ -829,7 +841,7 @@ class SpeeduinoClient(
     /**
      * Lê Trigger Settings (Page 4 - 128 bytes)
      */
-    suspend fun readTriggerSettings(): TriggerSettings {
+    override suspend fun readTriggerSettings(): TriggerSettings {
         if (firmwareInfo?.family == EcuFamily.RUSEFI) {
             activeIniDefinition?.let { definition ->
                 val length = RusefiIniUiParsers.requiredBytesForTrigger(definition)
@@ -869,7 +881,7 @@ class SpeeduinoClient(
         return TriggerSettings.fromPageData(pageData)
     }
 
-    suspend fun readRusefiInputOutputSnapshot(): RusefiInputOutputSnapshot {
+    override suspend fun readRusefiInputOutputSnapshot(): RusefiInputOutputSnapshot {
         if (firmwareInfo?.family != EcuFamily.RUSEFI) {
             throw UnsupportedOperationException("I/O snapshot disponível apenas para rusEFI")
         }
@@ -894,7 +906,7 @@ class SpeeduinoClient(
     /**
      * Lê configuração do Secondary Serial (Page 9, offset 0)
      */
-    suspend fun readSecondarySerialConfig(): SecondarySerialConfig = withContext(Dispatchers.IO) {
+    override suspend fun readSecondarySerialConfig(): SecondarySerialConfig = withContext(Dispatchers.IO) {
         Logger.d(TAG, "Lendo Secondary Serial Config (Page 9)...")
         val data = readPage(
             pageNum = SecondarySerialConfig.PAGE_NUMBER.toByte(),
@@ -908,7 +920,7 @@ class SpeeduinoClient(
     /**
      * Lê Engine Protection/Limiters (Page 6)
      */
-    suspend fun readEngineProtectionConfig(): EngineProtectionConfig {
+    override suspend fun readEngineProtectionConfig(): EngineProtectionConfig {
         if (firmwareInfo?.family == EcuFamily.RUSEFI) {
             throw UnsupportedOperationException("Engine Protection rusEFI ainda não mapeado nesta versão")
         }
@@ -925,7 +937,7 @@ class SpeeduinoClient(
     /**
      * Lê correções AFR/O2 em malha fechada (Page 6)
      */
-    suspend fun readClosedLoopCorrectionConfig(): ClosedLoopCorrectionConfig {
+    override suspend fun readClosedLoopCorrectionConfig(): ClosedLoopCorrectionConfig {
         val era = firmwareInfo?.era ?: FirmwareEra.MODERN_2025
         if (!ClosedLoopCorrectionMapper.isSupported(era)) {
             throw UnsupportedOperationException("Correcoes AFR/O2 requerem firmware Speeduino moderno")
@@ -942,7 +954,7 @@ class SpeeduinoClient(
     /**
      * Grava Engine Protection/Limiters (Page 6) + Burn
      */
-    suspend fun writeEngineProtectionConfig(config: EngineProtectionConfig, burn: Boolean = true) {
+    override suspend fun writeEngineProtectionConfig(config: EngineProtectionConfig, burn: Boolean) {
         ensureWritable("writeEngineProtectionConfig")
         if (firmwareInfo?.family == EcuFamily.RUSEFI) {
             throw UnsupportedOperationException("Engine Protection rusEFI ainda não mapeado nesta versão")
@@ -972,7 +984,7 @@ class SpeeduinoClient(
     /**
      * Grava correções AFR/O2 em malha fechada (Page 6) + Burn
      */
-    suspend fun writeClosedLoopCorrectionConfig(config: ClosedLoopCorrectionConfig, burn: Boolean = true) {
+    override suspend fun writeClosedLoopCorrectionConfig(config: ClosedLoopCorrectionConfig, burn: Boolean) {
         ensureWritable("writeClosedLoopCorrectionConfig")
         val era = firmwareInfo?.era ?: FirmwareEra.MODERN_2025
         if (!ClosedLoopCorrectionMapper.isSupported(era)) {
@@ -1002,7 +1014,7 @@ class SpeeduinoClient(
     /**
      * Grava Trigger Settings (Page 4) + Burn
      */
-    suspend fun writeTriggerSettings(settings: TriggerSettings, burn: Boolean = true) {
+    override suspend fun writeTriggerSettings(settings: TriggerSettings, burn: Boolean) {
         ensureWritable("writeTriggerSettings")
         if (firmwareInfo?.family == EcuFamily.RUSEFI) {
             throw UnsupportedOperationException("Trigger Settings rusEFI ainda não mapeados nesta versão")
@@ -1054,7 +1066,7 @@ class SpeeduinoClient(
     /**
      * Grava configuração do Secondary Serial (Page 9, offset 0) + Burn
      */
-    suspend fun writeSecondarySerialConfig(config: SecondarySerialConfig, burn: Boolean = true) = withContext(Dispatchers.IO) {
+    override suspend fun writeSecondarySerialConfig(config: SecondarySerialConfig, burn: Boolean) = withContext(Dispatchers.IO) {
         ensureWritable("writeSecondarySerialConfig")
         Logger.d(TAG, "Gravando Secondary Serial Config (Page 9)...")
         val baseData = readPage(
@@ -1093,7 +1105,7 @@ class SpeeduinoClient(
      *
      * @throws IllegalStateException if not connected
      */
-    suspend fun readVeTable(mapIndex: Int = 1): VeTable {
+    override suspend fun readVeTable(mapIndex: Int): VeTable {
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             return readMs2VeTable()
         }
@@ -1146,7 +1158,7 @@ class SpeeduinoClient(
      *
      * @throws IllegalStateException if not connected
      */
-    suspend fun readIgnitionTable(mapIndex: Int = 1): IgnitionTable {
+    override suspend fun readIgnitionTable(mapIndex: Int): IgnitionTable {
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             return readMs2IgnitionTable()
         }
@@ -1190,7 +1202,7 @@ class SpeeduinoClient(
     /**
      * Grava Engine Constants (Page 1 - 128 bytes) + Burn
      */
-    suspend fun writeEngineConstants(engineConstants: EngineConstants) {
+    override suspend fun writeEngineConstants(engineConstants: EngineConstants) {
         ensureWritable("writeEngineConstants")
         if (firmwareInfo?.family == EcuFamily.RUSEFI) {
             throw UnsupportedOperationException("Engine Constants rusEFI ainda não mapeados nesta versão")
@@ -1224,7 +1236,7 @@ class SpeeduinoClient(
     /**
      * Grava uma página completa de configuração (backup/restore)
      */
-    suspend fun writeRawPage(pageNum: Int, data: ByteArray) {
+    override suspend fun writeRawPage(pageNum: Int, data: ByteArray) {
         ensureWritable("writeRawPage")
         if (
             firmwareInfo?.family == EcuFamily.MS2 ||
@@ -1248,7 +1260,7 @@ class SpeeduinoClient(
     /**
      * Grava uma página completa sem executar burn (para restauração em lote).
      */
-    suspend fun writeRawPageWithoutBurn(pageNum: Int, data: ByteArray) {
+    override suspend fun writeRawPageWithoutBurn(pageNum: Int, data: ByteArray) {
         ensureWritable("writeRawPageWithoutBurn")
         if (
             firmwareInfo?.family == EcuFamily.MS2 ||
@@ -1270,7 +1282,7 @@ class SpeeduinoClient(
     /**
      * Executa burn após gravações em lote.
      */
-    suspend fun burnConfigs() {
+    override suspend fun burnConfigs() {
         ensureWritable("burnConfigs")
         if (
             firmwareInfo?.family == EcuFamily.MS2 ||
@@ -1293,7 +1305,7 @@ class SpeeduinoClient(
      * @param veTable VE Table to write
      * @throws ValidationException if table has critical errors
      */
-    suspend fun writeVeTable(veTable: VeTable, mapIndex: Int = 1) {
+    override suspend fun writeVeTable(veTable: VeTable, mapIndex: Int) {
         ensureWritable("writeVeTable")
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             writeMs2VeTable(veTable)
@@ -1351,7 +1363,7 @@ class SpeeduinoClient(
      * @param ignitionTable Ignition Table to write
      * @throws ValidationException if table has critical errors (esp. dangerous advance)
      */
-    suspend fun writeIgnitionTable(ignitionTable: IgnitionTable, mapIndex: Int = 1) {
+    override suspend fun writeIgnitionTable(ignitionTable: IgnitionTable, mapIndex: Int) {
         ensureWritable("writeIgnitionTable")
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             writeMs2IgnitionTable(ignitionTable)
@@ -1406,7 +1418,7 @@ class SpeeduinoClient(
      *
      * @throws IllegalStateException if not connected
      */
-    suspend fun readAfrTable(): AfrTable {
+    override suspend fun readAfrTable(): AfrTable {
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             return readMs2AfrTable()
         }
@@ -1720,7 +1732,7 @@ class SpeeduinoClient(
      * @param afrTable AFR Target Table to write
      * @throws IllegalStateException if not connected
      */
-    suspend fun writeAfrTable(afrTable: AfrTable) {
+    override suspend fun writeAfrTable(afrTable: AfrTable) {
         ensureWritable("writeAfrTable")
         if (firmwareInfo?.family == EcuFamily.MS2 || firmwareInfo?.family == EcuFamily.MEGASPEED) {
             writeMs2AfrTable(afrTable)
@@ -2126,7 +2138,7 @@ class SpeeduinoClient(
     /**
      * Inicia stream contínuo de dados em tempo real
      */
-    fun startLiveDataStream(intervalMs: Long = 100) {
+    override fun startLiveDataStream(intervalMs: Long) {
         if (_isStreaming) {
             Logger.w(TAG, "Stream já está ativo, ignorando nova requisição")
             return
@@ -2257,7 +2269,7 @@ class SpeeduinoClient(
     /**
      * Para stream de dados
      */
-    fun stopLiveDataStream() {
+    override fun stopLiveDataStream() {
         Logger.d(TAG, "Parando live data stream...")
         _isStreaming = false
         pendingLiveDataRecoveryReason = null
@@ -2276,7 +2288,7 @@ class SpeeduinoClient(
         }
     }
 
-    suspend fun readMapSelectionSupport(): MapSelectionSupport {
+    override suspend fun readMapSelectionSupport(): MapSelectionSupport {
         if (firmwareInfo?.family != EcuFamily.SPEEDUINO) {
             return MapSelectionSupport()
         }
@@ -2425,7 +2437,7 @@ class SpeeduinoClient(
     /**
      * Pausa stream aguardando o ciclo atual finalizar para evitar respostas pendentes.
      */
-    suspend fun pauseLiveDataStream(timeoutMs: Long = 6000) {
+    override suspend fun pauseLiveDataStream(timeoutMs: Long) {
         if (!_isStreaming) {
             return
         }

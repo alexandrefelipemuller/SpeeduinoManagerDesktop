@@ -2,13 +2,13 @@ package com.speeduino.manager.sync
 
 import com.speeduino.manager.ConfigDownloadResult
 import com.speeduino.manager.ConfigManager
-import com.speeduino.manager.SpeeduinoClient
 import com.speeduino.manager.model.AfrTable
 import com.speeduino.manager.model.EngineConstants
 import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.Page6Validator
 import com.speeduino.manager.model.TriggerSettings
 import com.speeduino.manager.model.VeTable
+import com.speeduino.manager.transport.EcuTransport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -45,7 +45,7 @@ class ConfigSyncService(
     private val configManager: ConfigManager,
 ) {
     suspend fun downloadAndResolveSync(
-        client: SpeeduinoClient,
+        client: EcuTransport,
         localSessionDir: File?,
         onProgress: (Int, Int, String) -> Unit,
     ): Pair<ConfigDownloadResult, SyncDecision> = withContext(Dispatchers.IO) {
@@ -84,7 +84,7 @@ class ConfigSyncService(
     }
 
     suspend fun restoreConfigToEcu(
-        client: SpeeduinoClient,
+        client: EcuTransport,
         sessionDir: File,
         skipPages: Set<Byte> = emptySet(),
         stopOnRangeErr: Boolean = false,
@@ -132,7 +132,7 @@ class ConfigSyncService(
             while (attempt < 3 && !success) {
                 attempt++
                 try {
-                    client.writeRawPageWithoutBurn(pageNum, data)
+                    client.writeRawPageWithoutBurn(pageNum.toInt() and 0xFF, data)
                     wroteAnyPage = true
                     success = true
                 } catch (e: Exception) {
@@ -142,7 +142,7 @@ class ConfigSyncService(
                             val sanitized = Page6Validator.sanitize(data)
                             if (sanitized.changed) {
                                 try {
-                                    client.writeRawPageWithoutBurn(pageNum, sanitized.data)
+                                    client.writeRawPageWithoutBurn(pageNum.toInt() and 0xFF, sanitized.data)
                                     wroteAnyPage = true
                                     warnings.add("Página 6 corrigida (sanitização)")
                                     success = true

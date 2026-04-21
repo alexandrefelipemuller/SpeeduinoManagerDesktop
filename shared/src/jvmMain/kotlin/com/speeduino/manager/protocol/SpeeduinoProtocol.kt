@@ -197,44 +197,60 @@ class SpeeduinoProtocol(
      * @param length Tamanho a ler
      */
     suspend fun readPage(pageNum: Byte, offset: Int, length: Int): ByteArray {
-        if (!isModernEnabled()) {
-            val payload = ByteArray(6)
-            payload[0] = 0x00  // Padding byte
-            payload[1] = pageNum
-            payload[2] = (offset and 0xFF).toByte()
-            payload[3] = ((offset shr 8) and 0xFF).toByte()
-            payload[4] = (length and 0xFF).toByte()
-            payload[5] = ((length shr 8) and 0xFF).toByte()
+        val pageLabel = formatPageId(pageNum)
+        return try {
+            if (!isModernEnabled()) {
+                val payload = ByteArray(6)
+                payload[0] = 0x00  // Padding byte
+                payload[1] = pageNum
+                payload[2] = (offset and 0xFF).toByte()
+                payload[3] = ((offset shr 8) and 0xFF).toByte()
+                payload[4] = (length and 0xFF).toByte()
+                payload[5] = ((length shr 8) and 0xFF).toByte()
 
-            Logger.d("SpeeduinoProtocol", "readPage (LEGACY): pageNum=${formatPageId(pageNum)}, offset=$offset, length=$length")
-            sendLegacyCommand('p'.code.toByte(), payload = payload, expectResponse = false)
-            return connection.receive(length)
-        }
+                Logger.d("SpeeduinoProtocol", "readPage (LEGACY): pageNum=$pageLabel, offset=$offset, length=$length")
+                sendLegacyCommand('p'.code.toByte(), payload = payload, expectResponse = false)
+                val data = connection.receive(length)
+                if (data.size != length) {
+                    throw Exception("short legacy page response: expected=$length received=${data.size}")
+                }
+                data
+            } else {
+                val payload = ByteArray(6)
+                payload[0] = 0x00  // Padding byte
+                payload[1] = pageNum
 
-        val payload = ByteArray(6)
-        payload[0] = 0x00  // Padding byte
-        payload[1] = pageNum
+                // Offset (2 bytes, little-endian)
+                payload[2] = (offset and 0xFF).toByte()           // LSB first
+                payload[3] = ((offset shr 8) and 0xFF).toByte()   // MSB second
 
-        // Offset (2 bytes, little-endian)
-        payload[2] = (offset and 0xFF).toByte()           // LSB first
-        payload[3] = ((offset shr 8) and 0xFF).toByte()   // MSB second
+                // Length (2 bytes, little-endian)
+                payload[4] = (length and 0xFF).toByte()           // LSB first
+                payload[5] = ((length shr 8) and 0xFF).toByte()   // MSB second
 
-        // Length (2 bytes, little-endian)
-        payload[4] = (length and 0xFF).toByte()           // LSB first
-        payload[5] = ((length shr 8) and 0xFF).toByte()   // MSB second
+                Logger.d("SpeeduinoProtocol", "readPage: pageNum=$pageLabel, offset=$offset, length=$length")
+                Logger.d("SpeeduinoProtocol", "Payload bytes: ${payload.joinToString(" ") { "0x%02X".format(it) }}")
 
-        Logger.d("SpeeduinoProtocol", "readPage: pageNum=${formatPageId(pageNum)}, offset=$offset, length=$length")
-        Logger.d("SpeeduinoProtocol", "Payload bytes: ${payload.joinToString(" ") { "0x%02X".format(it) }}")
+                val response = sendModernCommand('p'.code.toByte(), payload)
 
-        val response = sendModernCommand('p'.code.toByte(), payload)
+                Logger.d("SpeeduinoProtocol", "Response size: ${response.size} bytes")
+                Logger.d("SpeeduinoProtocol", "Response first bytes: ${response.take(10).joinToString(" ") { "0x%02X".format(it) }}")
 
-        Logger.d("SpeeduinoProtocol", "Response size: ${response.size} bytes")
-        Logger.d("SpeeduinoProtocol", "Response first bytes: ${response.take(10).joinToString(" ") { "0x%02X".format(it) }}")
+                if (response.isEmpty() || response[0] != SERIAL_RC_OK) {
+                    throw Exception("unexpected response code=${response.getOrNull(0)?.toUByte()?.toString(16) ?: "null"}")
+                }
 
-        return if (response.isNotEmpty() && response[0] == SERIAL_RC_OK) {
-            response.copyOfRange(1, response.size)
-        } else {
-            throw Exception("Erro ao ler página ${formatPageId(pageNum)}")
+                val data = response.copyOfRange(1, response.size)
+                if (data.size != length) {
+                    throw Exception("short modern page response: expected=$length received=${data.size}")
+                }
+                data
+            }
+        } catch (e: Exception) {
+            throw Exception(
+                "Page read failed page=$pageLabel offset=$offset length=$length detail=${e.message ?: "unknown"}",
+                e
+            )
         }
     }
 
@@ -248,32 +264,44 @@ class SpeeduinoProtocol(
 
     suspend fun readTable(tableId: Int, offset: Int, length: Int, family: EcuFamily): ByteArray {
         requireModernCommandSupport("table read")
+        val tableLabel = formatPageId(tableId)
+        return try {
+            val response = if (family == EcuFamily.RUSEFI) {
+                val payload = byteArrayOf(
+                    (tableId and 0xFF).toByte(),
+                    ((tableId shr 8) and 0xFF).toByte(),
+                    (offset and 0xFF).toByte(),
+                    ((offset shr 8) and 0xFF).toByte(),
+                    (length and 0xFF).toByte(),
+                    ((length shr 8) and 0xFF).toByte(),
+                )
+                sendModernCommand('R'.code.toByte(), payload)
+            } else {
+                val payload = ByteArray(6)
+                payload[0] = 0x00
+                payload[1] = (tableId and 0xFF).toByte()
+                payload[2] = ((offset shr 8) and 0xFF).toByte()
+                payload[3] = (offset and 0xFF).toByte()
+                payload[4] = ((length shr 8) and 0xFF).toByte()
+                payload[5] = (length and 0xFF).toByte()
+                sendModernCommand('r'.code.toByte(), payload)
+            }
 
-        val response = if (family == EcuFamily.RUSEFI) {
-            val payload = byteArrayOf(
-                (tableId and 0xFF).toByte(),
-                ((tableId shr 8) and 0xFF).toByte(),
-                (offset and 0xFF).toByte(),
-                ((offset shr 8) and 0xFF).toByte(),
-                (length and 0xFF).toByte(),
-                ((length shr 8) and 0xFF).toByte(),
+            if (response.isEmpty() || response[0] != SERIAL_RC_OK) {
+                throw Exception("unexpected response code=${response.getOrNull(0)?.toUByte()?.toString(16) ?: "null"}")
+            }
+
+            val data = response.copyOfRange(1, response.size)
+            if (data.size != length) {
+                throw Exception("short table response: expected=$length received=${data.size}")
+            }
+
+            data
+        } catch (e: Exception) {
+            throw Exception(
+                "Table read failed table=$tableLabel family=${family.name} offset=$offset length=$length detail=${e.message ?: "unknown"}",
+                e
             )
-            sendModernCommand('R'.code.toByte(), payload)
-        } else {
-            val payload = ByteArray(6)
-            payload[0] = 0x00
-            payload[1] = (tableId and 0xFF).toByte()
-            payload[2] = ((offset shr 8) and 0xFF).toByte()
-            payload[3] = (offset and 0xFF).toByte()
-            payload[4] = ((length shr 8) and 0xFF).toByte()
-            payload[5] = (length and 0xFF).toByte()
-            sendModernCommand('r'.code.toByte(), payload)
-        }
-
-        return if (response.isNotEmpty() && response[0] == SERIAL_RC_OK) {
-            response.copyOfRange(1, response.size)
-        } else {
-            throw Exception("Erro ao ler tabela ${formatPageId(tableId)}")
         }
     }
 
@@ -646,7 +674,11 @@ class SpeeduinoProtocol(
      */
     private fun readModernResponse(cmd: Byte, maxResponseSize: Int = 2048): ByteArray {
         // Read length (2 bytes, big-endian)
-        val lengthBytes = connection.receive(2)
+        val lengthBytes = try {
+            connection.receive(2)
+        } catch (e: Exception) {
+            throw ModernResponseReadException("length", cmd, 2, e)
+        }
         if (lengthBytes.size < 2) {
             throw IncompleteResponseException("length", 2, lengthBytes.size, cmd)
         }
@@ -665,14 +697,22 @@ class SpeeduinoProtocol(
         }
 
         // Read payload
-        val payload = connection.receive(length)
+        val payload = try {
+            connection.receive(length)
+        } catch (e: Exception) {
+            throw ModernResponseReadException("payload", cmd, length, e)
+        }
         if (payload.size < length) {
             throw IncompleteResponseException("payload", length, payload.size, cmd)
         }
         Logger.d("SpeeduinoProtocol", "Payload bytes: ${payload.joinToString(" ") { "0x%02X".format(it) }}")
 
         // Read CRC32 (4 bytes, big-endian)
-        val crcBytes = connection.receive(4)
+        val crcBytes = try {
+            connection.receive(4)
+        } catch (e: Exception) {
+            throw ModernResponseReadException("crc", cmd, 4, e)
+        }
         if (crcBytes.size < 4) {
             throw IncompleteResponseException("crc", 4, crcBytes.size, cmd)
         }
@@ -703,6 +743,16 @@ class SpeeduinoProtocol(
         private val cmd: Byte
     ) : Exception(
         "Incomplete modern response ($stage) for cmd=0x${cmd.toInt().and(0xFF).toString(16)}: expected $expected bytes, received $received"
+    )
+
+    class ModernResponseReadException(
+        private val stage: String,
+        private val cmd: Byte,
+        private val expected: Int,
+        cause: Exception
+    ) : Exception(
+        "Modern response read failed ($stage) for cmd=0x${cmd.toInt().and(0xFF).toString(16)}: expected $expected bytes; ${cause.message ?: "unknown"}",
+        cause
     )
 
     /**
@@ -936,12 +986,3 @@ class SpeeduinoProtocol(
         return crc32.value
     }
 }
-
-/**
- * Capacidades seriais do Speeduino
- */
-data class SerialCapability(
-    val protocolVersion: Int,
-    val blockingFactor: Int,
-    val tableBlockingFactor: Int
-)

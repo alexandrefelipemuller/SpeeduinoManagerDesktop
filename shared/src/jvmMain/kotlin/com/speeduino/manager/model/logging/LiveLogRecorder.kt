@@ -109,6 +109,14 @@ data class LiveLogEntry(
     val batteryDeciVolt: Int,
     val advanceDeg: Int,
     val o2: Int,
+    val candidateSpeedKph: Int?,
+    val candidateAccelPedalPosPct: Int?,
+    val candidateGear: Int?,
+    val candidateThrottleAngleDeg: Double?,
+    val candidateIgnitionAdvanceDeg: Double?,
+    val candidateInjectionDurationMs: Double?,
+    val candidateInjectionDurationMirrorMs: Double?,
+    val gpsSpeedKph: Double?,
     val outputChannelBlockSize: Int,
     val outputChannelData: ByteArray?
 ) {
@@ -124,6 +132,14 @@ data class LiveLogEntry(
                 batteryDeciVolt = (liveData.batteryVoltage * 10).toInt(),
                 advanceDeg = liveData.advance,
                 o2 = liveData.o2,
+                candidateSpeedKph = liveData.candidateSpeedKph,
+                candidateAccelPedalPosPct = liveData.candidateAccelPedalPosPct,
+                candidateGear = liveData.candidateGear,
+                candidateThrottleAngleDeg = liveData.candidateThrottleAngleDeg,
+                candidateIgnitionAdvanceDeg = liveData.candidateIgnitionAdvanceDeg,
+                candidateInjectionDurationMs = liveData.candidateInjectionDurationMs,
+                candidateInjectionDurationMirrorMs = liveData.candidateInjectionDurationMirrorMs,
+                gpsSpeedKph = liveData.gpsSpeedKph,
                 outputChannelBlockSize = liveData.outputChannelBlockSize,
                 outputChannelData = liveData.outputChannelData?.copyOf()
             )

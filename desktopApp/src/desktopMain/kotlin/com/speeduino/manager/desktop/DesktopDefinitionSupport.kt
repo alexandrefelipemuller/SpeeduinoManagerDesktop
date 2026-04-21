@@ -3,6 +3,7 @@ package com.speeduino.manager.desktop
 import com.speeduino.manager.definition.IniCatalogEntry
 import com.speeduino.manager.definition.IniDefinition
 import com.speeduino.manager.definition.IniParser
+import com.speeduino.manager.units.UnitSystem
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -38,11 +39,34 @@ internal enum class IniSelectionSource(val storageValue: String) {
     }
 }
 
+internal enum class AppProtocol(val storageValue: String) {
+    MS_PROTOCOL("ms_protocol"),
+    ELM327_OBD2("elm327_obd2");
+
+    companion object {
+        fun fromStorage(value: String?): AppProtocol =
+            entries.firstOrNull { it.storageValue == value } ?: MS_PROTOCOL
+    }
+}
+
+internal const val SHIFT_LIGHT_RPM_DEFAULT = 6000
+internal const val SHIFT_LIGHT_RPM_MIN = 3000
+internal const val SHIFT_LIGHT_RPM_MAX = 8000
+
 internal data class DesktopSettingsState(
+    val unitSystem: UnitSystem = UnitSystem.AUTO,
+    val autoConnectOnStart: Boolean = false,
+    val shiftLightRpm: Int = SHIFT_LIGHT_RPM_DEFAULT,
+    val protocol: AppProtocol = AppProtocol.MS_PROTOCOL,
     val iniSelectionMode: IniSelectionMode = IniSelectionMode.AUTOMATIC,
     val iniSelectionSource: IniSelectionSource = IniSelectionSource.CATALOG,
     val iniDefinitionId: String? = null,
     val manualFirmwareProfile: String? = null,
+    val lastConnectionType: ConnectionType? = null,
+    val lastTcpHost: String? = null,
+    val lastTcpPort: Int? = null,
+    val lastSerialPort: String? = null,
+    val lastSerialBaudRate: Int? = null,
 )
 
 internal data class ManualFirmwareProfileOption(
@@ -206,10 +230,19 @@ internal object DesktopSettingsStore {
     private const val SETTINGS_FILE = "settings.properties"
     private const val INI_CACHE_FILE = "ini_cache.properties"
     private const val KEY_LANGUAGE = "language"
+    private const val KEY_UNIT_SYSTEM = "unit_system"
+    private const val KEY_AUTO_CONNECT_ON_START = "auto_connect_on_start"
+    private const val KEY_SHIFT_LIGHT_RPM = "shift_light_rpm"
     private const val KEY_INI_SELECTION_MODE = "ini_selection_mode"
     private const val KEY_INI_SELECTION_SOURCE = "ini_selection_source"
     private const val KEY_INI_DEFINITION_ID = "ini_definition_id"
     private const val KEY_MANUAL_FIRMWARE_PROFILE = "manual_firmware_profile"
+    private const val KEY_PROTOCOL = "protocol"
+    private const val KEY_LAST_CONNECTION_TYPE = "last_connection_type"
+    private const val KEY_LAST_TCP_HOST = "last_tcp_host"
+    private const val KEY_LAST_TCP_PORT = "last_tcp_port"
+    private const val KEY_LAST_SERIAL_PORT = "last_serial_port"
+    private const val KEY_LAST_SERIAL_BAUD_RATE = "last_serial_baud_rate"
 
     fun settingsDir(): File = File(System.getProperty("user.home"), ".speeduino-manager-desktop").apply { mkdirs() }
 
@@ -244,20 +277,45 @@ internal object DesktopSettingsStore {
 
     fun loadSettings(): DesktopSettingsState {
         val properties = loadProperties(settingsFile())
+        val unitSystem = UnitSystem.fromStorage(properties.getProperty(KEY_UNIT_SYSTEM))
+        val autoConnectOnStart = properties.getProperty(KEY_AUTO_CONNECT_ON_START)?.equals("true", ignoreCase = true) ?: false
+        val shiftLightRpm = properties.getProperty(KEY_SHIFT_LIGHT_RPM)?.toIntOrNull()
+            ?.coerceIn(SHIFT_LIGHT_RPM_MIN, SHIFT_LIGHT_RPM_MAX)
+            ?: SHIFT_LIGHT_RPM_DEFAULT
+        val protocol = AppProtocol.fromStorage(properties.getProperty(KEY_PROTOCOL))
         val mode = IniSelectionMode.fromStorage(properties.getProperty(KEY_INI_SELECTION_MODE))
         val source = IniSelectionSource.fromStorage(properties.getProperty(KEY_INI_SELECTION_SOURCE))
         val definitionId = properties.getProperty(KEY_INI_DEFINITION_ID)?.takeIf { it.isNotBlank() }
         val manualFirmwareProfile = properties.getProperty(KEY_MANUAL_FIRMWARE_PROFILE)?.takeIf { it.isNotBlank() }
+        val lastConnectionType = properties.getProperty(KEY_LAST_CONNECTION_TYPE)?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { ConnectionType.valueOf(it) }.getOrNull() }
+        val lastTcpHost = properties.getProperty(KEY_LAST_TCP_HOST)?.takeIf { it.isNotBlank() }
+        val lastTcpPort = properties.getProperty(KEY_LAST_TCP_PORT)?.toIntOrNull()
+        val lastSerialPort = properties.getProperty(KEY_LAST_SERIAL_PORT)?.takeIf { it.isNotBlank() }
+        val lastSerialBaudRate = properties.getProperty(KEY_LAST_SERIAL_BAUD_RATE)?.toIntOrNull()
         return DesktopSettingsState(
+            unitSystem = unitSystem,
+            autoConnectOnStart = autoConnectOnStart,
+            shiftLightRpm = shiftLightRpm,
+            protocol = protocol,
             iniSelectionMode = mode,
             iniSelectionSource = if (mode == IniSelectionMode.MANUAL) source else IniSelectionSource.CATALOG,
             iniDefinitionId = if (mode == IniSelectionMode.MANUAL) definitionId else null,
             manualFirmwareProfile = manualFirmwareProfile,
+            lastConnectionType = lastConnectionType,
+            lastTcpHost = lastTcpHost,
+            lastTcpPort = lastTcpPort,
+            lastSerialPort = lastSerialPort,
+            lastSerialBaudRate = lastSerialBaudRate,
         )
     }
 
     fun saveSettings(settings: DesktopSettingsState) {
         val properties = loadProperties(settingsFile())
+        properties.setProperty(KEY_UNIT_SYSTEM, settings.unitSystem.storageValue)
+        properties.setProperty(KEY_AUTO_CONNECT_ON_START, settings.autoConnectOnStart.toString())
+        properties.setProperty(KEY_SHIFT_LIGHT_RPM, settings.shiftLightRpm.coerceIn(SHIFT_LIGHT_RPM_MIN, SHIFT_LIGHT_RPM_MAX).toString())
+        properties.setProperty(KEY_PROTOCOL, settings.protocol.storageValue)
         properties.setProperty(KEY_INI_SELECTION_MODE, settings.iniSelectionMode.storageValue)
         properties.setProperty(KEY_INI_SELECTION_SOURCE, settings.iniSelectionSource.storageValue)
         if (settings.iniSelectionMode == IniSelectionMode.MANUAL && !settings.iniDefinitionId.isNullOrBlank()) {
@@ -269,6 +327,31 @@ internal object DesktopSettingsStore {
             properties.setProperty(KEY_MANUAL_FIRMWARE_PROFILE, settings.manualFirmwareProfile)
         } else {
             properties.remove(KEY_MANUAL_FIRMWARE_PROFILE)
+        }
+        if (settings.lastConnectionType != null) {
+            properties.setProperty(KEY_LAST_CONNECTION_TYPE, settings.lastConnectionType.name)
+        } else {
+            properties.remove(KEY_LAST_CONNECTION_TYPE)
+        }
+        if (!settings.lastTcpHost.isNullOrBlank()) {
+            properties.setProperty(KEY_LAST_TCP_HOST, settings.lastTcpHost)
+        } else {
+            properties.remove(KEY_LAST_TCP_HOST)
+        }
+        if (settings.lastTcpPort != null) {
+            properties.setProperty(KEY_LAST_TCP_PORT, settings.lastTcpPort.toString())
+        } else {
+            properties.remove(KEY_LAST_TCP_PORT)
+        }
+        if (!settings.lastSerialPort.isNullOrBlank()) {
+            properties.setProperty(KEY_LAST_SERIAL_PORT, settings.lastSerialPort)
+        } else {
+            properties.remove(KEY_LAST_SERIAL_PORT)
+        }
+        if (settings.lastSerialBaudRate != null) {
+            properties.setProperty(KEY_LAST_SERIAL_BAUD_RATE, settings.lastSerialBaudRate.toString())
+        } else {
+            properties.remove(KEY_LAST_SERIAL_BAUD_RATE)
         }
         storeProperties(settingsFile(), properties)
     }

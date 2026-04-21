@@ -143,10 +143,37 @@ internal fun ScreenHost(
     onSerialPortChange: (String) -> Unit,
     onBaudRateChange: (String) -> Unit,
     onToggleConnection: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenInstitutional: () -> Unit,
+    onOpenConnectionSettings: () -> Unit,
+    onOpenConnection: () -> Unit,
+    onOpenBluetoothConnection: () -> Unit,
+    onOpenUsbSerialConnection: () -> Unit,
+    onOpenVeTable: () -> Unit,
+    onOpenVeTable2: () -> Unit,
+    onOpenIgnitionTable: () -> Unit,
+    onOpenIgnitionTable2: () -> Unit,
+    onOpenAfrTable: () -> Unit,
+    onOpenBaseMapWizard: () -> Unit,
+    onOpenEngineConstants: () -> Unit,
+    onOpenTriggerSettings: () -> Unit,
+    onOpenIdleControl: () -> Unit,
+    onOpenInputOutputConfig: () -> Unit,
+    onOpenSensorCalibration: () -> Unit,
+    onOpenEngineProtection: () -> Unit,
+    onOpenClosedLoopCorrections: () -> Unit,
+    onOpenInjectorConfig: () -> Unit,
+    onOpenRevLimiterConfig: () -> Unit,
+    onOpenSecondarySerial: () -> Unit,
+    onOpenTuningAssistant: () -> Unit,
+    onOpenLogsEcuTools: () -> Unit,
+    onOpenLogViewer: () -> Unit,
+    onOpenRealTimeMonitor: () -> Unit,
+    onOpenBeforeAfter: () -> Unit
 ) {
     when (route) {
         DesktopRoute.Settings -> SettingsScreen(controller)
+        DesktopRoute.Institutional -> InstitutionalScreenDesktop()
         DesktopRoute.Dashboard -> DashboardScreen(liveData, onOpenSettings = onOpenSettings)
         DesktopRoute.Connection -> DiagnosticScreen(
             controller = controller,
@@ -162,8 +189,58 @@ internal fun ScreenHost(
             onConnectionTypeChange = onConnectionTypeChange,
             onSerialPortChange = onSerialPortChange,
             onBaudRateChange = onBaudRateChange,
-            onToggleConnection = onToggleConnection
+            onToggleConnection = onToggleConnection,
+            onOpenConnectionSettings = onOpenConnectionSettings,
+            onOpenBluetoothConnection = onOpenBluetoothConnection,
+            onOpenUsbSerialConnection = onOpenUsbSerialConnection,
+            onOpenLogsEcuTools = onOpenLogsEcuTools,
+            onOpenInstitutional = onOpenInstitutional
         )
+        DesktopRoute.LogsEcuTools -> LogsEcuToolsScreenDesktop(
+            onOpenDiagnostic = onOpenConnection,
+            onOpenLogViewer = onOpenLogViewer,
+            onOpenRealTimeMonitor = onOpenRealTimeMonitor,
+            onOpenBeforeAfter = onOpenBeforeAfter
+        )
+        DesktopRoute.ConnectionSettings -> ConnectionSettingsScreenDesktop(
+            controller = controller,
+            onOpenBluetoothConnection = onOpenBluetoothConnection,
+            onOpenUsbSerialConnection = onOpenUsbSerialConnection
+        )
+        DesktopRoute.BluetoothConnection -> BluetoothConnectionScreenDesktop(controller)
+        DesktopRoute.UsbSerialConnection -> UsbSerialConnectionScreenDesktop(controller)
+        DesktopRoute.MapsTables -> MapsTablesScreenDesktop(
+            onOpenVeTable = onOpenVeTable,
+            onOpenVeTable2 = onOpenVeTable2,
+            onOpenIgnitionTable = onOpenIgnitionTable,
+            onOpenIgnitionTable2 = onOpenIgnitionTable2,
+            onOpenAfrTable = onOpenAfrTable,
+            onOpenBaseMapWizard = onOpenBaseMapWizard
+        )
+        DesktopRoute.ConfigsTuning -> ConfigsTuningScreenDesktop(
+            onOpenEngineConstants = onOpenEngineConstants,
+            onOpenTriggerSettings = onOpenTriggerSettings,
+            onOpenIdleControl = onOpenIdleControl,
+            onOpenInputOutput = onOpenInputOutputConfig,
+            onOpenSensorCalibration = onOpenSensorCalibration,
+            onOpenEngineProtection = onOpenEngineProtection,
+            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
+            onOpenInjectorConfig = onOpenInjectorConfig,
+            onOpenRevLimiter = onOpenRevLimiterConfig,
+            onOpenSecondarySerial = onOpenSecondarySerial,
+            onOpenTuningAssistant = onOpenTuningAssistant
+        )
+        DesktopRoute.TuningAssistant -> TuningAssistantScreenDesktop(
+            controller = controller,
+            onOpenBeforeAfter = onOpenBeforeAfter
+        )
+        DesktopRoute.InjectorConfig -> InjectorConfigScreenDesktop(controller)
+        DesktopRoute.InputOutputConfig -> InputOutputConfigScreenDesktop(
+            controller = controller,
+            onOpenSecondarySerial = onOpenSecondarySerial
+        )
+        DesktopRoute.RevLimiterConfig -> RevLimiterConfigScreenDesktop()
+        DesktopRoute.SecondarySerial -> SecondarySerialScreenDesktop(controller)
         DesktopRoute.VeTable -> VeTableScreenDesktop(controller, mapIndex = 1)
         DesktopRoute.VeTable2 -> VeTableScreenDesktop(controller, mapIndex = 2)
         DesktopRoute.IgnitionTable -> IgnitionTableScreenDesktop(controller, mapIndex = 1)
@@ -187,7 +264,7 @@ internal fun navSections(): List<NavSection> {
     return listOf(
         NavSection(
             titleKey = "nav.sectionApp",
-            routes = listOf(DesktopRoute.Settings)
+            routes = listOf(DesktopRoute.Settings, DesktopRoute.Institutional)
         ),
         NavSection(
             titleKey = "nav.sectionDashboard",
@@ -196,6 +273,7 @@ internal fun navSections(): List<NavSection> {
         NavSection(
             titleKey = "nav.sectionMaps",
             routes = listOf(
+                DesktopRoute.MapsTables,
                 DesktopRoute.VeTable,
                 DesktopRoute.VeTable2,
                 DesktopRoute.IgnitionTable,
@@ -207,6 +285,12 @@ internal fun navSections(): List<NavSection> {
         NavSection(
             titleKey = "nav.sectionConfigs",
             routes = listOf(
+                DesktopRoute.ConfigsTuning,
+                DesktopRoute.InjectorConfig,
+                DesktopRoute.InputOutputConfig,
+                DesktopRoute.RevLimiterConfig,
+                DesktopRoute.SecondarySerial,
+                DesktopRoute.TuningAssistant,
                 DesktopRoute.EngineConstants,
                 DesktopRoute.TriggerSettings,
                 DesktopRoute.IdleControl,
@@ -218,7 +302,11 @@ internal fun navSections(): List<NavSection> {
         NavSection(
             titleKey = "nav.sectionLogs",
             routes = listOf(
+                DesktopRoute.ConnectionSettings,
+                DesktopRoute.BluetoothConnection,
+                DesktopRoute.UsbSerialConnection,
                 DesktopRoute.Connection,
+                DesktopRoute.LogsEcuTools,
                 DesktopRoute.LogViewer,
                 DesktopRoute.RealTimeMonitor,
                 DesktopRoute.LogAnalyzer,
