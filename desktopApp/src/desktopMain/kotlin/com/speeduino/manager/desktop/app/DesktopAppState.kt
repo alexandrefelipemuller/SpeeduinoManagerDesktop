@@ -37,7 +37,7 @@ internal fun rememberDesktopAppState(desktopSettings: DesktopSettingsState): Des
         desktopSettings.lastSerialBaudRate
     ) {
         DesktopAppState(
-            initialRoute = DesktopRoute.Connection,
+            initialRoute = DesktopRoute.Home,
             initialHost = desktopSettings.lastTcpHost ?: "127.0.0.1",
             initialPort = desktopSettings.lastTcpPort?.toString() ?: "5555",
             initialConnectionType = desktopSettings.lastConnectionType ?: ConnectionType.TCP,

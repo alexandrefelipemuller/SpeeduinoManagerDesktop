@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.speeduino.manager.desktop.ui.chooseOpenFile
 import java.awt.Desktop
 import java.net.URI
 
@@ -30,7 +31,8 @@ internal fun LogsEcuToolsScreenDesktop(
     onOpenDiagnostic: () -> Unit,
     onOpenLogViewer: () -> Unit,
     onOpenRealTimeMonitor: () -> Unit,
-    onOpenBeforeAfter: () -> Unit
+    onOpenBeforeAfter: () -> Unit,
+    onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     val strings = LocalStrings.current
     UtilityScreenFrame(
@@ -45,9 +47,17 @@ internal fun LogsEcuToolsScreenDesktop(
         )
         UtilityActionCard(
             title = strings["route.logViewer"],
-            description = "Inspect captured logs and review live samples.",
+            description = "Inspect captured logs or open an older CSV log manually.",
             buttonLabel = strings["label.institutionalLogViewerCta"],
             onClick = onOpenLogViewer
+        )
+        UtilityActionCard(
+            title = strings["label.logViewerOpenCsvAction"],
+            description = "Choose an older CSV log file and open it directly in the desktop viewer.",
+            buttonLabel = strings["label.logViewerChooseCsv"],
+            onClick = {
+                chooseOpenFile(strings["label.logViewerOpenCsvTitle"])?.absolutePath?.let(onOpenHistoricalLogViewer)
+            }
         )
         UtilityActionCard(
             title = strings["route.realTimeMonitor"],

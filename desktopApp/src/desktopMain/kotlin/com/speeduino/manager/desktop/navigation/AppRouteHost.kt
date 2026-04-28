@@ -2,9 +2,11 @@ package com.speeduino.manager.desktop.navigation
 
 import androidx.compose.runtime.Composable
 import com.speeduino.manager.SpeeduinoLiveData
+import com.speeduino.manager.desktop.ConnectionState
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.InstitutionalScreenDesktop
 import com.speeduino.manager.desktop.feature.app.DashboardScreen
+import com.speeduino.manager.desktop.feature.app.HomeScreenDesktop
 import com.speeduino.manager.desktop.feature.app.SettingsScreen
 
 @Composable
@@ -12,9 +14,18 @@ internal fun AppRouteHost(
     route: DesktopRoute,
     controller: DesktopSpeeduinoController,
     liveData: SpeeduinoLiveData?,
-    onOpenSettings: () -> Unit
+    connectionState: ConnectionState,
+    onToggleConnection: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenRoute: (DesktopRoute) -> Unit,
 ) {
     when (route) {
+        DesktopRoute.Home -> HomeScreenDesktop(
+            controller = controller,
+            connectionState = connectionState,
+            onToggleConnection = onToggleConnection,
+            onOpenRoute = onOpenRoute
+        )
         DesktopRoute.Settings -> SettingsScreen(controller)
         DesktopRoute.Institutional -> InstitutionalScreenDesktop()
         DesktopRoute.Dashboard -> DashboardScreen(liveData, onOpenSettings = onOpenSettings)

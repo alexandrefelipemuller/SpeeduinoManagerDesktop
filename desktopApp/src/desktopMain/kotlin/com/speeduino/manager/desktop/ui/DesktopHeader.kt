@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,7 +25,8 @@ import com.speeduino.manager.desktop.LocalStrings
 internal fun HeaderBar(
     title: String,
     connectionState: ConnectionState,
-    onBackClick: (() -> Unit)? = null
+    onBackClick: (() -> Unit)? = null,
+    onMenuClick: (() -> Unit)? = null
 ) {
     val strings = LocalStrings.current
 
@@ -34,14 +36,24 @@ internal fun HeaderBar(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (onBackClick != null) {
-                FilledTonalButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = strings["action.back"]
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(strings["action.back"])
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onMenuClick != null) {
+                    FilledTonalButton(onClick = onMenuClick) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = strings["action.open"]
+                        )
+                    }
+                }
+                if (onBackClick != null) {
+                    FilledTonalButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = strings["action.back"]
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(strings["action.back"])
+                    }
                 }
             }
             Column {

@@ -26,6 +26,7 @@ internal fun ScreenHost(
     onToggleConnection: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenInstitutional: () -> Unit,
+    onOpenRoute: (DesktopRoute) -> Unit,
     onOpenConnectionSettings: () -> Unit,
     onOpenConnection: () -> Unit,
     onOpenBluetoothConnection: () -> Unit,
@@ -50,16 +51,21 @@ internal fun ScreenHost(
     onOpenLogsEcuTools: () -> Unit,
     onOpenLogViewer: () -> Unit,
     onOpenRealTimeMonitor: () -> Unit,
-    onOpenBeforeAfter: () -> Unit
+    onOpenBeforeAfter: () -> Unit,
+    onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     when (route) {
+        DesktopRoute.Home,
         DesktopRoute.Settings,
         DesktopRoute.Institutional,
         DesktopRoute.Dashboard -> AppRouteHost(
             route = route,
             controller = controller,
             liveData = liveData,
-            onOpenSettings = onOpenSettings
+            connectionState = connectionState,
+            onToggleConnection = onToggleConnection,
+            onOpenSettings = onOpenSettings,
+            onOpenRoute = onOpenRoute
         )
         DesktopRoute.Connection,
         DesktopRoute.ConnectionSettings,
@@ -140,7 +146,8 @@ internal fun ScreenHost(
             onOpenConnection = onOpenConnection,
             onOpenLogViewer = onOpenLogViewer,
             onOpenRealTimeMonitor = onOpenRealTimeMonitor,
-            onOpenBeforeAfter = onOpenBeforeAfter
+            onOpenBeforeAfter = onOpenBeforeAfter,
+            onOpenHistoricalLogViewer = onOpenHistoricalLogViewer
         )
     }
 }

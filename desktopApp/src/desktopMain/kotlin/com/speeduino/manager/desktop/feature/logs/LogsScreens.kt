@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,19 +22,26 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,12 +51,15 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.speeduino.manager.SpeeduinoLiveData
 import com.speeduino.manager.compare.LogCompareResult
 import com.speeduino.manager.compare.LogHeatCellState
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
+import com.speeduino.manager.desktop.DesktopLogExportFormat
 import com.speeduino.manager.desktop.DefaultSelectedLogSignals
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.LogExportSignals
@@ -60,8 +72,11 @@ import com.speeduino.manager.model.logging.LiveLogSnapshot
 import com.speeduino.manager.tuning.CellRef
 import com.speeduino.manager.tuning.CellSuggestion
 import com.speeduino.manager.tuning.TuningStrategy
+import java.io.File
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun RealTimeMonitorScreenDesktop(
@@ -201,8 +216,29 @@ internal fun RealTimeMonitorScreenDesktop(
                         }
                     }
                 }
-                FilledTonalButton(onClick = { controller.saveLogSnapshot(fileName, selectedSignals) }) {
-                    Text(strings["action.saveCsv"])
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(
+                        onClick = {
+                            controller.saveLogSnapshot(
+                                fileName = fileName,
+                                selectedSignalKeys = selectedSignals,
+                                exportFormat = DesktopLogExportFormat.CSV
+                            )
+                        }
+                    ) {
+                        Text(strings["action.saveCsv"])
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            controller.saveLogSnapshot(
+                                fileName = fileName,
+                                selectedSignalKeys = selectedSignals,
+                                exportFormat = DesktopLogExportFormat.MSL
+                            )
+                        }
+                    ) {
+                        Text(strings["action.saveMsl"])
+                    }
                 }
                 if (!logSaveStatus.isNullOrBlank()) {
                     Text(
@@ -231,7 +267,16 @@ internal fun RealTimeMonitorScreenDesktop(
 internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
     val strings = LocalStrings.current
     val snapshot by controller.logSnapshot.collectAsState()
+    val snapshotSourcePath by controller.logSnapshotSourcePath.collectAsState()
+    val logViewerError by controller.logViewerError.collectAsState()
     val entries = snapshot?.entries.orEmpty()
+    val parsedCsvLog = remember(snapshotSourcePath) {
+        snapshotSourcePath?.let { path ->
+            runCatching { parseDesktopCsvLog(path) }
+        }
+    }
+    val csvLog = parsedCsvLog?.getOrNull()
+    val effectiveLogViewerError = logViewerError ?: parsedCsvLog?.exceptionOrNull()?.message
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
@@ -249,8 +294,40 @@ internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
-                Text(strings["label.snapshotSubtitle"], style = MaterialTheme.typography.bodyMedium)
-                FilledTonalButton(onClick = controller::captureSnapshot) { Text(strings["action.refreshSnapshot"]) }
+                Text(
+                    text = if (snapshotSourcePath.isNullOrBlank()) {
+                        strings["label.snapshotSubtitle"]
+                    } else {
+                        strings["label.logViewerLoadedFileSubtitle"]
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (!snapshotSourcePath.isNullOrBlank()) {
+                    Text(
+                        text = snapshotSourcePath!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(onClick = controller::captureSnapshot) {
+                        Text(strings["action.refreshSnapshot"])
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            chooseOpenFile(strings["label.logViewerOpenCsvTitle"])?.absolutePath?.let(controller::loadLogSnapshotFromCsv)
+                        }
+                    ) {
+                        Text(strings["label.logViewerChooseCsv"])
+                    }
+                }
+                effectiveLogViewerError?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
 
@@ -264,16 +341,43 @@ internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (entries.isEmpty()) {
-                    Text(strings["label.noLogCaptured"], style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    val series = remember(entries, strings) { buildLogSeries(entries, strings) }
-                    var selected by remember(series) {
-                        mutableStateOf(series.take(3).map { it.name }.toSet())
+                if (snapshotSourcePath != null && csvLog != null) {
+                    val orderedSignals = remember(csvLog) { sortSignalsByPriority(csvLog.series.map { it.name }) }
+                    var selected by remember(csvLog) {
+                        mutableStateOf(defaultSelectedSignals(orderedSignals).toSet())
                     }
 
                     LogViewerFiltersRow(
-                        signals = series.map { it.name },
+                        signals = orderedSignals,
+                        signalColors = csvLog.series.associate { it.name to it.color },
+                        selectedSignals = selected,
+                        onToggle = { name ->
+                            selected = if (selected.contains(name)) selected - name else selected + name
+                        }
+                    )
+
+                    LogViewerChart(
+                        series = csvLog.series.filter { selected.contains(it.name) },
+                        totalSamples = csvLog.sampleCount
+                    )
+
+                    LogMetadataSummary(
+                        startedAtMs = csvLog.startedAtMs,
+                        endedAtMs = csvLog.endedAtMs,
+                        sampleCount = csvLog.sampleCount
+                    )
+                } else if (entries.isEmpty()) {
+                    Text(strings["label.noLogCaptured"], style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    val series = remember(entries, strings) { buildLogSeries(entries, strings) }
+                    val orderedSignals = remember(series) { sortSignalsByPriority(series.map { it.name }) }
+                    var selected by remember(series) {
+                        mutableStateOf(defaultSelectedSignals(orderedSignals).toSet())
+                    }
+
+                    LogViewerFiltersRow(
+                        signals = orderedSignals,
+                        signalColors = series.associate { it.name to it.color },
                         selectedSignals = selected,
                         onToggle = { name ->
                             selected = if (selected.contains(name)) {
@@ -751,9 +855,36 @@ private fun analyzerHeatColor(base: Color, intensity: Double): Color {
 private data class LogSeries(
     val name: String,
     val color: Color,
-    val values: List<Float>,
+    val points: List<LogPoint>
+)
+
+private data class LogPoint(
+    val x: Float,
+    val y: Float
+)
+
+private data class SeriesScale(
     val min: Float,
     val max: Float
+) {
+    private val range: Float = max - min
+
+    fun normalize(value: Float): Float {
+        if (range == 0f) return 0.5f
+        return ((value - min) / range).coerceIn(0f, 1f)
+    }
+}
+
+private data class ParsedCsvLog(
+    val series: List<LogSeries>,
+    val startedAtMs: Long,
+    val endedAtMs: Long,
+    val sampleCount: Int
+)
+
+private data class SelectedSignalValue(
+    val name: String,
+    val y: Float
 )
 
 private fun buildLogSeries(
@@ -761,16 +892,23 @@ private fun buildLogSeries(
     strings: com.speeduino.manager.desktop.Strings
 ): List<LogSeries> {
     if (entries.isEmpty()) return emptyList()
+    val anchorTimestamp = entries.first().timestampMs
 
     fun build(
         name: String,
         color: Color,
         extractor: (LiveLogEntry) -> Float
     ): LogSeries {
-        val values = entries.map(extractor)
-        val min = values.minOrNull() ?: 0f
-        val max = values.maxOrNull() ?: 0f
-        return LogSeries(name, color, values, min, max)
+        return LogSeries(
+            name = name,
+            color = color,
+            points = entries.map { entry ->
+                LogPoint(
+                    x = ((entry.timestampMs - anchorTimestamp).coerceAtLeast(0L)) / 1000f,
+                    y = extractor(entry)
+                )
+            }
+        )
     }
 
     return listOf(
@@ -788,6 +926,7 @@ private fun buildLogSeries(
 @Composable
 private fun LogViewerFiltersRow(
     signals: List<String>,
+    signalColors: Map<String, Color>,
     selectedSignals: Set<String>,
     onToggle: (String) -> Unit
 ) {
@@ -817,6 +956,12 @@ private fun LogViewerFiltersRow(
                     checked = selectedSignals.contains(name),
                     onCheckedChange = { onToggle(name) }
                 )
+                Box(
+                    modifier = Modifier
+                        .size(width = 22.dp, height = 4.dp)
+                        .background(signalColors[name] ?: MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(name, style = MaterialTheme.typography.bodyMedium)
             }
         }
@@ -831,14 +976,114 @@ private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
         return
     }
 
-    val maxPoints = 800
-    val downsampled = series.map { it.copy(values = downsample(it.values, maxPoints)) }
-    val chartWidth = maxOf(720.dp, (downsampled.first().values.size * 4).dp)
+    var zoomFactor by remember(totalSamples) { mutableStateOf(1f) }
+    var highlightedRange by remember(totalSamples) { mutableStateOf<Pair<Float, Float>?>(null) }
+    var pendingCenterX by remember(totalSamples) { mutableStateOf<Float?>(null) }
+    val maxPoints = (800 * zoomFactor).roundToInt().coerceIn(800, 6_000)
+    val downsampled = series.map { it.copy(points = downsamplePoints(it.points, maxPoints)) }
+    val basePointCount = downsampled.maxOfOrNull { it.points.size } ?: 1
+    val chartWidth = maxOf(720.dp, (basePointCount * 4 * zoomFactor).dp)
     val chartHeight = 320.dp
     val horizontal = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
     val axisColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    val markerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+    val zoomHighlightColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f)
+    val zoomHighlightStroke = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+    val xMax = downsampled.maxOfOrNull { it.points.lastOrNull()?.x ?: 0f }?.coerceAtLeast(1f) ?: 1f
+    val scales = remember(downsampled) {
+        downsampled.associate { logSeries ->
+            val values = logSeries.points.map { it.y }
+            logSeries.name to SeriesScale(
+                min = values.minOrNull() ?: 0f,
+                max = values.maxOrNull() ?: 1f
+            )
+        }
+    }
+    var selectedX by remember(totalSamples) { mutableStateOf<Float?>(null) }
+    val selectedSignalValues = remember(downsampled, selectedX) {
+        val x = selectedX ?: return@remember emptyList()
+        downsampled.mapNotNull { logSeries ->
+            interpolateYAtX(logSeries, x)?.let { value ->
+                SelectedSignalValue(name = logSeries.name, y = value)
+            }
+        }
+    }
+    fun visibleCenterX(): Float {
+        val contentWidthPx = with(density) { chartWidth.toPx() }
+        if (contentWidthPx <= 0f || horizontal.maxValue <= 0) {
+            return selectedX ?: (xMax / 2f)
+        }
+        val viewportWidthPx = (contentWidthPx - horizontal.maxValue).coerceAtLeast(1f)
+        val centerPx = horizontal.value + viewportWidthPx / 2f
+        return ((centerPx / contentWidthPx).coerceIn(0f, 1f) * xMax)
+    }
+
+    LaunchedEffect(pendingCenterX, zoomFactor, chartWidth, horizontal.maxValue, xMax) {
+        val centerX = pendingCenterX ?: return@LaunchedEffect
+        if (horizontal.maxValue <= 0) return@LaunchedEffect
+
+        val contentWidthPx = with(density) { chartWidth.toPx() }
+        val viewportWidthPx = (contentWidthPx - horizontal.maxValue).coerceAtLeast(1f)
+        val centerRatio = (centerX / xMax).coerceIn(0f, 1f)
+        val targetScroll = (contentWidthPx * centerRatio - viewportWidthPx / 2f)
+            .roundToInt()
+            .coerceIn(0, horizontal.maxValue)
+        horizontal.animateScrollTo(targetScroll)
+        pendingCenterX = null
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            val centerX = selectedX ?: visibleCenterX()
+                            val nextZoom = (zoomFactor / 1.6f).coerceAtLeast(1f)
+                            zoomFactor = nextZoom
+                            pendingCenterX = centerX
+                            if (nextZoom == 1f) highlightedRange = null
+                        },
+                        enabled = zoomFactor > 1f
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ZoomOut,
+                            contentDescription = "Zoom out"
+                        )
+                    }
+                    Text(
+                        text = "${String.format(Locale.US, "%.1f", zoomFactor)}x",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    IconButton(
+                        onClick = {
+                            pendingCenterX = selectedX ?: visibleCenterX()
+                            zoomFactor = (zoomFactor * 1.6f).coerceAtMost(16f)
+                        },
+                        enabled = zoomFactor < 16f
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ZoomIn,
+                            contentDescription = "Zoom in"
+                        )
+                    }
+                }
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -850,10 +1095,73 @@ private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
                     .height(chartHeight)
                     .horizontalScroll(horizontal)
             ) {
-                Canvas(modifier = Modifier.width(chartWidth).height(chartHeight)) {
+                Canvas(
+                    modifier = Modifier
+                        .width(chartWidth)
+                        .height(chartHeight)
+                        .pointerInput(zoomFactor) {
+                            detectDragGestures { _, dragAmount ->
+                                val target = (horizontal.value - dragAmount.x)
+                                    .roundToInt()
+                                    .coerceIn(0, horizontal.maxValue)
+                                scope.launch { horizontal.scrollTo(target) }
+                            }
+                        }
+                        .pointerInput(downsampled, zoomFactor) {
+                            fun xFromOffset(offset: Offset): Float {
+                                val padding = 24f
+                                val widthPx = this.size.width.toFloat() - padding * 2f
+                                if (widthPx <= 0f) return selectedX ?: 0f
+                                val normalizedX = ((offset.x - padding) / widthPx).coerceIn(0f, 1f)
+                                return normalizedX * xMax
+                            }
+
+                            detectTapGestures(
+                                onTap = { offset ->
+                                    selectedX = xFromOffset(offset)
+                                },
+                                onDoubleTap = { offset ->
+                                    val tappedX = xFromOffset(offset)
+                                    val nextZoom = (zoomFactor * 2f).coerceAtMost(16f)
+                                    selectedX = tappedX
+                                    zoomFactor = nextZoom
+                                    val window = (xMax / nextZoom).coerceAtLeast(0.5f)
+                                    val start = (tappedX - window / 2f).coerceAtLeast(0f)
+                                    val end = (start + window).coerceAtMost(xMax)
+                                    highlightedRange = start to end
+                                    pendingCenterX = tappedX
+                                }
+                            )
+                        }
+                ) {
                     val padding = 24f
                     val width = size.width - padding * 2
                     val height = size.height - padding * 2
+
+                    highlightedRange?.let { (start, end) ->
+                        val startX = padding + (start / xMax) * width
+                        val endX = padding + (end / xMax) * width
+                        drawRect(
+                            color = zoomHighlightColor,
+                            topLeft = Offset(startX, padding),
+                            size = androidx.compose.ui.geometry.Size(
+                                width = (endX - startX).coerceAtLeast(1f),
+                                height = height
+                            )
+                        )
+                        drawLine(
+                            color = zoomHighlightStroke,
+                            start = Offset(startX, padding),
+                            end = Offset(startX, padding + height),
+                            strokeWidth = 1.4f
+                        )
+                        drawLine(
+                            color = zoomHighlightStroke,
+                            start = Offset(endX, padding),
+                            end = Offset(endX, padding + height),
+                            strokeWidth = 1.4f
+                        )
+                    }
 
                     drawLine(
                         color = axisColor,
@@ -869,14 +1177,11 @@ private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
                     )
 
                     downsampled.forEach { s ->
-                        val min = s.min
-                        val max = if (s.max == s.min) s.min + 1f else s.max
-                        val values = s.values
-                        val stepX = if (values.size <= 1) width else width / (values.size - 1)
+                        val scale = scales.getValue(s.name)
                         val path = Path()
-                        values.forEachIndexed { index, value ->
-                            val normalized = (value - min) / (max - min)
-                            val x = padding + stepX * index
+                        s.points.forEachIndexed { index, point ->
+                            val normalized = scale.normalize(point.y)
+                            val x = padding + (point.x / xMax) * width
                             val y = padding + height - (normalized * height)
                             if (index == 0) {
                                 path.moveTo(x, y)
@@ -889,6 +1194,33 @@ private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
                             color = s.color,
                             style = Stroke(width = 2.2f, cap = StrokeCap.Round)
                         )
+
+                        val markerX = selectedX
+                        if (markerX != null) {
+                            val markerY = interpolateYAtX(s, markerX)
+                            if (markerY != null) {
+                                val normalized = scale.normalize(markerY)
+                                drawCircle(
+                                    color = s.color,
+                                    radius = 4f,
+                                    center = Offset(
+                                        x = padding + (markerX / xMax) * width,
+                                        y = padding + height - (normalized * height)
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    val markerX = selectedX
+                    if (markerX != null) {
+                        val canvasX = padding + (markerX / xMax) * width
+                        drawLine(
+                            color = markerColor,
+                            start = Offset(canvasX, padding),
+                            end = Offset(canvasX, padding + height),
+                            strokeWidth = 1.5f
+                        )
                     }
                 }
             }
@@ -896,13 +1228,34 @@ private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
                 adapter = rememberScrollbarAdapter(horizontal),
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
             )
+            AxisRangeLabels(
+                series = downsampled,
+                scales = scales,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 30.dp, top = 8.dp)
+            )
+            AxisRangeLabels(
+                series = downsampled,
+                scales = scales,
+                showMax = false,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 30.dp, bottom = 28.dp)
+            )
         }
 
         Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Text(strings.format("label.samples", totalSamples), style = MaterialTheme.typography.labelLarge)
             downsampled.forEach { s ->
+                val values = s.points.map { it.y }
+                val min = values.minOrNull() ?: 0f
+                val max = values.maxOrNull() ?: 0f
+                val amplitude = max - min
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -915,11 +1268,64 @@ private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
                             .background(s.color, RoundedCornerShape(4.dp))
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("${s.name} ${formatRange(s.min, s.max)}", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "${s.name} ${formatRange(min, max)} amp ${formatAxisValue(amplitude)}",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
-            Spacer(modifier = Modifier.weight(1f))
-            Text(strings.format("label.samples", totalSamples), style = MaterialTheme.typography.labelLarge)
+        }
+
+        if (selectedSignalValues.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                selectedX?.let { tappedX ->
+                    Text("t=${String.format(Locale.US, "%.2f", tappedX)} s", style = MaterialTheme.typography.labelLarge)
+                }
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    selectedSignalValues.forEach { reading ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = formatSignalReading(reading.name, reading.y),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AxisRangeLabels(
+    series: List<LogSeries>,
+    scales: Map<String, SeriesScale>,
+    modifier: Modifier = Modifier,
+    showMax: Boolean = true
+) {
+    Column(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        series.forEach { logSeries ->
+            val scale = scales[logSeries.name] ?: return@forEach
+            val value = if (showMax) scale.max else scale.min
+            Text(
+                text = "${logSeries.name} ${if (showMax) "max" else "min"} ${formatAxisValue(value)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = logSeries.color,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
@@ -927,27 +1333,84 @@ private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
 @Composable
 private fun LogMetadataSummary(entries: List<LiveLogEntry>) {
     if (entries.isEmpty()) return
+    LogMetadataSummary(
+        startedAtMs = entries.first().timestampMs,
+        endedAtMs = entries.last().timestampMs,
+        sampleCount = entries.size
+    )
+}
+
+@Composable
+private fun LogMetadataSummary(
+    startedAtMs: Long,
+    endedAtMs: Long,
+    sampleCount: Int
+) {
     val strings = LocalStrings.current
-    val start = entries.first().timestampMs
-    val end = entries.last().timestampMs
-    val durationSec = (end - start).coerceAtLeast(0) / 1000
+    val durationSec = (endedAtMs - startedAtMs).coerceAtLeast(0) / 1000
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(strings.format("label.duration", durationSec), style = MaterialTheme.typography.labelLarge)
-        Text(strings.format("label.start", start), style = MaterialTheme.typography.labelLarge)
-        Text(strings.format("label.end", end), style = MaterialTheme.typography.labelLarge)
+        Text(strings.format("label.start", startedAtMs), style = MaterialTheme.typography.labelLarge)
+        Text(strings.format("label.end", endedAtMs), style = MaterialTheme.typography.labelLarge)
+        Text(strings.format("label.samples", sampleCount), style = MaterialTheme.typography.labelLarge)
     }
 }
 
-private fun downsample(values: List<Float>, maxPoints: Int): List<Float> {
-    if (values.size <= maxPoints) return values
-    val step = values.size.toFloat() / maxPoints
+private fun downsamplePoints(points: List<LogPoint>, maxPoints: Int): List<LogPoint> {
+    if (points.size <= maxPoints) return points
+    val step = points.size.toFloat() / maxPoints
     return List(maxPoints) { index ->
-        val idx = (index * step).toInt().coerceIn(0, values.size - 1)
-        values[idx]
+        val idx = (index * step).toInt().coerceIn(0, points.size - 1)
+        points[idx]
+    }
+}
+
+private fun interpolateYAtX(series: LogSeries, x: Float): Float? {
+    val points = series.points
+    if (points.isEmpty()) return null
+    if (points.size == 1) return points.first().y
+
+    val first = points.first()
+    val last = points.last()
+    if (x <= first.x) return first.y
+    if (x >= last.x) return last.y
+
+    var low = 0
+    var high = points.lastIndex
+    while (low <= high) {
+        val mid = (low + high) / 2
+        val midX = points[mid].x
+        when {
+            abs(midX - x) < 0.0001f -> return points[mid].y
+            midX < x -> low = mid + 1
+            else -> high = mid - 1
+        }
+    }
+
+    val rightIndex = low.coerceIn(1, points.lastIndex)
+    val leftIndex = rightIndex - 1
+    val left = points[leftIndex]
+    val right = points[rightIndex]
+    val span = right.x - left.x
+    if (span <= 0f) return left.y
+    val ratio = ((x - left.x) / span).coerceIn(0f, 1f)
+    return left.y + (right.y - left.y) * ratio
+}
+
+private fun formatSignalReading(signalName: String, value: Float): String {
+    return "$signalName ${String.format(Locale.US, "%.2f", value)}"
+}
+
+private fun formatAxisValue(value: Float): String {
+    val absValue = abs(value)
+    return when {
+        absValue >= 100f -> String.format(Locale.US, "%.0f", value)
+        absValue >= 10f -> String.format(Locale.US, "%.1f", value)
+        else -> String.format(Locale.US, "%.2f", value)
     }
 }
 
@@ -957,4 +1420,135 @@ private fun formatRange(min: Float, max: Float): String {
     } else {
         String.format(Locale.US, "%.1f-%.1f", min, max)
     }
+}
+
+private fun parseDesktopCsvLog(path: String): ParsedCsvLog {
+    val file = File(path)
+    require(file.exists()) { "CSV file not found: ${file.name}" }
+
+    val lines = file.readLines().filter { it.isNotBlank() }
+    require(lines.size > 1) { "CSV has no samples." }
+
+    val headers = lines.first().split(",").map { it.trim() }
+    val timestampIndex = headers.indexOfFirst { header ->
+        val normalized = header.trim().lowercase()
+        normalized == "timestamp_ms" || normalized == "timestamp" || normalized == "time_ms" || normalized == "time"
+    }
+    require(timestampIndex >= 0) { "Missing timestamp column." }
+
+    val valueIndices = headers.indices.filter { it != timestampIndex }
+    val headerUnits = valueIndices.associateWith { columnIndex ->
+        detectUnitFromHeader(headers[columnIndex])
+    }
+    val buffers = valueIndices.map { mutableListOf<LogPoint>() }
+    var baseTimestamp: Long? = null
+    var lastTimestamp: Long? = null
+
+    lines.drop(1).forEach { line ->
+        val cols = line.split(",")
+        val timestamp = cols.getOrNull(timestampIndex)?.trim()?.toLongOrNull() ?: return@forEach
+        val anchor = baseTimestamp ?: timestamp.also { baseTimestamp = it }
+        lastTimestamp = timestamp
+        val xSeconds = (timestamp - anchor) / 1000f
+
+        valueIndices.forEachIndexed { bufferIndex, colIndex ->
+            val value = cols.getOrNull(colIndex)?.trim()?.toFloatOrNull()
+            if (value != null) {
+                buffers[bufferIndex].add(LogPoint(x = xSeconds, y = value))
+            }
+        }
+    }
+
+    val orderedColors = listOf(
+        Color(0xFF2F6B5F),
+        Color(0xFFC37B2C),
+        Color(0xFF5C6BC0),
+        Color(0xFFB04A3B),
+        Color(0xFF8D6E63),
+        Color(0xFF388E3C),
+        Color(0xFF6D4C41),
+        Color(0xFF00897B),
+        Color(0xFFD81B60),
+        Color(0xFF3949AB),
+    )
+
+    val series = valueIndices.mapIndexedNotNull { index, columnIndex ->
+        val originalName = headers[columnIndex]
+        val detectedUnit = headerUnits[columnIndex]
+        val displayName = decorateSeriesName(originalName, detectedUnit)
+        val points = buffers[index]
+        if (points.isEmpty()) {
+            null
+        } else {
+            LogSeries(
+                name = displayName,
+                color = orderedColors[index % orderedColors.size],
+                points = points
+            )
+        }
+    }
+    require(series.isNotEmpty()) { "CSV has no numeric columns." }
+
+    return ParsedCsvLog(
+        series = series,
+        startedAtMs = baseTimestamp ?: 0L,
+        endedAtMs = lastTimestamp ?: baseTimestamp ?: 0L,
+        sampleCount = series.maxOfOrNull { it.points.size } ?: 0
+    )
+}
+
+private fun detectUnitFromHeader(header: String): String? {
+    val normalized = header.trim().lowercase()
+    return when {
+        normalized.contains("kpa") -> "kPa"
+        normalized.contains("bar") -> "bar"
+        normalized.endsWith("_c") || normalized.contains("coolant_c") || normalized.contains("iat_c") || normalized.contains("temp_c") -> "°C"
+        normalized.contains("km/h") || normalized.contains("kph") || normalized.contains("kmh") || normalized.endsWith("_kmh") -> "km/h"
+        normalized.contains("pct") || normalized.endsWith("_pct") -> "%"
+        normalized.contains("deg") -> "deg"
+        normalized.endsWith("_v") || normalized.contains("battery_v") -> "V"
+        normalized.endsWith("_ms") || normalized.contains("time_ms") -> "ms"
+        normalized.contains("nm") -> "Nm"
+        normalized.contains("whp") -> "whp"
+        else -> null
+    }
+}
+
+private fun decorateSeriesName(originalName: String, unit: String?): String {
+    if (unit.isNullOrBlank()) return originalName
+    return "$originalName [$unit]"
+}
+
+private fun sortSignalsByPriority(signals: List<String>): List<String> {
+    return signals.sortedWith(compareBy<String> { signalPriority(it) }.thenBy { it.lowercase() })
+}
+
+private fun defaultSelectedSignals(orderedSignals: List<String>): List<String> {
+    val rpm = orderedSignals.firstOrNull { signalMatchesAny(it, listOf("rpm")) }
+    val map = orderedSignals.firstOrNull { signalMatchesAny(it, listOf("map", "map_kpa", "mapkpa")) }
+    val tps = orderedSignals.firstOrNull { signalMatchesAny(it, listOf("tps", "throttle")) }
+    val prioritized = listOfNotNull(rpm, map, tps).distinct()
+    if (prioritized.size >= 3) return prioritized.take(3)
+    return (prioritized + orderedSignals.filterNot { prioritized.contains(it) }).take(3)
+}
+
+private fun signalPriority(signal: String): Int {
+    return when {
+        signalMatchesAny(signal, listOf("rpm")) -> 0
+        signalMatchesAny(signal, listOf("map", "map_kpa", "mapkpa")) -> 1
+        signalMatchesAny(signal, listOf("tps", "throttle")) -> 2
+        signalMatchesAny(signal, listOf("lambda", "afr", "o2")) -> 3
+        signalMatchesAny(signal, listOf("oil_pressure", "fuel_pressure")) -> 4
+        signalMatchesAny(signal, listOf("speed", "drag")) -> 5
+        signalMatchesAny(signal, listOf("coolant", "clt")) -> 6
+        signalMatchesAny(signal, listOf("air_temp", "iat")) -> 7
+        signalMatchesAny(signal, listOf("ignition", "advance", "dwell")) -> 8
+        signalMatchesAny(signal, listOf("inj", "injection")) -> 9
+        else -> 100
+    }
+}
+
+private fun signalMatchesAny(signal: String, tokens: List<String>): Boolean {
+    val normalized = signal.lowercase()
+    return tokens.any { token -> normalized == token || normalized.contains(token) }
 }

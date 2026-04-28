@@ -17,14 +17,16 @@ internal fun LogsRouteHost(
     onOpenConnection: () -> Unit,
     onOpenLogViewer: () -> Unit,
     onOpenRealTimeMonitor: () -> Unit,
-    onOpenBeforeAfter: () -> Unit
+    onOpenBeforeAfter: () -> Unit,
+    onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     when (route) {
         DesktopRoute.LogsEcuTools -> LogsEcuToolsScreenDesktop(
             onOpenDiagnostic = onOpenConnection,
             onOpenLogViewer = onOpenLogViewer,
             onOpenRealTimeMonitor = onOpenRealTimeMonitor,
-            onOpenBeforeAfter = onOpenBeforeAfter
+            onOpenBeforeAfter = onOpenBeforeAfter,
+            onOpenHistoricalLogViewer = onOpenHistoricalLogViewer
         )
         DesktopRoute.RealTimeMonitor -> RealTimeMonitorScreenDesktop(controller, liveData)
         DesktopRoute.LogViewer -> LogViewerScreenDesktop(controller)

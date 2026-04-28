@@ -20,11 +20,14 @@ import com.speeduino.manager.model.EngineConstants
 import com.speeduino.manager.model.FirmwareEra
 import com.speeduino.manager.model.IdleControlSettings
 import com.speeduino.manager.model.IgnitionTable
+import com.speeduino.manager.model.OutputField
 import com.speeduino.manager.model.TriggerSettings
 import com.speeduino.manager.model.VeTable
 import com.speeduino.manager.model.RusefiInputOutputSnapshot
 import com.speeduino.manager.model.SecondarySerialConfig
+import com.speeduino.manager.model.SpeeduinoOutputChannels
 import com.speeduino.manager.model.basemap.GeneratedBaseMap
+import com.speeduino.manager.model.logging.LiveLogEntry
 import com.speeduino.manager.model.logging.LiveLogRecorder
 import com.speeduino.manager.model.logging.LiveLogSnapshot
 import com.speeduino.manager.sync.ConfigSyncService
@@ -54,6 +57,12 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 internal class DesktopSpeeduinoController(
     private val scope: CoroutineScope
@@ -132,6 +141,10 @@ internal class DesktopSpeeduinoController(
     val logState = logRecorder.state
     private val _logSnapshot = MutableStateFlow<LiveLogSnapshot?>(null)
     val logSnapshot = _logSnapshot.asStateFlow()
+    private val _logSnapshotSourcePath = MutableStateFlow<String?>(null)
+    val logSnapshotSourcePath = _logSnapshotSourcePath.asStateFlow()
+    private val _logViewerError = MutableStateFlow<String?>(null)
+    val logViewerError = _logViewerError.asStateFlow()
     private val _lastSavedLogPath = MutableStateFlow<String?>(null)
     val lastSavedLogPath = _lastSavedLogPath.asStateFlow()
     private val _logSaveStatus = MutableStateFlow<String?>(null)
@@ -1005,13 +1018,35 @@ internal class DesktopSpeeduinoController(
     fun stopLogCapture() {
         logRecorder.stop()
         _logSnapshot.value = logRecorder.snapshot()
+        _logSnapshotSourcePath.value = null
+        _logViewerError.value = null
     }
 
     fun captureSnapshot() {
         _logSnapshot.value = logRecorder.snapshot()
+        _logSnapshotSourcePath.value = null
+        _logViewerError.value = null
     }
 
-    fun saveLogSnapshot(fileName: String, selectedSignalKeys: Set<String>) {
+    fun loadLogSnapshotFromCsv(path: String) {
+        scope.launch(Dispatchers.IO) {
+            val strings = LocalizationManager.currentStrings()
+            try {
+                val snapshot = parseLogSnapshotCsv(File(path))
+                _logSnapshot.value = snapshot
+                _logSnapshotSourcePath.value = path
+                _logViewerError.value = null
+            } catch (e: Exception) {
+                _logViewerError.value = strings.format("label.errorWithValue", e.message ?: "unknown")
+            }
+        }
+    }
+
+    fun saveLogSnapshot(
+        fileName: String,
+        selectedSignalKeys: Set<String>,
+        exportFormat: DesktopLogExportFormat = DesktopLogExportFormat.CSV
+    ) {
         scope.launch(Dispatchers.IO) {
             val strings = LocalizationManager.currentStrings()
             try {
@@ -1023,58 +1058,188 @@ internal class DesktopSpeeduinoController(
 
                 val rawName = fileName.ifBlank { strings["label.logFilenamePrefix"] }
                 val sanitizedName = rawName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                val baseName = sanitizedName.substringBeforeLast('.').ifBlank { strings["label.logFilenamePrefix"] }
                 val targetDir = java.nio.file.Paths.get(
                     System.getProperty("user.home"),
                     "SpeeduinoManagerDesktop",
                     "logs"
                 )
                 java.nio.file.Files.createDirectories(targetDir)
-                val baseFile = targetDir.resolve(strings.format("label.logFilenameSuffix", sanitizedName)).toFile()
+                val baseFile = targetDir.resolve("$baseName.${exportFormat.fileExtension}").toFile()
                 val targetFile = uniqueFile(baseFile)
 
                 val selected = selectedSignalKeys.ifEmpty { DefaultSelectedLogSignals }
                 val activeSignals = LogExportSignals.filter { selected.contains(it.key) }
-                val header = buildList {
-                    add("timestamp_ms")
-                    activeSignals.forEach { add(it.header) }
-                }
 
                 targetFile.bufferedWriter().use { writer ->
-                    writer.appendLine(header.joinToString(","))
-                    snapshot.entries.forEach { entry ->
-                        val row = mutableListOf<String>()
-                        row += entry.timestampMs.toString()
-                        activeSignals.forEach { signal ->
-                            row += when (signal.key) {
-                                "rpm" -> entry.rpm.toString()
-                                "map" -> entry.mapKpa.toString()
-                                "tps" -> entry.tps.toString()
-                                "coolant" -> entry.coolantTempC.toString()
-                                "iat" -> entry.intakeTempC.toString()
-                                "battery" -> (entry.batteryDeciVolt / 10.0).toString()
-                                "advance" -> entry.advanceDeg.toString()
-                                "afr" -> entry.o2.toString()
-                                "afr_target" -> ""
-                                "candidate_speed" -> entry.candidateSpeedKph?.toString() ?: ""
-                                "candidate_pedal" -> entry.candidateAccelPedalPosPct?.toString() ?: ""
-                                "candidate_gear" -> entry.candidateGear?.toString() ?: ""
-                                "candidate_throttle_angle" -> entry.candidateThrottleAngleDeg?.toString() ?: ""
-                                "candidate_ignition_advance" -> entry.candidateIgnitionAdvanceDeg?.toString() ?: ""
-                                "candidate_injection_ms" -> entry.candidateInjectionDurationMs?.toString() ?: ""
-                                "candidate_injection_mirror_ms" -> entry.candidateInjectionDurationMirrorMs?.toString() ?: ""
-                                else -> ""
+                    when (exportFormat) {
+                        DesktopLogExportFormat.CSV -> writeSnapshotAsCsv(writer, snapshot, activeSignals)
+                        DesktopLogExportFormat.MSL -> {
+                            val firstRawEntry = snapshot.entries.firstOrNull { entry ->
+                                entry.outputChannelBlockSize > 0 && entry.outputChannelData != null
                             }
+                            val fields = firstRawEntry
+                                ?.outputChannelBlockSize
+                                ?.takeIf { it > 0 }
+                                ?.let(SpeeduinoOutputChannels::getDefinition)
+                                .orEmpty()
+                            writeSnapshotAsMsl(writer, snapshot, fields, activeSignals)
                         }
-                        writer.appendLine(row.joinToString(","))
                     }
                 }
 
-                _lastSavedLogPath.value = targetFile.absolutePath
-                _analyzerLogFile.value = targetFile.absolutePath
+                if (exportFormat == DesktopLogExportFormat.CSV) {
+                    _lastSavedLogPath.value = targetFile.absolutePath
+                    _analyzerLogFile.value = targetFile.absolutePath
+                }
                 _logSaveStatus.value = strings.format("label.logSaveSuccess", targetFile.absolutePath)
             } catch (e: Exception) {
                 _logSaveStatus.value = strings.format("label.logSaveError", e.message ?: "unknown")
             }
+        }
+    }
+
+    private fun writeSnapshotAsCsv(
+        writer: java.io.Writer,
+        snapshot: LiveLogSnapshot,
+        activeSignals: List<LogExportSignal>
+    ) {
+        val header = buildList {
+            add("timestamp_ms")
+            activeSignals.forEach { add(it.header) }
+        }
+        writer.appendLine(header.joinToString(","))
+        snapshot.entries.forEach { entry ->
+            val row = mutableListOf<String>()
+            row += entry.timestampMs.toString()
+            activeSignals.forEach { signal ->
+                row += logSignalValue(entry, signal.key, csv = true)
+            }
+            writer.appendLine(row.joinToString(","))
+        }
+    }
+
+    private fun writeSnapshotAsMsl(
+        writer: java.io.Writer,
+        snapshot: LiveLogSnapshot,
+        fields: List<OutputField>,
+        activeSignals: List<LogExportSignal>
+    ) {
+        val captureDateFormat = SimpleDateFormat("EEE MMM dd HH:mm:ss z yyyy", Locale.US)
+        writer.appendLine("\"speeduino_manager_live_log: SpeeduinoManager Desktop LiveData Export\"")
+        writer.appendLine("\"Capture Date: ${captureDateFormat.format(Date())}, File author: SpeeduinoManager\"")
+
+        val selectedRawFieldNames = activeSignals.map { it.header }.toSet()
+        val selectedFields = fields.filter { field -> selectedRawFieldNames.contains(field.name) }
+        if (selectedFields.isNotEmpty()) {
+            writeRawSnapshotAsMsl(writer, snapshot, selectedFields)
+            return
+        }
+
+        writer.appendLine(buildString {
+            append("Time")
+            activeSignals.forEach { append('\t').append(it.header) }
+        })
+        writer.appendLine(buildString {
+            append("s")
+            activeSignals.forEach { append('\t').append(mslUnitForSignal(it.key)) }
+        })
+
+        val firstTimestampMs = snapshot.entries.firstOrNull()?.timestampMs ?: 0L
+        snapshot.entries.forEach { entry ->
+            val relTimeSeconds = (entry.timestampMs - firstTimestampMs).coerceAtLeast(0L) / 1000.0
+            writer.appendLine(buildString {
+                append(String.format(Locale.US, "%.3f", relTimeSeconds))
+                activeSignals.forEach { signal ->
+                    append('\t').append(logSignalValue(entry, signal.key, csv = false))
+                }
+            })
+        }
+    }
+
+    private fun writeRawSnapshotAsMsl(
+        writer: java.io.Writer,
+        snapshot: LiveLogSnapshot,
+        selectedFields: List<OutputField>
+    ) {
+        writer.appendLine(buildString {
+            append("Time")
+            selectedFields.forEach { field -> append('\t').append(field.name) }
+        })
+        writer.appendLine(buildString {
+            append("s")
+            selectedFields.forEach { field -> append('\t').append(formatMslUnit(field.units)) }
+        })
+
+        val firstTimestampMs = snapshot.entries.firstOrNull()?.timestampMs ?: 0L
+        snapshot.entries.forEach { entry ->
+            val relTimeSeconds = (entry.timestampMs - firstTimestampMs).coerceAtLeast(0L) / 1000.0
+            writer.appendLine(buildString {
+                append(String.format(Locale.US, "%.3f", relTimeSeconds))
+                val data = entry.outputChannelData
+                selectedFields.forEach { field ->
+                    append('\t')
+                    if (data != null && entry.outputChannelBlockSize > 0) {
+                        append(formatLogValue(field.parse(data)))
+                    }
+                }
+            })
+        }
+    }
+
+    private fun logSignalValue(entry: LiveLogEntry, key: String, csv: Boolean): String {
+        return when (key) {
+            "rpm" -> entry.rpm.toString()
+            "map" -> entry.mapKpa.toString()
+            "tps" -> entry.tps.toString()
+            "coolant" -> entry.coolantTempC.toString()
+            "iat" -> entry.intakeTempC.toString()
+            "battery" -> if (csv) (entry.batteryDeciVolt / 10.0).toString() else String.format(Locale.US, "%.1f", entry.batteryDeciVolt / 10.0)
+            "advance" -> entry.advanceDeg.toString()
+            "afr" -> entry.o2.toString()
+            "afr_target" -> ""
+            "candidate_speed" -> entry.candidateSpeedKph?.toString() ?: ""
+            "candidate_pedal" -> entry.candidateAccelPedalPosPct?.toString() ?: ""
+            "candidate_gear" -> entry.candidateGear?.let { if (!csv && it == 0) "N" else it.toString() } ?: ""
+            "candidate_throttle_angle" -> entry.candidateThrottleAngleDeg?.let(::formatLogValue) ?: ""
+            "candidate_ignition_advance" -> entry.candidateIgnitionAdvanceDeg?.let(::formatLogValue) ?: ""
+            "candidate_injection_ms" -> entry.candidateInjectionDurationMs?.let(::formatLogValue) ?: ""
+            "candidate_injection_mirror_ms" -> entry.candidateInjectionDurationMirrorMs?.let(::formatLogValue) ?: ""
+            else -> ""
+        }
+    }
+
+    private fun mslUnitForSignal(key: String): String {
+        return when (key) {
+            "rpm" -> "rpm"
+            "map" -> "kPa"
+            "tps", "candidate_pedal" -> "%"
+            "coolant", "iat" -> "C"
+            "battery" -> "V"
+            "advance", "candidate_throttle_angle", "candidate_ignition_advance" -> "deg"
+            "afr", "afr_target" -> "AFR"
+            "candidate_speed" -> "km/h"
+            "candidate_gear" -> "gear"
+            "candidate_injection_ms", "candidate_injection_mirror_ms" -> "ms"
+            else -> ""
+        }
+    }
+
+    private fun formatMslUnit(rawUnit: String): String {
+        if (rawUnit.isBlank()) return ""
+        return when (rawUnit) {
+            "°C" -> "C"
+            "uS" -> "us"
+            else -> rawUnit
+        }
+    }
+
+    private fun formatLogValue(value: Double): String {
+        val rounded = value.roundToInt().toDouble()
+        return if (abs(value - rounded) < 0.0001) {
+            rounded.toInt().toString()
+        } else {
+            String.format(Locale.US, "%.2f", value)
         }
     }
 
@@ -1095,6 +1260,113 @@ internal class DesktopSpeeduinoController(
         _analyzerLogFile.value = path
         _analyzerResult.value = null
         _analyzerError.value = null
+    }
+
+    private fun parseLogSnapshotCsv(file: File): LiveLogSnapshot {
+        require(file.exists()) { "CSV file not found." }
+        val lines = file.readLines().filter { it.isNotBlank() }
+        require(lines.size >= 2) { "CSV has no samples." }
+
+        val header = lines.first().split(',').map { normalizeCsvHeader(it) }
+        val timestampIndex = header.indexOfFirst {
+            it in listOf("timestamp_ms", "timestamp", "time_ms", "time")
+        }
+        require(timestampIndex >= 0) { "Missing timestamp_ms column." }
+
+        fun headerIndex(vararg aliases: String): Int {
+            val normalizedAliases = aliases.map(::normalizeCsvHeader)
+            return header.indexOfFirst { value -> value in normalizedAliases }
+        }
+
+        val rpmIndex = headerIndex("rpm")
+        val mapIndex = headerIndex("map", "map_kpa", "mapkpa")
+        val tpsIndex = headerIndex("tps")
+        val coolantIndex = headerIndex("coolant", "coolant_c", "clt", "clt_c")
+        val iatIndex = headerIndex("iat", "iat_c", "intake", "intake_c")
+        val batteryIndex = headerIndex("battery", "battery_v", "batt", "batt_v")
+        val advanceIndex = headerIndex("advance", "advance_deg", "ignition_advance")
+        val o2Index = headerIndex("o2", "afr", "lambda")
+        val candidateSpeedIndex = headerIndex("candidate_speed", "candidate_speed_kph", "candidate_speed_kmh")
+        val candidatePedalIndex = headerIndex("candidate_pedal", "candidate_pedal_pct")
+        val candidateGearIndex = headerIndex("candidate_gear")
+        val candidateThrottleAngleIndex = headerIndex("candidate_throttle_angle", "candidate_throttle_angle_deg")
+        val candidateIgnitionAdvanceIndex = headerIndex("candidate_ignition_advance", "candidate_ignition_advance_deg")
+        val candidateInjectionMsIndex = headerIndex("candidate_injection_ms", "candidate_inj_time_ms")
+        val candidateInjectionMirrorMsIndex = headerIndex("candidate_injection_mirror_ms", "candidate_inj_time_mirror_ms")
+        val gpsSpeedIndex = headerIndex("gps_speed_kph", "gps_speed_kmh")
+
+        val entries = lines.drop(1).mapNotNull { line ->
+            val cells = line.split(',')
+            val timestampMs = cells.valueAt(timestampIndex)?.toLongOrNull() ?: return@mapNotNull null
+            LiveLogEntry(
+                timestampMs = timestampMs,
+                rpm = cells.parseInt(rpmIndex),
+                mapKpa = cells.parseInt(mapIndex),
+                tps = cells.parseInt(tpsIndex),
+                coolantTempC = cells.parseInt(coolantIndex),
+                intakeTempC = cells.parseInt(iatIndex),
+                batteryDeciVolt = cells.parseBatteryDeciVolt(batteryIndex),
+                advanceDeg = cells.parseInt(advanceIndex),
+                o2 = cells.parseRoundedInt(o2Index),
+                candidateSpeedKph = cells.parseOptionalInt(candidateSpeedIndex),
+                candidateAccelPedalPosPct = cells.parseOptionalInt(candidatePedalIndex),
+                candidateGear = cells.parseOptionalInt(candidateGearIndex),
+                candidateThrottleAngleDeg = cells.parseOptionalDouble(candidateThrottleAngleIndex),
+                candidateIgnitionAdvanceDeg = cells.parseOptionalDouble(candidateIgnitionAdvanceIndex),
+                candidateInjectionDurationMs = cells.parseOptionalDouble(candidateInjectionMsIndex),
+                candidateInjectionDurationMirrorMs = cells.parseOptionalDouble(candidateInjectionMirrorMsIndex),
+                gpsSpeedKph = cells.parseOptionalDouble(gpsSpeedIndex),
+                outputChannelBlockSize = 0,
+                outputChannelData = null
+            )
+        }
+        require(entries.isNotEmpty()) { "CSV has no valid samples." }
+
+        val averageInterval = entries.zipWithNext()
+            .map { (prev, next) -> next.timestampMs - prev.timestampMs }
+            .filter { it > 0L }
+            .average()
+            .takeIf { !it.isNaN() && it > 0.0 }
+            ?.roundToInt()
+            ?.toLong()
+            ?: 100L
+
+        return LiveLogSnapshot(
+            id = "csv-${UUID.randomUUID()}",
+            startedAtMs = entries.first().timestampMs,
+            stoppedAtMs = entries.last().timestampMs,
+            sampleIntervalMs = averageInterval,
+            entries = entries
+        )
+    }
+
+    private fun normalizeCsvHeader(value: String): String {
+        return value.trim().lowercase()
+    }
+
+    private fun List<String>.valueAt(index: Int): String? {
+        if (index < 0 || index >= size) return null
+        return this[index].trim().takeIf { it.isNotEmpty() }
+    }
+
+    private fun List<String>.parseInt(index: Int): Int {
+        return parseOptionalDouble(index)?.roundToInt() ?: 0
+    }
+
+    private fun List<String>.parseRoundedInt(index: Int): Int {
+        return parseOptionalDouble(index)?.roundToInt() ?: 0
+    }
+
+    private fun List<String>.parseOptionalInt(index: Int): Int? {
+        return parseOptionalDouble(index)?.roundToInt()
+    }
+
+    private fun List<String>.parseOptionalDouble(index: Int): Double? {
+        return valueAt(index)?.replace(',', '.')?.toDoubleOrNull()
+    }
+
+    private fun List<String>.parseBatteryDeciVolt(index: Int): Int {
+        return parseOptionalDouble(index)?.times(10.0)?.roundToInt() ?: 0
     }
 
     fun setBeforeAfterBeforeLogPath(path: String?) {

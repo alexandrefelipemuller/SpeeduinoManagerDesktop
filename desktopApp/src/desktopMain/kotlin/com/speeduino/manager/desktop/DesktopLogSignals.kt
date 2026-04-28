@@ -6,6 +6,13 @@ internal data class LogExportSignal(
     val labelKey: String
 )
 
+internal enum class DesktopLogExportFormat(
+    val fileExtension: String
+) {
+    CSV("csv"),
+    MSL("msl")
+}
+
 internal val LogExportSignals = listOf(
     LogExportSignal("rpm", "rpm", "label.rpm"),
     LogExportSignal("map", "map_kpa", "label.map"),
