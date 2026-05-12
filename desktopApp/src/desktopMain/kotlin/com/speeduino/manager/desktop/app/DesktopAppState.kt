@@ -29,13 +29,7 @@ internal class DesktopAppState(
 
 @Composable
 internal fun rememberDesktopAppState(desktopSettings: DesktopSettingsState): DesktopAppState {
-    return remember(
-        desktopSettings.lastTcpHost,
-        desktopSettings.lastTcpPort,
-        desktopSettings.lastConnectionType,
-        desktopSettings.lastSerialPort,
-        desktopSettings.lastSerialBaudRate
-    ) {
+    return remember {
         DesktopAppState(
             initialRoute = DesktopRoute.Home,
             initialHost = desktopSettings.lastTcpHost ?: "127.0.0.1",

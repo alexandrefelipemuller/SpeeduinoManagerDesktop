@@ -3,6 +3,11 @@ package com.speeduino.manager.desktop.navigation
 internal fun logsNavSection(): NavSection {
     return NavSection(
         titleKey = "nav.sectionLogs",
-        routes = listOf(DesktopRoute.LogsEcuTools)
+        routes = listOf(
+            DesktopRoute.LogsEcuTools,
+            DesktopRoute.RealTimeMonitor,
+            DesktopRoute.LogViewer,
+            DesktopRoute.BeforeAfter
+        )
     )
 }

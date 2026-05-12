@@ -61,11 +61,11 @@ internal fun navSections(): List<NavSection> {
                 DesktopRoute.Dashboard,
                 DesktopRoute.MapsTables,
                 DesktopRoute.ConfigsTuning,
-                DesktopRoute.LogsEcuTools,
                 DesktopRoute.Connection,
                 DesktopRoute.Settings,
             )
         ),
+        logsNavSection(),
         NavSection(
             titleKey = "nav.sectionMore",
             routes = listOf(DesktopRoute.Institutional)

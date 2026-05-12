@@ -35,7 +35,7 @@ internal fun NavigationSidebar(
     compact: Boolean = false
 ) {
     val strings = com.speeduino.manager.desktop.LocalStrings.current
-    val selectedRoute = selectedNavRoute(currentRoute)
+    val selectedTopLevelRoute = selectedNavRoute(currentRoute)
 
     Surface(
         modifier = Modifier.width(if (compact) 92.dp else 296.dp).fillMaxHeight(),
@@ -76,7 +76,8 @@ internal fun NavigationSidebar(
                             )
                         }
                         section.routes.forEach { route ->
-                            val selected = route == selectedRoute
+                            val selected = route == currentRoute ||
+                                (route.topLevel && route == selectedTopLevelRoute && currentRoute !in section.routes)
                             val contentColor = if (selected) {
                                 MaterialTheme.colorScheme.primary
                             } else {

@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -35,6 +37,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -351,6 +355,7 @@ internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
                         signals = orderedSignals,
                         signalColors = csvLog.series.associate { it.name to it.color },
                         selectedSignals = selected,
+                        onSelectedSignalsChange = { selected = it },
                         onToggle = { name ->
                             selected = if (selected.contains(name)) selected - name else selected + name
                         }
@@ -379,6 +384,7 @@ internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
                         signals = orderedSignals,
                         signalColors = series.associate { it.name to it.color },
                         selectedSignals = selected,
+                        onSelectedSignalsChange = { selected = it },
                         onToggle = { name ->
                             selected = if (selected.contains(name)) {
                                 selected - name
@@ -923,48 +929,117 @@ private fun buildLogSeries(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LogViewerFiltersRow(
     signals: List<String>,
     signalColors: Map<String, Color>,
     selectedSignals: Set<String>,
+    onSelectedSignalsChange: (Set<String>) -> Unit,
     onToggle: (String) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        signals.forEach { name ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+    var query by remember(signals) { mutableStateOf("") }
+    val filterFocusRequester = remember { FocusRequester() }
+    val filteredSignals = remember(signals, query) {
+        val normalizedQuery = query.trim().lowercase()
+        if (normalizedQuery.isBlank()) {
+            signals
+        } else {
+            signals.filter { it.lowercase().contains(normalizedQuery) }
+        }
+    }
+    LaunchedEffect(signals) {
+        filterFocusRequester.requestFocus()
+    }
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) {
+            filterFocusRequester.requestFocus()
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Filter channels") },
+                singleLine = true,
                 modifier = Modifier
-                    .background(
-                        if (selectedSignals.contains(name)) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        RoundedCornerShape(12.dp)
-                    )
-                    .clickable { onToggle(name) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .weight(1f)
+                    .focusRequester(filterFocusRequester)
+            )
+            FilledTonalButton(
+                onClick = { onSelectedSignalsChange(selectedSignals + filteredSignals) },
+                enabled = filteredSignals.isNotEmpty()
             ) {
-                androidx.compose.material3.Checkbox(
-                    checked = selectedSignals.contains(name),
-                    onCheckedChange = { onToggle(name) }
-                )
-                Box(
-                    modifier = Modifier
-                        .size(width = 22.dp, height = 4.dp)
-                        .background(signalColors[name] ?: MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(name, style = MaterialTheme.typography.bodyMedium)
+                Text("Select shown")
+            }
+            FilledTonalButton(
+                onClick = { onSelectedSignalsChange(selectedSignals - filteredSignals.toSet()) },
+                enabled = filteredSignals.any { selectedSignals.contains(it) }
+            ) {
+                Text("Clear shown")
             }
         }
+
+        Text(
+            text = "${selectedSignals.size}/${signals.size} channels selected",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            filteredSignals.forEach { name ->
+                LogSignalChip(
+                    name = name,
+                    color = signalColors[name] ?: MaterialTheme.colorScheme.outline,
+                    selected = selectedSignals.contains(name),
+                    onToggle = { onToggle(name) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogSignalChip(
+    name: String,
+    color: Color,
+    selected: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        androidx.compose.material3.Checkbox(
+            checked = selected,
+            onCheckedChange = { onToggle() }
+        )
+        Box(
+            modifier = Modifier
+                .size(width = 22.dp, height = 4.dp)
+                .background(color, RoundedCornerShape(4.dp))
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(name, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -1429,7 +1504,7 @@ private fun parseDesktopCsvLog(path: String): ParsedCsvLog {
     val lines = file.readLines().filter { it.isNotBlank() }
     require(lines.size > 1) { "CSV has no samples." }
 
-    val headers = lines.first().split(",").map { it.trim() }
+    val headers = splitCsvLine(lines.first()).map { it.trim() }
     val timestampIndex = headers.indexOfFirst { header ->
         val normalized = header.trim().lowercase()
         normalized == "timestamp_ms" || normalized == "timestamp" || normalized == "time_ms" || normalized == "time"
@@ -1445,14 +1520,14 @@ private fun parseDesktopCsvLog(path: String): ParsedCsvLog {
     var lastTimestamp: Long? = null
 
     lines.drop(1).forEach { line ->
-        val cols = line.split(",")
+        val cols = splitCsvLine(line)
         val timestamp = cols.getOrNull(timestampIndex)?.trim()?.toLongOrNull() ?: return@forEach
         val anchor = baseTimestamp ?: timestamp.also { baseTimestamp = it }
         lastTimestamp = timestamp
         val xSeconds = (timestamp - anchor) / 1000f
 
         valueIndices.forEachIndexed { bufferIndex, colIndex ->
-            val value = cols.getOrNull(colIndex)?.trim()?.toFloatOrNull()
+            val value = cols.getOrNull(colIndex)?.trim()?.replace(',', '.')?.toFloatOrNull()
             if (value != null) {
                 buffers[bufferIndex].add(LogPoint(x = xSeconds, y = value))
             }
@@ -1524,12 +1599,50 @@ private fun sortSignalsByPriority(signals: List<String>): List<String> {
 }
 
 private fun defaultSelectedSignals(orderedSignals: List<String>): List<String> {
-    val rpm = orderedSignals.firstOrNull { signalMatchesAny(it, listOf("rpm")) }
-    val map = orderedSignals.firstOrNull { signalMatchesAny(it, listOf("map", "map_kpa", "mapkpa")) }
-    val tps = orderedSignals.firstOrNull { signalMatchesAny(it, listOf("tps", "throttle")) }
-    val prioritized = listOfNotNull(rpm, map, tps).distinct()
-    if (prioritized.size >= 3) return prioritized.take(3)
-    return (prioritized + orderedSignals.filterNot { prioritized.contains(it) }).take(3)
+    val telemetryTokens = listOf(
+        listOf("rpm"),
+        listOf("tps", "throttle"),
+        listOf("lambda", "afr", "o2"),
+        listOf("map_kpa", "mapkpa", "map"),
+        listOf("speed"),
+        listOf("engine_temp", "coolant", "clt"),
+        listOf("air_temp", "iat"),
+        listOf("inj", "injection"),
+        listOf("ignition", "advance", "dwell"),
+        listOf("battery"),
+        listOf("torq", "torque"),
+        listOf("power")
+    )
+    val prioritized = telemetryTokens.mapNotNull { tokens ->
+        orderedSignals.firstOrNull { signalMatchesAny(it, tokens) }
+    }.distinct()
+    if (prioritized.isNotEmpty()) return prioritized.take(8)
+    return orderedSignals.take(8)
+}
+
+private fun splitCsvLine(line: String): List<String> {
+    val values = mutableListOf<String>()
+    val current = StringBuilder()
+    var inQuotes = false
+    var index = 0
+    while (index < line.length) {
+        val ch = line[index]
+        when {
+            ch == '"' && inQuotes && index + 1 < line.length && line[index + 1] == '"' -> {
+                current.append('"')
+                index++
+            }
+            ch == '"' -> inQuotes = !inQuotes
+            ch == ',' && !inQuotes -> {
+                values += current.toString()
+                current.clear()
+            }
+            else -> current.append(ch)
+        }
+        index++
+    }
+    values += current.toString()
+    return values
 }
 
 private fun signalPriority(signal: String): Int {

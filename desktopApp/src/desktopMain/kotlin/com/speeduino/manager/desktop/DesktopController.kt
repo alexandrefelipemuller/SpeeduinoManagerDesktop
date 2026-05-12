@@ -53,6 +53,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
@@ -184,6 +186,7 @@ internal class DesktopSpeeduinoController(
     private val beforeAfterComparator = BeforeAfterLogComparator()
     private val syncService = ConfigSyncService(configManager)
     private val definitionRepository = DesktopDefinitionRepository()
+    private val ecuCommandMutex = Mutex()
 
     init {
         refreshIniDefinitions()
@@ -380,6 +383,30 @@ internal class DesktopSpeeduinoController(
         )
     }
 
+    private suspend fun <T> withPausedLiveDataStream(
+        restartStream: Boolean = true,
+        block: suspend (EcuTransport) -> T
+    ): T? {
+        return ecuCommandMutex.withLock {
+            val activeClient = client
+            if (activeClient == null || !_connectionState.value.isConnected) {
+                return@withLock null
+            }
+
+            val wasStreaming = activeClient.isStreaming()
+            if (wasStreaming) {
+                activeClient.pauseLiveDataStream()
+            }
+            try {
+                block(activeClient)
+            } finally {
+                if (restartStream && wasStreaming && client === activeClient && _connectionState.value.isConnected) {
+                    activeClient.startLiveDataStream(_streamIntervalMs.value)
+                }
+            }
+        }
+    }
+
     fun disconnect() {
         pollingJob?.cancel()
         pollingJob = null
@@ -509,10 +536,8 @@ internal class DesktopSpeeduinoController(
     fun loadEngineConstants() {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                _engineConstants.value = if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.readEngineConstants()
-                } else {
+                _engineConstants.value = withPausedLiveDataStream { it.readEngineConstants() }
+                    ?: run {
                     localSessionDir?.let { configManager.loadEngineConstants(it) }
                 }
             } catch (e: Exception) {
@@ -524,10 +549,7 @@ internal class DesktopSpeeduinoController(
     fun saveEngineConstants(constants: EngineConstants) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeEngineConstants(constants)
-                }
+                withPausedLiveDataStream { it.writeEngineConstants(constants) }
                 updateLocalEngineConstants(constants)
                 _engineConstants.value = constants
             } catch (e: Exception) {
@@ -539,10 +561,8 @@ internal class DesktopSpeeduinoController(
     fun loadTriggerSettings() {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                _triggerSettings.value = if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.readTriggerSettings()
-                } else {
+                _triggerSettings.value = withPausedLiveDataStream { it.readTriggerSettings() }
+                    ?: run {
                     localSessionDir?.let { configManager.loadTriggerSettings(it) }
                 }
             } catch (e: Exception) {
@@ -554,10 +574,7 @@ internal class DesktopSpeeduinoController(
     fun saveTriggerSettings(settings: TriggerSettings) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeTriggerSettings(settings)
-                }
+                withPausedLiveDataStream { it.writeTriggerSettings(settings) }
                 updateLocalTriggerSettings(settings)
                 _triggerSettings.value = settings
             } catch (e: Exception) {
@@ -573,10 +590,8 @@ internal class DesktopSpeeduinoController(
     fun loadVeTable(mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                val table = if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.readVeTable(mapIndex)
-                } else {
+                val table = withPausedLiveDataStream { it.readVeTable(mapIndex) }
+                    ?: run {
                     localSessionDir?.let { configManager.loadVeTable(it, mapIndex) }
                 }
                 if (mapIndex == 2) _veTable2.value = table else _veTable.value = table
@@ -589,10 +604,7 @@ internal class DesktopSpeeduinoController(
     fun saveVeTable(table: VeTable, mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeVeTable(table, mapIndex)
-                }
+                withPausedLiveDataStream { it.writeVeTable(table, mapIndex) }
                 updateLocalVeTable(table, mapIndex)
                 if (mapIndex == 2) _veTable2.value = table else _veTable.value = table
             } catch (e: Exception) {
@@ -604,10 +616,8 @@ internal class DesktopSpeeduinoController(
     fun loadIgnitionTable(mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                val table = if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.readIgnitionTable(mapIndex)
-                } else {
+                val table = withPausedLiveDataStream { it.readIgnitionTable(mapIndex) }
+                    ?: run {
                     localSessionDir?.let { configManager.loadIgnitionTable(it, mapIndex) }
                 }
                 if (mapIndex == 2) _ignitionTable2.value = table else _ignitionTable.value = table
@@ -620,10 +630,7 @@ internal class DesktopSpeeduinoController(
     fun saveIgnitionTable(table: IgnitionTable, mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeIgnitionTable(table, mapIndex)
-                }
+                withPausedLiveDataStream { it.writeIgnitionTable(table, mapIndex) }
                 updateLocalIgnitionTable(table, mapIndex)
                 if (mapIndex == 2) _ignitionTable2.value = table else _ignitionTable.value = table
             } catch (e: Exception) {
@@ -635,10 +642,8 @@ internal class DesktopSpeeduinoController(
     fun loadAfrTable() {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                _afrTable.value = if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.readAfrTable()
-                } else {
+                _afrTable.value = withPausedLiveDataStream { it.readAfrTable() }
+                    ?: run {
                     localSessionDir?.let { configManager.loadAfrTable(it) }
                 }
             } catch (e: Exception) {
@@ -650,10 +655,7 @@ internal class DesktopSpeeduinoController(
     fun saveAfrTable(table: AfrTable) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeAfrTable(table)
-                }
+                withPausedLiveDataStream { it.writeAfrTable(table) }
                 updateLocalAfrTable(table)
                 _afrTable.value = table
             } catch (e: Exception) {
@@ -665,10 +667,8 @@ internal class DesktopSpeeduinoController(
     fun loadIdleControlSettings() {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                _idleControlSettings.value = if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.readIdleControlSettings()
-                } else {
+                _idleControlSettings.value = withPausedLiveDataStream { it.readIdleControlSettings() }
+                    ?: run {
                     loadIdleControlSettingsFromSession(localSessionDir)
                 }
             } catch (e: Exception) {
@@ -680,10 +680,7 @@ internal class DesktopSpeeduinoController(
     fun saveIdleControlSettings(settings: IdleControlSettings) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeIdleControlSettings(settings)
-                }
+                withPausedLiveDataStream { it.writeIdleControlSettings(settings) }
                 updateLocalIdleControlSettings(settings)
                 _idleControlSettings.value = settings
             } catch (e: Exception) {
@@ -695,10 +692,8 @@ internal class DesktopSpeeduinoController(
     fun loadClosedLoopCorrections() {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                _closedLoopCorrections.value = if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.readClosedLoopCorrectionConfig()
-                } else {
+                _closedLoopCorrections.value = withPausedLiveDataStream { it.readClosedLoopCorrectionConfig() }
+                    ?: run {
                     loadClosedLoopCorrectionsFromSession(localSessionDir)
                 }
             } catch (e: Exception) {
@@ -711,10 +706,7 @@ internal class DesktopSpeeduinoController(
         scope.launch(Dispatchers.IO) {
             try {
                 val normalized = ClosedLoopCorrectionMapper.syncFromAfr(config)
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeClosedLoopCorrectionConfig(normalized)
-                }
+                withPausedLiveDataStream { it.writeClosedLoopCorrectionConfig(normalized) }
                 updateLocalClosedLoopCorrections(normalized)
                 _closedLoopCorrections.value = normalized
             } catch (e: Exception) {
@@ -726,10 +718,10 @@ internal class DesktopSpeeduinoController(
     fun loadRusefiInputOutputSnapshot() {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
+                val snapshot = withPausedLiveDataStream { it.readRusefiInputOutputSnapshot() }
+                if (snapshot != null) {
                     _tuningConfigState.value = _tuningConfigState.value.copy(
-                        rusefiSnapshot = activeClient.readRusefiInputOutputSnapshot()
+                        rusefiSnapshot = snapshot
                     )
                 } else {
                     _lastError.value = "RuseFI input/output snapshot requires an active connection."
@@ -743,10 +735,10 @@ internal class DesktopSpeeduinoController(
     fun loadSecondarySerialConfig() {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
+                val config = withPausedLiveDataStream { it.readSecondarySerialConfig() }
+                if (config != null) {
                     _tuningConfigState.value = _tuningConfigState.value.copy(
-                        secondarySerialConfig = activeClient.readSecondarySerialConfig()
+                        secondarySerialConfig = config
                     )
                 } else {
                     _lastError.value = "Secondary serial config requires an active connection."
@@ -760,10 +752,7 @@ internal class DesktopSpeeduinoController(
     fun saveSecondarySerialConfig(config: SecondarySerialConfig) {
         scope.launch(Dispatchers.IO) {
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeSecondarySerialConfig(config, burn = true)
-                }
+                withPausedLiveDataStream { it.writeSecondarySerialConfig(config, burn = true) }
                 _tuningConfigState.value = _tuningConfigState.value.copy(secondarySerialConfig = config)
             } catch (e: Exception) {
                 _lastError.value = e.message
@@ -852,13 +841,15 @@ internal class DesktopSpeeduinoController(
             message = "Iniciando download..."
         )
 
-        val (result, decision) = syncService.downloadAndResolveSync(activeClient, localSessionDir) { current, total, message ->
-            val progress = if (total > 0) (current * 100) / total else 0
-            _configState.value = _configState.value.copy(
-                progressPercent = progress,
-                message = message
-            )
-        }
+        val (result, decision) = withPausedLiveDataStream(restartStream = autoRestartStream) {
+            syncService.downloadAndResolveSync(it, localSessionDir) { current, total, message ->
+                val progress = if (total > 0) (current * 100) / total else 0
+                _configState.value = _configState.value.copy(
+                    progressPercent = progress,
+                    message = message
+                )
+            }
+        } ?: return@withContext false
 
         if (result.success) {
             val sessionDir = result.sessionDir
@@ -1466,10 +1457,7 @@ internal class DesktopSpeeduinoController(
                     includedClusterIds = if (includedClusterIds.isEmpty()) allClusterIds else includedClusterIds,
                     clusters = result.clusters
                 )
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeVeTable(updated)
-                }
+                withPausedLiveDataStream { it.writeVeTable(updated) }
                 updateLocalVeTable(updated)
                 _veTable.value = updated
                 if (!logPath.isNullOrBlank() && afr != null) {
@@ -1495,10 +1483,7 @@ internal class DesktopSpeeduinoController(
         scope.launch(Dispatchers.IO) {
             val previous = _analyzerUndoVeTable.value ?: return@launch
             try {
-                val activeClient = client
-                if (activeClient != null && _connectionState.value.isConnected) {
-                    activeClient.writeVeTable(previous)
-                }
+                withPausedLiveDataStream { it.writeVeTable(previous) }
                 updateLocalVeTable(previous)
                 _veTable.value = previous
                 _analyzerUndoVeTable.value = null
@@ -1515,16 +1500,26 @@ internal class DesktopSpeeduinoController(
     fun applyGeneratedBaseMap(map: GeneratedBaseMap, writeTables: Boolean = true, writeConstants: Boolean = true) {
         scope.launch(Dispatchers.IO) {
             try {
+                withPausedLiveDataStream { activeClient ->
+                    if (writeTables) {
+                        activeClient.writeVeTable(map.veTable)
+                        activeClient.writeIgnitionTable(map.ignitionTable)
+                        activeClient.writeAfrTable(map.afrTable)
+                    }
+                    if (writeConstants) {
+                        activeClient.writeEngineConstants(map.engineConstants)
+                    }
+                }
                 if (writeTables) {
-                    client?.writeVeTable(map.veTable)
-                    client?.writeIgnitionTable(map.ignitionTable)
-                    client?.writeAfrTable(map.afrTable)
+                    updateLocalVeTable(map.veTable)
+                    updateLocalIgnitionTable(map.ignitionTable)
+                    updateLocalAfrTable(map.afrTable)
                     _veTable.value = map.veTable
                     _ignitionTable.value = map.ignitionTable
                     _afrTable.value = map.afrTable
                 }
                 if (writeConstants) {
-                    client?.writeEngineConstants(map.engineConstants)
+                    updateLocalEngineConstants(map.engineConstants)
                     _engineConstants.value = map.engineConstants
                 }
             } catch (e: Exception) {

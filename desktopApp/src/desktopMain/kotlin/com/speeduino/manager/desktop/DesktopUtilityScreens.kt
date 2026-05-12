@@ -40,10 +40,10 @@ internal fun LogsEcuToolsScreenDesktop(
         subtitle = strings["label.logsEcuToolsSubtitle"]
     ) {
         UtilityActionCard(
-            title = strings["label.diagnostics"],
-            description = "Open the main diagnostic and connection workspace.",
-            buttonLabel = strings["label.institutionalDiagnosticCta"],
-            onClick = onOpenDiagnostic
+            title = strings["route.realTimeMonitor"],
+            description = "Watch live data and capture it to CSV or MSL.",
+            buttonLabel = strings["label.institutionalRealtimeCta"],
+            onClick = onOpenRealTimeMonitor
         )
         UtilityActionCard(
             title = strings["route.logViewer"],
@@ -60,16 +60,16 @@ internal fun LogsEcuToolsScreenDesktop(
             }
         )
         UtilityActionCard(
-            title = strings["route.realTimeMonitor"],
-            description = "Watch live data and capture it to CSV.",
-            buttonLabel = strings["label.institutionalRealtimeCta"],
-            onClick = onOpenRealTimeMonitor
-        )
-        UtilityActionCard(
             title = strings["route.beforeAfter"],
             description = "Compare before and after logs to see AFR improvements.",
             buttonLabel = strings["label.institutionalBeforeAfterCta"],
             onClick = onOpenBeforeAfter
+        )
+        UtilityActionCard(
+            title = strings["label.diagnostics"],
+            description = "Open the main diagnostic and connection workspace.",
+            buttonLabel = strings["label.institutionalDiagnosticCta"],
+            onClick = onOpenDiagnostic
         )
     }
 }
