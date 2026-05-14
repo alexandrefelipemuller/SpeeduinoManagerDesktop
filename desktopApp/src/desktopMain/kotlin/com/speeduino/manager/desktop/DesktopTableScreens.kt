@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.speeduino.manager.model.AfrTable
+import com.speeduino.manager.model.DwellTable
 import com.speeduino.manager.model.Color as SharedColor
 import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.VeTable
@@ -155,6 +156,47 @@ internal fun AfrTableScreenDesktop(controller: DesktopSpeeduinoController) {
         updateCell = { t, row, col, value -> t.setValue(row, col, value) },
         updateRpm = { t, index, value -> t.setRpmBin(index, value) },
         updateLoad = { t, index, value -> t.setLoadBin(index, value) }
+    )
+}
+
+@Composable
+internal fun DwellTableScreenDesktop(controller: DesktopSpeeduinoController) {
+    val table by controller.dwellTable.collectAsState()
+    val strings = LocalStrings.current
+    val description = buildString {
+        append("Ignition coil charge time table.")
+        table?.let {
+            append(" Load axis: ")
+            append(if (it.loadType == DwellTable.LoadType.TPS) "TPS %" else "MAP kPa")
+        }
+    }
+    MapTableScreen(
+        title = strings["route.dwellTable"],
+        description = description,
+        table = table,
+        onLoad = controller::loadDwellTable,
+        onSave = controller::saveDwellTable,
+        formatValue = { it.toString() },
+        parseValue = { it.toIntOrNull() },
+        valueRange = 0..10,
+        cellColor = { dwellColor(it) },
+        loadAxisLabel = { if (it.loadType == DwellTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
+        rpmBins = { it.rpmBins },
+        loadBins = { it.loadBins },
+        values = { it.values },
+        updateCell = { t, row, col, value -> t.setValue(row, col, value) },
+        updateRpm = { t, index, value -> t.setRpmBin(index, value) },
+        updateLoad = { t, index, value -> t.setLoadBin(index, value) }
+    )
+}
+
+private fun dwellColor(value: Int): Color {
+    val normalized = value.coerceIn(0, 10) / 10.0f
+    return Color(
+        red = 0.18f + (0.70f * normalized),
+        green = 0.22f + (0.35f * (1f - normalized)),
+        blue = 0.55f + (0.20f * (1f - normalized)),
+        alpha = 1f
     )
 }
 

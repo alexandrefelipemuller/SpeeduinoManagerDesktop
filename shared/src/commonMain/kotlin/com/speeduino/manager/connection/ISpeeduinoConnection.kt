@@ -95,6 +95,11 @@ interface ISpeeduinoConnection {
     fun clearInputBuffer() {}
 
     /**
+     * Aborta uma leitura pendente sem precisar encerrar toda a conexão.
+     */
+    fun abortPendingRead() {}
+
+    /**
      * Permite ao transporte ajustar o perfil físico antes de uma nova tentativa de handshake.
      * Retorna true quando houve mudança relevante (ex: reopen com outro perfil).
      */

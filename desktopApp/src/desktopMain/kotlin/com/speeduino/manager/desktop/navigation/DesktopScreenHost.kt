@@ -36,6 +36,7 @@ internal fun ScreenHost(
     onOpenIgnitionTable: () -> Unit,
     onOpenIgnitionTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
+    onOpenDwellTable: () -> Unit,
     onOpenBaseMapWizard: () -> Unit,
     onOpenEngineConstants: () -> Unit,
     onOpenTriggerSettings: () -> Unit,
@@ -98,6 +99,7 @@ internal fun ScreenHost(
         DesktopRoute.IgnitionTable,
         DesktopRoute.IgnitionTable2,
         DesktopRoute.AfrTable,
+        DesktopRoute.DwellTable,
         DesktopRoute.BaseMapWizard -> MapsRouteHost(
             route = route,
             controller = controller,
@@ -106,6 +108,7 @@ internal fun ScreenHost(
             onOpenIgnitionTable = onOpenIgnitionTable,
             onOpenIgnitionTable2 = onOpenIgnitionTable2,
             onOpenAfrTable = onOpenAfrTable,
+            onOpenDwellTable = onOpenDwellTable,
             onOpenBaseMapWizard = onOpenBaseMapWizard
         )
         DesktopRoute.ConfigsTuning,

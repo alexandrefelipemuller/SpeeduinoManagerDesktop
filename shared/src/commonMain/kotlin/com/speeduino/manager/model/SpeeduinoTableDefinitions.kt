@@ -489,6 +489,12 @@ object SpeeduinoDefinitionProvider : EcuDefinitionProvider {
                 blockSize = definitions.ochBlockSize,
                 byteOrder = definitions.byteOrder,
                 schemaId = "speeduino-${definitions.era.name.lowercase()}",
+                liveDataBlockSize = definitions.ochBlockSize,
+                configReadMode = if (definitions.era == FirmwareEra.LEGACY) {
+                    EcuConfigReadMode.LEGACY_PAGE
+                } else {
+                    EcuConfigReadMode.MODERN_TABLE
+                },
             ),
             capabilities = EcuCapabilities(
                 supportsModernProtocol = true,

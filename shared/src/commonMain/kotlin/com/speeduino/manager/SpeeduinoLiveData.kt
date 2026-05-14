@@ -23,6 +23,8 @@ data class SpeeduinoLiveData(
     val candidateInjectionDurationMs: Double? = null,
     val candidateInjectionDurationMirrorMs: Double? = null,
     val gpsSpeedKph: Double? = null,
+    val gpsLatitude: Double? = null,
+    val gpsLongitude: Double? = null,
     val outputChannelBlockSize: Int = 0,
     val outputChannelData: ByteArray? = null
 ) {

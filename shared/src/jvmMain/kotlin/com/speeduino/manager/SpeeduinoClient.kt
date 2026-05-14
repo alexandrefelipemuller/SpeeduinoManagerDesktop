@@ -32,6 +32,7 @@ import com.speeduino.manager.model.TableValidator
 import com.speeduino.manager.model.UnsupportedFirmwareException
 import com.speeduino.manager.model.ValidationException
 import com.speeduino.manager.model.SecondarySerialConfig
+import com.speeduino.manager.model.DwellTable
 import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.AfrTable
 import com.speeduino.manager.model.IdleControlSettings
@@ -109,6 +110,7 @@ class SpeeduinoClient(
     private var megaSpeedIniCatalog: MegaSpeedIniTableDefinitions.Catalog? = null
     private var rusefiIniCatalog: RusefiIniTableDefinitions.Catalog? = null
     private var cachedEngineConstants: EngineConstants? = null
+    private var cachedDwellTable: DwellTable? = null
     private var pinLayoutInfo: PinLayoutInfo? = null
     private val connectMutex = Mutex()
     private var liveDataSampleCounter = 0
@@ -320,12 +322,18 @@ class SpeeduinoClient(
                         delay(retryDelayMs)
                     }
                 }
+                connection.abortPendingRead()
                 connection.clearInputBuffer()
 
                 val candidates = protocol.getFirmwareInfoLegacyCandidates()
                 val selectedSample = FirmwareHandshakeDomain.selectBestCandidate(candidates)
                 if (!selectedSample.isNullOrBlank()) {
                     return listOf(selectedSample)
+                }
+
+                val approximate = candidates.firstNotNullOfOrNull(FirmwareHandshakeDomain::approximateSpeeduinoSignature)
+                if (!approximate.isNullOrBlank()) {
+                    return listOf(approximate)
                 }
 
                 val cleanedCandidates = candidates
@@ -532,6 +540,7 @@ class SpeeduinoClient(
      */
     override fun disconnect() {
         stopLiveDataStream()
+        connection.abortPendingRead()
         connection.disconnect()
         // NÃO cancelar o scope - apenas o job do stream
         // Isso permite reconectar e reiniciar o stream
@@ -544,6 +553,7 @@ class SpeeduinoClient(
         megaSpeedIniCatalog = null
         rusefiIniCatalog = null
         cachedEngineConstants = null
+        cachedDwellTable = null
         pinLayoutInfo = null
         SpeeduinoOutputChannels.clearAllRuntimeDefinitions()
     }
@@ -1677,6 +1687,14 @@ class SpeeduinoClient(
         }
     }
 
+    override suspend fun readDwellTable(mapIndex: Int): DwellTable {
+        return cachedDwellTable ?: DwellTable.createDefault()
+    }
+
+    override suspend fun writeDwellTable(dwellTable: DwellTable, mapIndex: Int) {
+        cachedDwellTable = dwellTable
+    }
+
     private suspend fun readRusefiIgnitionTable(): IgnitionTable {
         val loadType = if (isMapLoad()) IgnitionTable.LoadType.MAP else IgnitionTable.LoadType.TPS
         rusefiIniCatalog?.let { catalog ->
@@ -2027,6 +2045,7 @@ class SpeeduinoClient(
                 protocol.readRusefiOutputChannels(outputSize)
             } catch (e: Exception) {
                 if (connection.isConnected()) {
+                    connection.abortPendingRead()
                     connection.clearInputBuffer()
                 }
                 throw e
@@ -2177,6 +2196,9 @@ class SpeeduinoClient(
                         restartReason = reason
                         Logger.w(TAG, "Reiniciando stream após amostras inválidas: $reason")
                         ConnectionTrace.info("live_data", "recovering stream after $reason")
+                        connection.abortPendingRead()
+                        connection.abortPendingRead()
+                        connection.abortPendingRead()
                         connection.clearInputBuffer()
                         break
                     }
@@ -2213,6 +2235,9 @@ class SpeeduinoClient(
                             TAG,
                             "Timeout parcial no stream (${recoverableReadTimeouts}/${LIVE_STREAM_RECOVERABLE_TIMEOUT_LIMIT}): ${e.message}"
                         )
+                        connection.abortPendingRead()
+                    connection.abortPendingRead()
+                        connection.abortPendingRead()
                         connection.clearInputBuffer()
 
                         if (recoverableReadTimeouts < LIVE_STREAM_RECOVERABLE_TIMEOUT_LIMIT) {

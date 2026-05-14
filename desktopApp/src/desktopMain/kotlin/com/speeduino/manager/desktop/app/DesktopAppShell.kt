@@ -164,6 +164,7 @@ internal fun DesktopAppShell() {
                                     onOpenIgnitionTable = { appState.currentRoute = DesktopRoute.IgnitionTable },
                                     onOpenIgnitionTable2 = { appState.currentRoute = DesktopRoute.IgnitionTable2 },
                                     onOpenAfrTable = { appState.currentRoute = DesktopRoute.AfrTable },
+                                    onOpenDwellTable = { appState.currentRoute = DesktopRoute.DwellTable },
                                     onOpenBaseMapWizard = { appState.currentRoute = DesktopRoute.BaseMapWizard },
                                     onOpenEngineConstants = { appState.currentRoute = DesktopRoute.EngineConstants },
                                     onOpenTriggerSettings = { appState.currentRoute = DesktopRoute.TriggerSettings },

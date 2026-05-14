@@ -3,6 +3,7 @@ package com.speeduino.manager.desktop.navigation
 import androidx.compose.runtime.Composable
 import com.speeduino.manager.desktop.AfrTableScreenDesktop
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
+import com.speeduino.manager.desktop.DwellTableScreenDesktop
 import com.speeduino.manager.desktop.IgnitionTableScreenDesktop
 import com.speeduino.manager.desktop.MapsTablesScreenDesktop
 import com.speeduino.manager.desktop.VeTableScreenDesktop
@@ -17,6 +18,7 @@ internal fun MapsRouteHost(
     onOpenIgnitionTable: () -> Unit,
     onOpenIgnitionTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
+    onOpenDwellTable: () -> Unit,
     onOpenBaseMapWizard: () -> Unit
 ) {
     when (route) {
@@ -26,6 +28,7 @@ internal fun MapsRouteHost(
             onOpenIgnitionTable = onOpenIgnitionTable,
             onOpenIgnitionTable2 = onOpenIgnitionTable2,
             onOpenAfrTable = onOpenAfrTable,
+            onOpenDwellTable = onOpenDwellTable,
             onOpenBaseMapWizard = onOpenBaseMapWizard
         )
         DesktopRoute.VeTable -> VeTableScreenDesktop(controller, mapIndex = 1)
@@ -33,6 +36,7 @@ internal fun MapsRouteHost(
         DesktopRoute.IgnitionTable -> IgnitionTableScreenDesktop(controller, mapIndex = 1)
         DesktopRoute.IgnitionTable2 -> IgnitionTableScreenDesktop(controller, mapIndex = 2)
         DesktopRoute.AfrTable -> AfrTableScreenDesktop(controller)
+        DesktopRoute.DwellTable -> DwellTableScreenDesktop(controller)
         DesktopRoute.BaseMapWizard -> BaseMapWizardScreenDesktop(controller)
         else -> Unit
     }

@@ -57,7 +57,9 @@ object MegaSpeedDefinitionProvider : EcuDefinitionProvider {
             runtime = EcuRuntimeSchema(
                 blockSize = 219,
                 byteOrder = EcuByteOrder.BIG_ENDIAN,
-                schemaId = "megaspeed-ms2x"
+                schemaId = "megaspeed-ms2x",
+                liveDataBlockSize = 219,
+                configReadMode = EcuConfigReadMode.LEGACY_PAGE,
             ),
             capabilities = EcuCapabilities(
                 supportsModernProtocol = true,
@@ -102,7 +104,9 @@ object Ms2DefinitionProvider : EcuDefinitionProvider {
             runtime = EcuRuntimeSchema(
                 blockSize = 212,
                 byteOrder = EcuByteOrder.BIG_ENDIAN,
-                schemaId = "ms2extra-342"
+                schemaId = "ms2extra-342",
+                liveDataBlockSize = 212,
+                configReadMode = EcuConfigReadMode.LEGACY_PAGE,
             ),
             capabilities = EcuCapabilities(
                 supportsModernProtocol = true,
@@ -161,7 +165,9 @@ object Ms3DefinitionProvider : EcuDefinitionProvider {
             runtime = EcuRuntimeSchema(
                 blockSize = 509,
                 byteOrder = EcuByteOrder.BIG_ENDIAN,
-                schemaId = "ms3-0523"
+                schemaId = "ms3-0523",
+                liveDataBlockSize = 509,
+                configReadMode = EcuConfigReadMode.LEGACY_PAGE,
             ),
             capabilities = EcuCapabilities(
                 supportsModernProtocol = true,
@@ -207,6 +213,8 @@ object RusefiDefinitionProvider : EcuDefinitionProvider {
                 blockSize = if (isF407Discovery) 2068 else 2084,
                 byteOrder = EcuByteOrder.LITTLE_ENDIAN,
                 schemaId = if (isF407Discovery) "rusefi-f407-discovery" else "rusefi-main",
+                liveDataBlockSize = if (isF407Discovery) 2068 else 2084,
+                configReadMode = EcuConfigReadMode.LEGACY_PAGE,
             ),
             capabilities = EcuCapabilities(
                 supportsModernProtocol = true,

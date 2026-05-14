@@ -4,6 +4,7 @@ import com.speeduino.manager.SpeeduinoLiveData
 import com.speeduino.manager.definition.IniDefinition
 import com.speeduino.manager.ecu.FirmwareInfo
 import com.speeduino.manager.model.AfrTable
+import com.speeduino.manager.model.DwellTable
 import com.speeduino.manager.model.ClosedLoopCorrectionConfig
 import com.speeduino.manager.model.EcuCapabilities
 import com.speeduino.manager.model.EcuFamily
@@ -81,6 +82,9 @@ interface EcuTransport {
     suspend fun readIgnitionTable(mapIndex: Int = 1): IgnitionTable =
         throw UnsupportedOperationException("Ignition table not supported by this transport")
 
+    suspend fun readDwellTable(mapIndex: Int = 1): DwellTable =
+        throw UnsupportedOperationException("Dwell table not supported by this transport")
+
     suspend fun readAfrTable(): AfrTable =
         throw UnsupportedOperationException("AFR table not supported by this transport")
 
@@ -151,6 +155,9 @@ interface EcuTransport {
 
     suspend fun writeIgnitionTable(ignitionTable: IgnitionTable, mapIndex: Int = 1): Unit =
         throw UnsupportedOperationException("Ignition table write not supported by this transport")
+
+    suspend fun writeDwellTable(dwellTable: DwellTable, mapIndex: Int = 1): Unit =
+        throw UnsupportedOperationException("Dwell table write not supported by this transport")
 
     suspend fun writeAfrTable(afrTable: AfrTable): Unit =
         throw UnsupportedOperationException("AFR table write not supported by this transport")

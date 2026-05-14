@@ -339,6 +339,9 @@ object SpeeduinoOutputChannels {
         // Total: 130 bytes (0-129)
     )
 
+    val MODERN_2022_FIELDS: List<OutputField> = MODERN_2020_FIELDS
+    val MODERN_2023_FIELDS: List<OutputField> = MODERN_2020_FIELDS
+
     // ========================================
     // FACTORY METHOD
     // ========================================

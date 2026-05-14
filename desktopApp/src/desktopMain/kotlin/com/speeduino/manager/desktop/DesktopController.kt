@@ -14,6 +14,7 @@ import com.speeduino.manager.connection.SpeeduinoSerialConnection
 import com.speeduino.manager.connection.SpeeduinoTcpConnection
 import com.speeduino.manager.ecu.FirmwareInfo
 import com.speeduino.manager.model.AfrTable
+import com.speeduino.manager.model.DwellTable
 import com.speeduino.manager.model.ClosedLoopCorrectionConfig
 import com.speeduino.manager.model.ClosedLoopCorrectionMapper
 import com.speeduino.manager.model.EngineConstants
@@ -93,6 +94,9 @@ internal class DesktopSpeeduinoController(
 
     private val _afrTable = MutableStateFlow<AfrTable?>(null)
     val afrTable = _afrTable.asStateFlow()
+
+    private val _dwellTable = MutableStateFlow<DwellTable?>(null)
+    val dwellTable = _dwellTable.asStateFlow()
 
     private val _idleControlSettings = MutableStateFlow<IdleControlSettings?>(null)
     val idleControlSettings = _idleControlSettings.asStateFlow()
@@ -424,6 +428,7 @@ internal class DesktopSpeeduinoController(
             _ignitionTable.value = null
             _ignitionTable2.value = null
             _afrTable.value = null
+            _dwellTable.value = null
             _idleControlSettings.value = null
             _closedLoopCorrections.value = null
         }
@@ -658,6 +663,30 @@ internal class DesktopSpeeduinoController(
                 withPausedLiveDataStream { it.writeAfrTable(table) }
                 updateLocalAfrTable(table)
                 _afrTable.value = table
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    fun loadDwellTable() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val table = withPausedLiveDataStream { it.readDwellTable() }
+                    ?: DwellTable.createDefault()
+                _dwellTable.value = table
+            } catch (e: Exception) {
+                _lastError.value = e.message
+                _dwellTable.value = DwellTable.createDefault()
+            }
+        }
+    }
+
+    fun saveDwellTable(table: DwellTable) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                withPausedLiveDataStream { it.writeDwellTable(table) }
+                _dwellTable.value = table
             } catch (e: Exception) {
                 _lastError.value = e.message
             }

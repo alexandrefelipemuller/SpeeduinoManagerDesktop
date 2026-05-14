@@ -61,15 +61,17 @@ internal fun MapsTablesScreenDesktop(
     onOpenIgnitionTable: () -> Unit,
     onOpenIgnitionTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
+    onOpenDwellTable: () -> Unit,
     onOpenBaseMapWizard: () -> Unit
 ) {
     TuningSectionScreen(
         title = "Maps & Tables",
-        subtitle = "Access VE, ignition, AFR and base map tools.",
+        subtitle = "Access VE, ignition, AFR, dwell and base map tools.",
     ) {
         ActionCard("VE Table", "Fuel table editor.") { RowButtons(onOpenVeTable, onOpenVeTable2, "VE 1", "VE 2") }
         ActionCard("Ignition Table", "Ignition timing table editor.") { RowButtons(onOpenIgnitionTable, onOpenIgnitionTable2, "Ign 1", "Ign 2") }
         ActionCard("AFR Table", "Target lambda / AFR table editor.") { RowButtons(onOpenAfrTable, null, "Open AFR", null) }
+        ActionCard("Dwell Table", "Ignition coil charge time editor.") { RowButtons(onOpenDwellTable, null, "Open Dwell", null) }
         ActionCard("Base Map Wizard", "Generate a starter fuel and ignition map.") { RowButtons(onOpenBaseMapWizard, null, "Open Wizard", null) }
     }
 }

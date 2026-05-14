@@ -136,6 +136,13 @@ class SpeeduinoSerialConnection(
         onError = callback
     }
 
+    override fun abortPendingRead() {
+        try {
+            port?.flushIOBuffers()
+        } catch (_: Exception) {
+        }
+    }
+
     override fun close() {
         disconnect()
     }

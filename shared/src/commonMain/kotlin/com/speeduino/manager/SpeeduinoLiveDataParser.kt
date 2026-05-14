@@ -27,8 +27,8 @@ object SpeeduinoLiveDataParser {
         val blockSize = data.size
         val secl = fieldInt(data, blockSize, "secl")
         val rpm = fieldInt(data, blockSize, "rpm")
-        val coolant = fieldInt(data, blockSize, "coolantRaw")
-        val intake = fieldInt(data, blockSize, "iatRaw")
+        val coolant = resolvedTemperature(data, blockSize, "coolant", "coolantRaw")
+        val intake = resolvedTemperature(data, blockSize, "intake", "iatRaw")
         val map = fieldInt(data, blockSize, "map")
         val tps = fieldInt(data, blockSize, "tps")
         val battery = fieldDouble(data, blockSize, "batteryVoltage")
@@ -62,6 +62,18 @@ object SpeeduinoLiveDataParser {
     private fun fieldDouble(data: ByteArray, blockSize: Int, name: String): Double {
         val field = SpeeduinoOutputChannels.getField(blockSize, name)
         return field?.parse(data) ?: 0.0
+    }
+
+    private fun resolvedTemperature(data: ByteArray, blockSize: Int, cookedName: String, rawName: String): Int {
+        return when {
+            hasField(blockSize, cookedName) -> fieldInt(data, blockSize, cookedName)
+            hasField(blockSize, rawName) -> fieldInt(data, blockSize, rawName)
+            else -> 0
+        }
+    }
+
+    private fun hasField(blockSize: Int, name: String): Boolean {
+        return SpeeduinoOutputChannels.getField(blockSize, name) != null
     }
 
     private fun u8(data: ByteArray, index: Int): Int {

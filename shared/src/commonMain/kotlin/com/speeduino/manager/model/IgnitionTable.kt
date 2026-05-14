@@ -30,6 +30,16 @@ data class IgnitionTable(
         private const val MAP_LOAD_SCALE = 2
         private const val TPS_LOAD_DIVISOR = 2
 
+        fun isBlankBytes(data: ByteArray): Boolean {
+            return data.isEmpty() || data.all { it.toInt() and 0xFF == 0x00 }
+        }
+
+        fun isBlankAxisPage(data: ByteArray): Boolean {
+            if (data.size < 288) return true
+            val axisBytes = data.drop(256).take(32)
+            return axisBytes.isNotEmpty() && axisBytes.all { it.toInt() and 0xFF == 0x00 }
+        }
+
         /**
          * Create a default 16x16 Ignition table for testing
          */

@@ -50,6 +50,14 @@ object FirmwareHandshakeDomain {
             .find(sanitized)
             ?.let { return "MS2Extra MegaSpeed" }
 
+        Regex("""(?i)^ms2extra\s+hr[_\s-]?10(?:\s+.*)?$""")
+            .find(sanitized)
+            ?.let { return "MS2Extra hr_10" }
+
+        Regex("""(?i)^ms2extra\s+hr[_\s-]?11d(?:\s+.*)?$""")
+            .find(sanitized)
+            ?.let { return "MS2Extra hr_11d" }
+
         if (sanitized.startsWith("rusEFI", ignoreCase = true)) {
             return sanitized
         }
@@ -114,6 +122,26 @@ object FirmwareHandshakeDomain {
     fun normalizeManualProfile(signature: String): String {
         return normalizeSignature(signature)
             ?: throw UnsupportedFirmwareException("Invalid manual firmware profile: $signature")
+    }
+
+    fun approximateSpeeduinoSignature(raw: String): String? {
+        val sanitized = sanitizeSignature(raw)
+        if (sanitized.isBlank()) return null
+        val lower = sanitized.lowercase(Locale.US)
+        if (!lower.contains("speeduino")) return null
+        if (normalizeSignature(sanitized) != null) return normalizeSignature(sanitized)
+        val version = Regex("""\b(20\d{4})\b""").find(sanitized)?.groupValues?.getOrNull(1)
+        return version?.let { "speeduino $it" }
+    }
+
+    fun containsApproximateToken(raw: String): Boolean {
+        val lower = sanitizeSignature(raw).lowercase(Locale.US)
+        return lower.contains("speeduino") || lower.contains("ms2extra") || lower.contains("rusefi")
+    }
+
+    fun isRusEfiFallbackAllowed(signature: String?): Boolean {
+        val sanitized = signature?.trim().orEmpty()
+        return sanitized.isNotBlank() && sanitized.startsWith("rusEFI", ignoreCase = true)
     }
 
     fun shouldUseLegacyHandshakeCore(supportsModernProtocol: Boolean): Boolean = !supportsModernProtocol

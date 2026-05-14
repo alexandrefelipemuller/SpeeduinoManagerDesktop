@@ -23,12 +23,22 @@ enum class EcuByteOrder {
 }
 
 /**
+ * Estratégia usada para ler configurações da ECU.
+ */
+enum class EcuConfigReadMode {
+    LEGACY_PAGE,
+    MODERN_TABLE
+}
+
+/**
  * Runtime/output channel schema metadata for a connected ECU.
  */
 data class EcuRuntimeSchema(
     val blockSize: Int,
     val byteOrder: EcuByteOrder,
-    val schemaId: String
+    val schemaId: String,
+    val liveDataBlockSize: Int? = null,
+    val configReadMode: EcuConfigReadMode = EcuConfigReadMode.MODERN_TABLE,
 )
 
 /**

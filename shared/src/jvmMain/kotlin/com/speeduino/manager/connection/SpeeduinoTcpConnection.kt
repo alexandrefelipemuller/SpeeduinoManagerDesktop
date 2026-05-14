@@ -197,6 +197,16 @@ class SpeeduinoTcpConnection(
         }
     }
 
+    override fun abortPendingRead() {
+        try {
+            socket?.soTimeout = 1
+            inputStream?.available()?.takeIf { it > 0 }?.let { available ->
+                inputStream?.read(ByteArray(available))
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     override fun close() {
         disconnect()
     }
