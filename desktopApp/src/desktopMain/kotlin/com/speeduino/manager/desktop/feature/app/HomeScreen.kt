@@ -55,19 +55,29 @@ internal fun HomeScreenDesktop(
             description = strings["home.dashboardDescription"],
         ),
         HomeAction(
-            route = DesktopRoute.MapsTables,
-            title = strings[DesktopRoute.MapsTables.labelKey],
-            description = strings["home.mapsDescription"],
+            route = DesktopRoute.Fuel,
+            title = strings[DesktopRoute.Fuel.labelKey],
+            description = strings["home.fuelDescription"],
         ),
         HomeAction(
-            route = DesktopRoute.ConfigsTuning,
-            title = strings[DesktopRoute.ConfigsTuning.labelKey],
-            description = strings["home.configsDescription"],
+            route = DesktopRoute.Ignition,
+            title = strings[DesktopRoute.Ignition.labelKey],
+            description = strings["home.ignitionDescription"],
         ),
         HomeAction(
-            route = DesktopRoute.LogsEcuTools,
-            title = strings[DesktopRoute.LogsEcuTools.labelKey],
-            description = strings["home.logsDescription"],
+            route = DesktopRoute.EngineSetup,
+            title = strings[DesktopRoute.EngineSetup.labelKey],
+            description = strings["home.engineSetupDescription"],
+        ),
+        HomeAction(
+            route = DesktopRoute.EngineOperation,
+            title = strings[DesktopRoute.EngineOperation.labelKey],
+            description = strings["home.engineOperationDescription"],
+        ),
+        HomeAction(
+            route = DesktopRoute.Tools,
+            title = strings[DesktopRoute.Tools.labelKey],
+            description = strings["home.toolsDescription"],
         ),
     )
     val setupActions = listOf(

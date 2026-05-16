@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.ConfigsTuningScreenDesktop
 import com.speeduino.manager.desktop.ClosedLoopCorrectionsScreenDesktop
+import com.speeduino.manager.desktop.EngineOperationScreenDesktop
+import com.speeduino.manager.desktop.IgnitionScreenDesktop
 import com.speeduino.manager.desktop.IdleControlScreenDesktop
 import com.speeduino.manager.desktop.InputOutputConfigScreenDesktop
 import com.speeduino.manager.desktop.InjectorConfigScreenDesktop
@@ -20,31 +22,40 @@ internal fun ConfigsRouteHost(
     route: DesktopRoute,
     controller: DesktopSpeeduinoController,
     onOpenEngineConstants: () -> Unit,
-    onOpenTriggerSettings: () -> Unit,
-    onOpenIdleControl: () -> Unit,
     onOpenInputOutputConfig: () -> Unit,
     onOpenSensorCalibration: () -> Unit,
+    onOpenInjectorConfig: () -> Unit,
+    onOpenSecondarySerial: () -> Unit,
+    onOpenIgnitionTable: () -> Unit,
+    onOpenIgnitionTable2: () -> Unit,
+    onOpenDwellTable: () -> Unit,
+    onOpenTriggerSettings: () -> Unit,
+    onOpenIdleControl: () -> Unit,
     onOpenEngineProtection: () -> Unit,
     onOpenClosedLoopCorrections: () -> Unit,
-    onOpenInjectorConfig: () -> Unit,
     onOpenRevLimiterConfig: () -> Unit,
-    onOpenSecondarySerial: () -> Unit,
-    onOpenTuningAssistant: () -> Unit,
     onOpenBeforeAfter: () -> Unit
 ) {
     when (route) {
+        DesktopRoute.Ignition -> IgnitionScreenDesktop(
+            onOpenIgnitionTable = onOpenIgnitionTable,
+            onOpenIgnitionTable2 = onOpenIgnitionTable2,
+            onOpenDwellTable = onOpenDwellTable,
+            onOpenTriggerSettings = onOpenTriggerSettings
+        )
+        DesktopRoute.EngineSetup,
         DesktopRoute.ConfigsTuning -> ConfigsTuningScreenDesktop(
             onOpenEngineConstants = onOpenEngineConstants,
-            onOpenTriggerSettings = onOpenTriggerSettings,
-            onOpenIdleControl = onOpenIdleControl,
             onOpenInputOutput = onOpenInputOutputConfig,
             onOpenSensorCalibration = onOpenSensorCalibration,
-            onOpenEngineProtection = onOpenEngineProtection,
-            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
             onOpenInjectorConfig = onOpenInjectorConfig,
-            onOpenRevLimiter = onOpenRevLimiterConfig,
-            onOpenSecondarySerial = onOpenSecondarySerial,
-            onOpenTuningAssistant = onOpenTuningAssistant
+            onOpenSecondarySerial = onOpenSecondarySerial
+        )
+        DesktopRoute.EngineOperation -> EngineOperationScreenDesktop(
+            onOpenIdleControl = onOpenIdleControl,
+            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
+            onOpenEngineProtection = onOpenEngineProtection,
+            onOpenRevLimiter = onOpenRevLimiterConfig
         )
         DesktopRoute.TuningAssistant -> TuningAssistantScreenDesktop(
             controller = controller,

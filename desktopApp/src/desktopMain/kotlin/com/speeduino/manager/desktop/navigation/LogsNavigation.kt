@@ -1,12 +1,14 @@
 package com.speeduino.manager.desktop.navigation
 
-internal fun logsNavSection(): NavSection {
+internal fun toolsNavSection(): NavSection {
     return NavSection(
-        titleKey = "nav.sectionLogs",
+        titleKey = "nav.sectionTools",
         routes = listOf(
+            DesktopRoute.Tools,
             DesktopRoute.LogsEcuTools,
             DesktopRoute.RealTimeMonitor,
             DesktopRoute.LogViewer,
+            DesktopRoute.LogAnalyzer,
             DesktopRoute.BeforeAfter
         )
     )

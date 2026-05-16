@@ -58,53 +58,73 @@ import kotlin.math.abs
 internal fun MapsTablesScreenDesktop(
     onOpenVeTable: () -> Unit,
     onOpenVeTable2: () -> Unit,
-    onOpenIgnitionTable: () -> Unit,
-    onOpenIgnitionTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
-    onOpenDwellTable: () -> Unit,
-    onOpenBaseMapWizard: () -> Unit
+    onOpenBaseMapWizard: () -> Unit,
+    onOpenTuningAssistant: () -> Unit
 ) {
     TuningSectionScreen(
-        title = "Maps & Tables",
-        subtitle = "Access VE, ignition, AFR, dwell and base map tools.",
+        title = "Fuel",
+        subtitle = "Fuel tables, base map tools and VE tuning workflows.",
     ) {
         ActionCard("VE Table", "Fuel table editor.") { RowButtons(onOpenVeTable, onOpenVeTable2, "VE 1", "VE 2") }
-        ActionCard("Ignition Table", "Ignition timing table editor.") { RowButtons(onOpenIgnitionTable, onOpenIgnitionTable2, "Ign 1", "Ign 2") }
         ActionCard("AFR Table", "Target lambda / AFR table editor.") { RowButtons(onOpenAfrTable, null, "Open AFR", null) }
-        ActionCard("Dwell Table", "Ignition coil charge time editor.") { RowButtons(onOpenDwellTable, null, "Open Dwell", null) }
         ActionCard("Base Map Wizard", "Generate a starter fuel and ignition map.") { RowButtons(onOpenBaseMapWizard, null, "Open Wizard", null) }
+        ActionCard("Tuning Assistant", "Analyze logs and apply VE suggestions.") { RowButtons(onOpenTuningAssistant, null, "Open Assistant", null) }
+    }
+}
+
+@Composable
+internal fun IgnitionScreenDesktop(
+    onOpenIgnitionTable: () -> Unit,
+    onOpenIgnitionTable2: () -> Unit,
+    onOpenDwellTable: () -> Unit,
+    onOpenTriggerSettings: () -> Unit
+) {
+    TuningSectionScreen(
+        title = "Ignition",
+        subtitle = "Ignition timing, dwell and trigger workflows.",
+    ) {
+        ActionCard("Ignition Table", "Ignition timing table editor.") { RowButtons(onOpenIgnitionTable, onOpenIgnitionTable2, "Ign 1", "Ign 2") }
+        ActionCard("Dwell Table", "Ignition coil charge time editor.") { RowButtons(onOpenDwellTable, null, "Open Dwell", null) }
+        ActionCard("Trigger Settings", "Trigger wheel and signal configuration.") { RowButtons(onOpenTriggerSettings, null, "Open", null) }
     }
 }
 
 @Composable
 internal fun ConfigsTuningScreenDesktop(
     onOpenEngineConstants: () -> Unit,
-    onOpenTriggerSettings: () -> Unit,
-    onOpenIdleControl: () -> Unit,
     onOpenInputOutput: () -> Unit,
     onOpenSensorCalibration: () -> Unit,
-    onOpenEngineProtection: () -> Unit,
-    onOpenClosedLoopCorrections: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
-    onOpenRevLimiter: () -> Unit,
     onOpenSecondarySerial: () -> Unit,
-    onOpenTuningAssistant: () -> Unit,
 ) {
     TuningSectionScreen(
-        title = "Configs & Tuning",
-        subtitle = "Grouped access to engine, trigger and I/O configuration.",
+        title = "Engine Setup",
+        subtitle = "Hardware, injection, sensor and serial setup.",
     ) {
         ActionCard("Engine Constants", "Fueling and injector configuration.") { RowButtons(onOpenEngineConstants, null, "Open", null) }
-        ActionCard("Trigger Settings", "Trigger wheel and signal configuration.") { RowButtons(onOpenTriggerSettings, null, "Open", null) }
-        ActionCard("Idle Control", "Idle target and actuator settings.") { RowButtons(onOpenIdleControl, null, "Open", null) }
-        ActionCard("Input / Output", "I/O channels and secondary serial.") { RowButtons(onOpenInputOutput, null, "Open", null) }
-        ActionCard("Sensors", "Sensor calibration and lookup tables.") { RowButtons(onOpenSensorCalibration, null, "Open", null) }
-        ActionCard("Engine Protection", "Cut and protection controls.") { RowButtons(onOpenEngineProtection, null, "Open", null) }
-        ActionCard("AFR Corrections", "Closed-loop correction tuning.") { RowButtons(onOpenClosedLoopCorrections, null, "Open", null) }
         ActionCard("Injector Config", "Dedicated injector setup view.") { RowButtons(onOpenInjectorConfig, null, "Open", null) }
-        ActionCard("Rev Limiter", "Dedicated rev limiter view.") { RowButtons(onOpenRevLimiter, null, "Open", null) }
+        ActionCard("Input / Output", "I/O channels and live pin snapshot.") { RowButtons(onOpenInputOutput, null, "Open", null) }
+        ActionCard("Sensors", "Sensor calibration and lookup tables.") { RowButtons(onOpenSensorCalibration, null, "Open", null) }
         ActionCard("Secondary Serial", "Secondary serial protocol setup.") { RowButtons(onOpenSecondarySerial, null, "Open", null) }
-        ActionCard("Tuning Assistant", "Analyze logs and apply VE suggestions.") { RowButtons(onOpenTuningAssistant, null, "Open", null) }
+    }
+}
+
+@Composable
+internal fun EngineOperationScreenDesktop(
+    onOpenIdleControl: () -> Unit,
+    onOpenClosedLoopCorrections: () -> Unit,
+    onOpenEngineProtection: () -> Unit,
+    onOpenRevLimiter: () -> Unit,
+) {
+    TuningSectionScreen(
+        title = "Engine Operation",
+        subtitle = "Idle, correction and safety controls.",
+    ) {
+        ActionCard("Idle Control", "Idle target and actuator settings.") { RowButtons(onOpenIdleControl, null, "Open", null) }
+        ActionCard("AFR Corrections", "Closed-loop correction tuning.") { RowButtons(onOpenClosedLoopCorrections, null, "Open", null) }
+        ActionCard("Engine Protection", "Cut and protection controls.") { RowButtons(onOpenEngineProtection, null, "Open", null) }
+        ActionCard("Rev Limiter", "Dedicated rev limiter view.") { RowButtons(onOpenRevLimiter, null, "Open", null) }
     }
 }
 

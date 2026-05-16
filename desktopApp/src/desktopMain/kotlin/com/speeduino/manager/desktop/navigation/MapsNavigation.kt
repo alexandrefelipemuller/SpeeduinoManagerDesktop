@@ -1,8 +1,16 @@
 package com.speeduino.manager.desktop.navigation
 
-internal fun mapsNavSection(): NavSection {
+internal fun fuelNavSection(): NavSection {
     return NavSection(
-        titleKey = "nav.sectionMaps",
-        routes = listOf(DesktopRoute.MapsTables)
+        titleKey = "nav.sectionFuel",
+        routes = listOf(
+            DesktopRoute.Fuel,
+            DesktopRoute.MapsTables,
+            DesktopRoute.VeTable,
+            DesktopRoute.VeTable2,
+            DesktopRoute.AfrTable,
+            DesktopRoute.BaseMapWizard,
+            DesktopRoute.TuningAssistant
+        )
     )
 }

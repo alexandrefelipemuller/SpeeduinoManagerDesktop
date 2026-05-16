@@ -28,16 +28,16 @@ import java.net.URI
 
 @Composable
 internal fun LogsEcuToolsScreenDesktop(
-    onOpenDiagnostic: () -> Unit,
     onOpenLogViewer: () -> Unit,
     onOpenRealTimeMonitor: () -> Unit,
+    onOpenLogAnalyzer: () -> Unit,
     onOpenBeforeAfter: () -> Unit,
     onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     val strings = LocalStrings.current
     UtilityScreenFrame(
-        title = strings["label.logsEcuToolsTitle"],
-        subtitle = strings["label.logsEcuToolsSubtitle"]
+        title = strings["route.tools"],
+        subtitle = strings["label.toolsSubtitle"]
     ) {
         UtilityActionCard(
             title = strings["route.realTimeMonitor"],
@@ -52,6 +52,12 @@ internal fun LogsEcuToolsScreenDesktop(
             onClick = onOpenLogViewer
         )
         UtilityActionCard(
+            title = strings["route.logAnalyzer"],
+            description = "Analyze a CSV log and generate VE tuning suggestions.",
+            buttonLabel = strings["action.analyze"],
+            onClick = onOpenLogAnalyzer
+        )
+        UtilityActionCard(
             title = strings["label.logViewerOpenCsvAction"],
             description = "Choose an older CSV log file and open it directly in the desktop viewer.",
             buttonLabel = strings["label.logViewerChooseCsv"],
@@ -64,12 +70,6 @@ internal fun LogsEcuToolsScreenDesktop(
             description = "Compare before and after logs to see AFR improvements.",
             buttonLabel = strings["label.institutionalBeforeAfterCta"],
             onClick = onOpenBeforeAfter
-        )
-        UtilityActionCard(
-            title = strings["label.diagnostics"],
-            description = "Open the main diagnostic and connection workspace.",
-            buttonLabel = strings["label.institutionalDiagnosticCta"],
-            onClick = onOpenDiagnostic
         )
     }
 }

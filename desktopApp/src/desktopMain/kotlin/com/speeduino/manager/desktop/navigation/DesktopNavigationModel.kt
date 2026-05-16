@@ -23,11 +23,16 @@ internal enum class DesktopRoute(
     Institutional("route.institutional", "label.institutionalTitle", Icons.Default.Info, topLevel = true),
     Dashboard("route.dashboard", "route.dashboard", Icons.Default.Dashboard, topLevel = true),
     Connection("route.connection", "route.connection", Icons.Default.Cable, topLevel = true),
+    Fuel("route.fuel", "route.fuel", Icons.Default.TableChart, topLevel = true),
+    Ignition("route.ignition", "route.ignition", Icons.Default.TableChart, topLevel = true),
+    EngineSetup("route.engineSetup", "route.engineSetup", Icons.Default.Settings, topLevel = true),
+    EngineOperation("route.engineOperation", "route.engineOperation", Icons.Default.Settings, topLevel = true),
+    Tools("route.tools", "route.tools", Icons.Default.Build, topLevel = true),
     ConnectionSettings("label.connectionScreenTitle", "label.connectionScreenTitle", Icons.Default.Cable),
     BluetoothConnection("label.bluetooth", "label.bluetooth", Icons.Default.Cable),
     UsbSerialConnection("label.usbSerial", "label.usbSerial", Icons.Default.Cable),
-    MapsTables("route.mapsTables", "route.mapsTables", Icons.Default.TableChart, topLevel = true),
-    ConfigsTuning("route.configsTuning", "route.configsTuning", Icons.Default.Settings, topLevel = true),
+    MapsTables("route.mapsTables", "route.mapsTables", Icons.Default.TableChart),
+    ConfigsTuning("route.configsTuning", "route.configsTuning", Icons.Default.Settings),
     TuningAssistant("route.tuningAssistant", "label.tuningAssistantTitle", Icons.Default.Settings),
     InjectorConfig("label.injectors", "label.injectors", Icons.Default.Settings),
     InputOutputConfig("label.inputOutputTitle", "label.inputOutputTitle", Icons.Default.Settings),
@@ -48,7 +53,7 @@ internal enum class DesktopRoute(
     EngineProtection("route.engineProtection", "route.engineProtection", Icons.Default.Settings),
     RealTimeMonitor("route.realTimeMonitor", "route.realTimeMonitor", Icons.Default.Build),
     LogViewer("route.logViewer", "route.logViewer", Icons.Default.Build),
-    LogsEcuTools("route.logsEcuTools", "label.logsEcuToolsTitle", Icons.Default.Build, topLevel = true),
+    LogsEcuTools("route.logsEcuTools", "label.logsEcuToolsTitle", Icons.Default.Build),
     LogAnalyzer("route.logAnalyzer", "route.logAnalyzer", Icons.Default.Build),
     BeforeAfter("route.beforeAfter", "route.beforeAfter", Icons.Default.Build)
 }
@@ -56,17 +61,19 @@ internal enum class DesktopRoute(
 internal fun navSections(): List<NavSection> {
     return listOf(
         NavSection(
-            titleKey = "nav.sectionPrimary",
+            titleKey = "nav.sectionApp",
             routes = listOf(
                 DesktopRoute.Home,
                 DesktopRoute.Dashboard,
-                DesktopRoute.MapsTables,
-                DesktopRoute.ConfigsTuning,
-                DesktopRoute.Connection,
                 DesktopRoute.Settings,
             )
         ),
-        logsNavSection(),
+        connectionNavSection(),
+        fuelNavSection(),
+        ignitionNavSection(),
+        engineSetupNavSection(),
+        engineOperationNavSection(),
+        toolsNavSection(),
         NavSection(
             titleKey = "nav.sectionMore",
             routes = listOf(DesktopRoute.Institutional)
@@ -87,26 +94,29 @@ internal fun parentRoute(route: DesktopRoute): DesktopRoute? {
         DesktopRoute.UsbSerialConnection -> DesktopRoute.Connection
         DesktopRoute.VeTable,
         DesktopRoute.VeTable2,
+        DesktopRoute.AfrTable,
+        DesktopRoute.BaseMapWizard,
+        DesktopRoute.TuningAssistant -> DesktopRoute.Fuel
         DesktopRoute.IgnitionTable,
         DesktopRoute.IgnitionTable2,
-        DesktopRoute.AfrTable,
         DesktopRoute.DwellTable,
-        DesktopRoute.BaseMapWizard -> DesktopRoute.MapsTables
-        DesktopRoute.TuningAssistant,
+        DesktopRoute.TriggerSettings -> DesktopRoute.Ignition
         DesktopRoute.InjectorConfig,
         DesktopRoute.InputOutputConfig,
-        DesktopRoute.RevLimiterConfig,
-        DesktopRoute.SecondarySerial,
         DesktopRoute.EngineConstants,
-        DesktopRoute.TriggerSettings,
+        DesktopRoute.SensorsConfig,
+        DesktopRoute.SecondarySerial -> DesktopRoute.EngineSetup
         DesktopRoute.IdleControl,
         DesktopRoute.ClosedLoopCorrections,
-        DesktopRoute.SensorsConfig,
-        DesktopRoute.EngineProtection -> DesktopRoute.ConfigsTuning
+        DesktopRoute.EngineProtection,
+        DesktopRoute.RevLimiterConfig -> DesktopRoute.EngineOperation
         DesktopRoute.LogViewer,
         DesktopRoute.RealTimeMonitor,
         DesktopRoute.LogAnalyzer,
-        DesktopRoute.BeforeAfter -> DesktopRoute.LogsEcuTools
+        DesktopRoute.BeforeAfter -> DesktopRoute.Tools
+        DesktopRoute.MapsTables -> DesktopRoute.Fuel
+        DesktopRoute.ConfigsTuning -> DesktopRoute.EngineSetup
+        DesktopRoute.LogsEcuTools -> DesktopRoute.Tools
         else -> null
     }
 }
