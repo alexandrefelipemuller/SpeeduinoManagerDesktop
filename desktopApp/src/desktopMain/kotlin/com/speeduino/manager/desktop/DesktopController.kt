@@ -5,6 +5,7 @@ import com.speeduino.manager.SpeeduinoClient
 import com.speeduino.manager.SpeeduinoLiveData
 import com.speeduino.manager.definition.IniCatalogEntry
 import com.speeduino.manager.definition.IniDefinition
+import com.speeduino.manager.shared.Logger
 import com.speeduino.manager.compare.BeforeAfterLogComparator
 import com.speeduino.manager.compare.LogCompareException
 import com.speeduino.manager.compare.LogCompareReason
@@ -70,6 +71,10 @@ import kotlin.math.roundToInt
 internal class DesktopSpeeduinoController(
     private val scope: CoroutineScope
 ) {
+    companion object {
+        private const val TAG = "DesktopController"
+    }
+
     private val _connectionState = MutableStateFlow(ConnectionState())
     val connectionState = _connectionState.asStateFlow()
 
@@ -286,9 +291,29 @@ internal class DesktopSpeeduinoController(
                 _productString.value = activeClient.getProductString()
                 _connectionInfo.value = activeClient.getConnectionInfo()
                 _readOnlySafeMode.value = activeClient.isReadOnlySafeMode()
-                applyConfiguredIniDefinition(activeClient)
-                activeClient.startLiveDataStream(_streamIntervalMs.value)
-                downloadAllConfigs(autoRestartStream = true)
+                runCatching {
+                    applyConfiguredIniDefinition(activeClient)
+                }.onFailure { error ->
+                    val message = "Falha ao aplicar definicao .ini: ${error.message ?: "unknown"}"
+                    Logger.w(TAG, message)
+                    _lastError.value = message
+                }
+
+                runCatching {
+                    activeClient.startLiveDataStream(_streamIntervalMs.value)
+                }.onFailure { error ->
+                    val message = "Falha ao iniciar stream: ${error.message ?: "unknown"}"
+                    Logger.w(TAG, message)
+                    _lastError.value = message
+                }
+
+                runCatching {
+                    downloadAllConfigs(autoRestartStream = true)
+                }.onFailure { error ->
+                    val message = "Falha no download inicial das configuracoes: ${error.message ?: "unknown"}"
+                    Logger.w(TAG, message)
+                    _lastError.value = message
+                }
             } catch (e: Exception) {
                 _lastError.value = e.message
                 _connectionState.value = ConnectionState(
