@@ -83,6 +83,7 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
             )
 
             val downloadedPages = mutableMapOf<Byte, PageData>()
+            val failedPages = mutableListOf<Byte>()
             var currentPage = 0
 
             // 2. Baixar cada página
@@ -114,6 +115,7 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
                         "Página $pageNum baixada (${pageData.size} bytes$crcInfo)"
                     )
                 } catch (e: Exception) {
+                    failedPages += pageNum
                     onProgress(
                         currentPage,
                         PAGE_SIZES.size + 1,
@@ -125,17 +127,22 @@ class ConfigManager(baseDir: File = defaultBaseDir()) {
             onProgress(
                 PAGE_SIZES.size + 1,
                 PAGE_SIZES.size + 1,
-                "Download concluído! ${downloadedPages.size} páginas salvas"
+                if (failedPages.isEmpty()) {
+                    "Download concluído! ${downloadedPages.size} páginas salvas"
+                } else {
+                    "Download concluído com falhas: ${failedPages.joinToString(", ")}"
+                }
             )
 
             ConfigDownloadResult(
-                success = true,
+                success = failedPages.isEmpty(),
                 timestamp = timestamp,
                 pagesDownloaded = downloadedPages.size,
                 totalPages = PAGE_SIZES.size,
                 sessionDir = sessionDir,
                 capability = capability,
-                pages = downloadedPages
+                pages = downloadedPages,
+                error = if (failedPages.isEmpty()) null else "Páginas com falha: ${failedPages.joinToString(", ")}"
             )
         } catch (e: Exception) {
             ConfigDownloadResult(

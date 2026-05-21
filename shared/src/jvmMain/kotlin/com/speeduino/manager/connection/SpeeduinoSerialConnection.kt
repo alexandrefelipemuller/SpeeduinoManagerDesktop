@@ -31,6 +31,7 @@ class SpeeduinoSerialConnection(
 
     override suspend fun connect(): Unit = withContext(Dispatchers.IO) {
         try {
+            Logger.d(TAG, "Opening serial port $portDescriptor @ $baudRate")
             val selected = SerialPort.getCommPort(portDescriptor)
             selected.baudRate = baudRate
             selected.numDataBits = 8
@@ -55,7 +56,7 @@ class SpeeduinoSerialConnection(
             val dtrSet = selected.setDTR()
             val rtsSet = selected.setRTS()
             Logger.d(TAG, "DTR/RTS set: dtr=$dtrSet rts=$rtsSet")
-            delay(1000)
+            delay(1500)
 
             port = selected
             inputStream = selected.inputStream
@@ -74,6 +75,7 @@ class SpeeduinoSerialConnection(
     override fun disconnect() {
         isConnected = false
         try {
+            Logger.d(TAG, "Closing serial connection: $portDescriptor")
             inputStream?.close()
             outputStream?.close()
             port?.closePort()

@@ -75,50 +75,27 @@ internal fun NavigationSidebar(
                                 color = MaterialTheme.colorScheme.secondary
                             )
                         }
-                        section.routes.forEach { route ->
-                            val selected = route == currentRoute ||
-                                (route.topLevel && route == selectedTopLevelRoute && currentRoute !in section.routes)
-                            val contentColor = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            }
-                            val background = if (selected) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                            } else {
-                                Color.Transparent
-                            }
-                            val borderColor = if (selected) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                            } else {
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                            }
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                color = background,
-                                border = BorderStroke(1.dp, borderColor)
-                            ) {
-                                val clickableModifier = if (selected) Modifier else Modifier.clickable { onRouteSelected(route) }
-                                Row(
-                                    modifier = clickableModifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = if (compact) 10.dp else 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = route.icon,
-                                        contentDescription = strings[route.labelKey],
-                                        tint = contentColor
+                        section.entries.forEach { entry ->
+                            NavigationEntryRow(
+                                route = entry.route,
+                                currentRoute = currentRoute,
+                                selectedTopLevelRoute = selectedTopLevelRoute,
+                                strings = strings,
+                                compact = compact,
+                                onRouteSelected = onRouteSelected,
+                                depth = 0,
+                            )
+                            if (entry.children.isNotEmpty()) {
+                                entry.children.forEach { child ->
+                                    NavigationEntryRow(
+                                        route = child,
+                                        currentRoute = currentRoute,
+                                        selectedTopLevelRoute = selectedTopLevelRoute,
+                                        strings = strings,
+                                        compact = compact,
+                                        onRouteSelected = onRouteSelected,
+                                        depth = 1,
                                     )
-                                    if (!compact) {
-                                        Text(
-                                            text = strings[route.labelKey],
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = contentColor
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -131,6 +108,52 @@ internal fun NavigationSidebar(
                 adapter = rememberScrollbarAdapter(scrollState),
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
             )
+        }
+    }
+}
+
+@Composable
+private fun NavigationEntryRow(
+    route: DesktopRoute,
+    currentRoute: DesktopRoute,
+    selectedTopLevelRoute: DesktopRoute,
+    strings: com.speeduino.manager.desktop.Strings,
+    compact: Boolean,
+    onRouteSelected: (DesktopRoute) -> Unit,
+    depth: Int,
+) {
+    val selected = route == currentRoute || (route.topLevel && route == selectedTopLevelRoute)
+    val contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    val background = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent
+    val borderColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    val indent = if (compact) 0.dp else (12.dp * depth)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = background,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        val clickableModifier = if (selected) Modifier else Modifier.clickable { onRouteSelected(route) }
+        Row(
+            modifier = clickableModifier
+                .fillMaxWidth()
+                .padding(start = if (compact) 10.dp else 12.dp + indent, end = if (compact) 10.dp else 12.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = route.icon,
+                contentDescription = strings[route.labelKey],
+                tint = contentColor
+            )
+            if (!compact) {
+                Text(
+                    text = strings[route.labelKey],
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = contentColor
+                )
+            }
         }
     }
 }

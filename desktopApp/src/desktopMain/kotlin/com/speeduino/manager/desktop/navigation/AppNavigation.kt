@@ -3,13 +3,13 @@ package com.speeduino.manager.desktop.navigation
 internal fun appNavSection(): NavSection {
     return NavSection(
         titleKey = "nav.sectionApp",
-        routes = listOf(DesktopRoute.Settings)
+        entries = listOf(NavEntry(DesktopRoute.Settings))
     )
 }
 
 internal fun dashboardNavSection(): NavSection {
     return NavSection(
         titleKey = "nav.sectionDashboard",
-        routes = listOf(DesktopRoute.Dashboard)
+        entries = listOf(NavEntry(DesktopRoute.Dashboard))
     )
 }

@@ -36,6 +36,7 @@ import com.speeduino.manager.sync.SessionSyncPrompt
 import com.speeduino.manager.tuning.AnalyzerResult
 import com.speeduino.manager.tuning.TuningAssistantAnalyzer
 import com.speeduino.manager.tuning.TuningStrategy
+import com.speeduino.manager.telemetry.ConnectionDiagnosticsLogger
 import com.speeduino.manager.telemetry.DiagnosticsFlags
 import com.speeduino.manager.telemetry.Obd2InvestigationRecorder
 import com.speeduino.manager.transport.AutoDetectEcuTransport
@@ -282,14 +283,19 @@ internal class DesktopSpeeduinoController(
                 }
 
                 activeClient.connect()
+                ConnectionDiagnosticsLogger.log("desktop", "connect", "handshake complete ${activeClient.getConnectionInfo()}")
                 _firmwareInfo.value = activeClient.getFirmwareInfoCached()
                 _productString.value = activeClient.getProductString()
                 _connectionInfo.value = activeClient.getConnectionInfo()
                 _readOnlySafeMode.value = activeClient.isReadOnlySafeMode()
                 applyConfiguredIniDefinition(activeClient)
-                activeClient.startLiveDataStream(_streamIntervalMs.value)
-                downloadAllConfigs(autoRestartStream = true)
+                val configsDownloaded = downloadAllConfigs(autoRestartStream = false)
+                if (configsDownloaded && _connectionState.value.isConnected) {
+                    activeClient.startLiveDataStream(_streamIntervalMs.value)
+                    ConnectionDiagnosticsLogger.log("desktop", "stream", "started after config download")
+                }
             } catch (e: Exception) {
+                ConnectionDiagnosticsLogger.logError("desktop", "connect", "failed: ${e.message ?: "unknown"}", e)
                 _lastError.value = e.message
                 _connectionState.value = ConnectionState(
                     status = ConnectionStatus.Failed,
@@ -864,6 +870,11 @@ internal class DesktopSpeeduinoController(
             return@withContext false
         }
 
+        ConnectionDiagnosticsLogger.log(
+            "desktop",
+            "config_download",
+            "starting autoRestartStream=$autoRestartStream transport=${activeClient.getConnectionInfo()}"
+        )
         _configState.value = _configState.value.copy(
             isBusy = true,
             progressPercent = 0,
@@ -906,6 +917,12 @@ internal class DesktopSpeeduinoController(
                 message = "Erro: ${result.error}"
             )
         }
+
+        ConnectionDiagnosticsLogger.log(
+            "desktop",
+            "config_download",
+            "finished success=${result.success} pages=${result.pagesDownloaded}/${result.totalPages} error=${result.error ?: "none"}"
+        )
 
         return@withContext result.success
     }

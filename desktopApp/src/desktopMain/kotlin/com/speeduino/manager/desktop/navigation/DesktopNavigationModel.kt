@@ -10,7 +10,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.ui.graphics.vector.ImageVector
 
-internal data class NavSection(val titleKey: String, val routes: List<DesktopRoute>)
+internal data class NavSection(val titleKey: String, val entries: List<NavEntry>)
+
+internal data class NavEntry(
+    val route: DesktopRoute,
+    val children: List<DesktopRoute> = emptyList(),
+)
 
 internal enum class DesktopRoute(
     val labelKey: String,
@@ -28,7 +33,7 @@ internal enum class DesktopRoute(
     EngineSetup("route.engineSetup", "route.engineSetup", Icons.Default.Settings, topLevel = true),
     EngineOperation("route.engineOperation", "route.engineOperation", Icons.Default.Settings, topLevel = true),
     Tools("route.tools", "route.tools", Icons.Default.Build, topLevel = true),
-    ConnectionSettings("label.connectionScreenTitle", "label.connectionScreenTitle", Icons.Default.Cable),
+    ConnectionSettings("label.wifiTcp", "label.wifiTcp", Icons.Default.Cable),
     BluetoothConnection("label.bluetooth", "label.bluetooth", Icons.Default.Cable),
     UsbSerialConnection("label.usbSerial", "label.usbSerial", Icons.Default.Cable),
     MapsTables("route.mapsTables", "route.mapsTables", Icons.Default.TableChart),
@@ -62,10 +67,10 @@ internal fun navSections(): List<NavSection> {
     return listOf(
         NavSection(
             titleKey = "nav.sectionApp",
-            routes = listOf(
-                DesktopRoute.Home,
-                DesktopRoute.Dashboard,
-                DesktopRoute.Settings,
+            entries = listOf(
+                NavEntry(DesktopRoute.Home),
+                NavEntry(DesktopRoute.Dashboard),
+                NavEntry(DesktopRoute.Settings),
             )
         ),
         connectionNavSection(),
@@ -76,7 +81,7 @@ internal fun navSections(): List<NavSection> {
         toolsNavSection(),
         NavSection(
             titleKey = "nav.sectionMore",
-            routes = listOf(DesktopRoute.Institutional)
+            entries = listOf(NavEntry(DesktopRoute.Institutional))
         )
     )
 }

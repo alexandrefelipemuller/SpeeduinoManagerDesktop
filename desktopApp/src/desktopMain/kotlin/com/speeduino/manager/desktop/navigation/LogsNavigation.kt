@@ -3,13 +3,13 @@ package com.speeduino.manager.desktop.navigation
 internal fun toolsNavSection(): NavSection {
     return NavSection(
         titleKey = "nav.sectionTools",
-        routes = listOf(
-            DesktopRoute.Tools,
-            DesktopRoute.LogsEcuTools,
-            DesktopRoute.RealTimeMonitor,
-            DesktopRoute.LogViewer,
-            DesktopRoute.LogAnalyzer,
-            DesktopRoute.BeforeAfter
+        entries = listOf(
+            NavEntry(DesktopRoute.Tools),
+            NavEntry(DesktopRoute.LogsEcuTools),
+            NavEntry(DesktopRoute.RealTimeMonitor),
+            NavEntry(DesktopRoute.LogViewer),
+            NavEntry(DesktopRoute.LogAnalyzer),
+            NavEntry(DesktopRoute.BeforeAfter)
         )
     )
 }

@@ -4,15 +4,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +56,7 @@ internal fun DesktopAppShell() {
 
     val connectionState by controller.connectionState.collectAsState()
     val liveData by controller.liveData.collectAsState()
+    val configState by controller.configState.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
     val portIsValid by remember {
@@ -192,6 +197,35 @@ internal fun DesktopAppShell() {
                                 adapter = rememberScrollbarAdapter(contentScroll),
                                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
                             )
+                            if (configState.isBusy) {
+                                Surface(
+                                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    tonalElevation = 3.dp,
+                                    shadowElevation = 8.dp,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                text = strings.format("label.configProgress", configState.progressPercent),
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                text = configState.message ?: strings["label.noData"],
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

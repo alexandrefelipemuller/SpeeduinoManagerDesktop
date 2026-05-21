@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -350,6 +351,10 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                     Text(
                         text = strings.format("label.configProgress", configState.progressPercent),
                         style = MaterialTheme.typography.bodyMedium
+                    )
+                    LinearProgressIndicator(
+                        progress = { configState.progressPercent.coerceIn(0, 100) / 100f },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
                 val message = configState.message

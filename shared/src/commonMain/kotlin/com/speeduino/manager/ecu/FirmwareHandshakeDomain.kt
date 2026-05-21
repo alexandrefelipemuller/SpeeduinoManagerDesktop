@@ -101,7 +101,7 @@ object FirmwareHandshakeDomain {
 
     fun validateConsensus(consensus: FirmwareConsensus, samples: List<String>) {
         val signature = consensus.signature
-        if (signature != null && (samples.size == 1 || consensus.consensusHits >= 2)) {
+        if (signature != null && consensus.consensusHits >= 1) {
             return
         }
 

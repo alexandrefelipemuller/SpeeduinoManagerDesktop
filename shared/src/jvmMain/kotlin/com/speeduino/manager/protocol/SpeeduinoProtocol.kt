@@ -555,6 +555,7 @@ class SpeeduinoProtocol(
     private fun queryModernString(cmd: Byte): String? {
         if (!canAttemptModernFallback()) return null
 
+        connection.clearInputBuffer()
         val response = sendModernCommand(cmd, byteArrayOf())
         if (response.isEmpty() || response[0] != SERIAL_RC_OK || response.size <= 1) {
             return null
@@ -574,6 +575,7 @@ class SpeeduinoProtocol(
     }
 
     private fun queryLegacyString(cmd: Byte, label: String): String? {
+        connection.clearInputBuffer()
         val response = sendLegacyCommand(cmd)
         if (response.isEmpty()) {
             Logger.w("SpeeduinoProtocol", "Legacy $label returned empty response")
