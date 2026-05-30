@@ -7,14 +7,15 @@ import com.speeduino.manager.desktop.ClosedLoopCorrectionsScreenDesktop
 import com.speeduino.manager.desktop.EngineOperationScreenDesktop
 import com.speeduino.manager.desktop.IgnitionScreenDesktop
 import com.speeduino.manager.desktop.IdleControlScreenDesktop
-import com.speeduino.manager.desktop.InputOutputConfigScreenDesktop
-import com.speeduino.manager.desktop.InjectorConfigScreenDesktop
-import com.speeduino.manager.desktop.RevLimiterConfigScreenDesktop
 import com.speeduino.manager.desktop.SecondarySerialScreenDesktop
 import com.speeduino.manager.desktop.TuningAssistantScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.EngineConstantsScreenDesktop
-import com.speeduino.manager.desktop.feature.configs.EngineProtectionScreenDesktop
-import com.speeduino.manager.desktop.feature.configs.SensorsConfigScreenDesktop
+import com.speeduino.manager.desktop.feature.configs.InputOutputEditorScreenDesktop
+import com.speeduino.manager.desktop.feature.configs.InjectorConfigScreenDesktop
+import com.speeduino.manager.desktop.feature.configs.RevLimiterConfigScreenDesktop
+import com.speeduino.manager.desktop.feature.configs.EngineProtectionEditorScreenDesktop
+import com.speeduino.manager.desktop.feature.configs.IgnitionConfigScreenDesktop
+import com.speeduino.manager.desktop.feature.configs.SensorsCalibrationScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.TriggerSettingsScreenDesktop
 
 @Composable
@@ -26,6 +27,7 @@ internal fun ConfigsRouteHost(
     onOpenSensorCalibration: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
     onOpenSecondarySerial: () -> Unit,
+    onOpenIgnitionConfig: () -> Unit,
     onOpenIgnitionTable: () -> Unit,
     onOpenIgnitionTable2: () -> Unit,
     onOpenDwellTable: () -> Unit,
@@ -38,6 +40,7 @@ internal fun ConfigsRouteHost(
 ) {
     when (route) {
         DesktopRoute.Ignition -> IgnitionScreenDesktop(
+            onOpenIgnitionConfig = onOpenIgnitionConfig,
             onOpenIgnitionTable = onOpenIgnitionTable,
             onOpenIgnitionTable2 = onOpenIgnitionTable2,
             onOpenDwellTable = onOpenDwellTable,
@@ -49,7 +52,8 @@ internal fun ConfigsRouteHost(
             onOpenInputOutput = onOpenInputOutputConfig,
             onOpenSensorCalibration = onOpenSensorCalibration,
             onOpenInjectorConfig = onOpenInjectorConfig,
-            onOpenSecondarySerial = onOpenSecondarySerial
+            onOpenSecondarySerial = onOpenSecondarySerial,
+            onOpenIgnitionConfig = onOpenIgnitionConfig
         )
         DesktopRoute.EngineOperation -> EngineOperationScreenDesktop(
             onOpenIdleControl = onOpenIdleControl,
@@ -62,7 +66,7 @@ internal fun ConfigsRouteHost(
             onOpenBeforeAfter = onOpenBeforeAfter
         )
         DesktopRoute.InjectorConfig -> InjectorConfigScreenDesktop(controller)
-        DesktopRoute.InputOutputConfig -> InputOutputConfigScreenDesktop(
+        DesktopRoute.InputOutputConfig -> InputOutputEditorScreenDesktop(
             controller = controller,
             onOpenSecondarySerial = onOpenSecondarySerial
         )
@@ -70,10 +74,11 @@ internal fun ConfigsRouteHost(
         DesktopRoute.SecondarySerial -> SecondarySerialScreenDesktop(controller)
         DesktopRoute.EngineConstants -> EngineConstantsScreenDesktop(controller)
         DesktopRoute.TriggerSettings -> TriggerSettingsScreenDesktop(controller)
+        DesktopRoute.IgnitionConfig -> IgnitionConfigScreenDesktop(controller)
         DesktopRoute.IdleControl -> IdleControlScreenDesktop(controller)
         DesktopRoute.ClosedLoopCorrections -> ClosedLoopCorrectionsScreenDesktop(controller)
-        DesktopRoute.SensorsConfig -> SensorsConfigScreenDesktop()
-        DesktopRoute.EngineProtection -> EngineProtectionScreenDesktop()
+        DesktopRoute.SensorsConfig -> SensorsCalibrationScreenDesktop(controller)
+        DesktopRoute.EngineProtection -> EngineProtectionEditorScreenDesktop(controller)
         else -> Unit
     }
 }

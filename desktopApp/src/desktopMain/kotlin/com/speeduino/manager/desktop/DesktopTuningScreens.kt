@@ -45,8 +45,6 @@ import com.speeduino.manager.model.SecondarySerialConfig
 import com.speeduino.manager.model.SecondarySerialProtocol
 import com.speeduino.manager.tuning.CellRef
 import com.speeduino.manager.tuning.TuningStrategy
-import com.speeduino.manager.desktop.feature.configs.EngineConstantsScreenDesktop
-import com.speeduino.manager.desktop.feature.configs.EngineProtectionScreenDesktop
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.InfoRow
 import java.awt.FileDialog
@@ -60,21 +58,30 @@ internal fun MapsTablesScreenDesktop(
     onOpenVeTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
     onOpenBaseMapWizard: () -> Unit,
-    onOpenTuningAssistant: () -> Unit
+    onOpenTuningAssistant: () -> Unit,
+    onOpenInjectorConfig: () -> Unit,
+    onOpenBeforeAfter: () -> Unit
 ) {
     TuningSectionScreen(
-        title = "Fuel",
-        subtitle = "Fuel tables, base map tools and VE tuning workflows.",
+        title = "Maps & Tuning",
+        subtitle = "Fuel, ignition and workflow shortcuts aligned with the Android hub.",
     ) {
-        ActionCard("VE Table", "Fuel table editor.") { RowButtons(onOpenVeTable, onOpenVeTable2, "VE 1", "VE 2") }
-        ActionCard("AFR Table", "Target lambda / AFR table editor.") { RowButtons(onOpenAfrTable, null, "Open AFR", null) }
-        ActionCard("Base Map Wizard", "Generate a starter fuel and ignition map.") { RowButtons(onOpenBaseMapWizard, null, "Open Wizard", null) }
-        ActionCard("Tuning Assistant", "Analyze logs and apply VE suggestions.") { RowButtons(onOpenTuningAssistant, null, "Open Assistant", null) }
+        SectionPanel("Fuel") {
+            ActionCard("Injector Config", "Quick access to injector-related setup.") { RowButtons(onOpenInjectorConfig, null, "Open", null) }
+            ActionCard("VE Table", "Fuel table editor.") { RowButtons(onOpenVeTable, onOpenVeTable2, "VE 1", "VE 2") }
+            ActionCard("AFR Table", "Target lambda / AFR table editor.") { RowButtons(onOpenAfrTable, null, "Open AFR", null) }
+        }
+        SectionPanel("Workflow") {
+            ActionCard("Base Map Wizard", "Generate a starter fuel and ignition map.") { RowButtons(onOpenBaseMapWizard, null, "Open Wizard", null) }
+            ActionCard("Tuning Assistant", "Analyze logs and apply VE suggestions.") { RowButtons(onOpenTuningAssistant, null, "Open Assistant", null) }
+            ActionCard("Before / After", "Compare two logs to validate tuning changes.") { RowButtons(onOpenBeforeAfter, null, "Open Compare", null) }
+        }
     }
 }
 
 @Composable
 internal fun IgnitionScreenDesktop(
+    onOpenIgnitionConfig: () -> Unit,
     onOpenIgnitionTable: () -> Unit,
     onOpenIgnitionTable2: () -> Unit,
     onOpenDwellTable: () -> Unit,
@@ -82,8 +89,9 @@ internal fun IgnitionScreenDesktop(
 ) {
     TuningSectionScreen(
         title = "Ignition",
-        subtitle = "Ignition timing, dwell and trigger workflows.",
+        subtitle = "Ignition setup, timing tables, dwell and trigger workflows.",
     ) {
+        ActionCard("Ignition Config", "Load reference, trigger strategy and ignition baseline.") { RowButtons(onOpenIgnitionConfig, null, "Open", null) }
         ActionCard("Ignition Table", "Ignition timing table editor.") { RowButtons(onOpenIgnitionTable, onOpenIgnitionTable2, "Ign 1", "Ign 2") }
         ActionCard("Dwell Table", "Ignition coil charge time editor.") { RowButtons(onOpenDwellTable, null, "Open Dwell", null) }
         ActionCard("Trigger Settings", "Trigger wheel and signal configuration.") { RowButtons(onOpenTriggerSettings, null, "Open", null) }
@@ -97,16 +105,22 @@ internal fun ConfigsTuningScreenDesktop(
     onOpenSensorCalibration: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
     onOpenSecondarySerial: () -> Unit,
+    onOpenIgnitionConfig: () -> Unit,
 ) {
     TuningSectionScreen(
-        title = "Engine Setup",
-        subtitle = "Hardware, injection, sensor and serial setup.",
+        title = "Configs & Tuning",
+        subtitle = "Core ECU setup grouped like the Android project: core, operation and hardware.",
     ) {
-        ActionCard("Engine Constants", "Fueling and injector configuration.") { RowButtons(onOpenEngineConstants, null, "Open", null) }
-        ActionCard("Injector Config", "Dedicated injector setup view.") { RowButtons(onOpenInjectorConfig, null, "Open", null) }
-        ActionCard("Input / Output", "I/O channels and live pin snapshot.") { RowButtons(onOpenInputOutput, null, "Open", null) }
-        ActionCard("Sensors", "Sensor calibration and lookup tables.") { RowButtons(onOpenSensorCalibration, null, "Open", null) }
-        ActionCard("Secondary Serial", "Secondary serial protocol setup.") { RowButtons(onOpenSecondarySerial, null, "Open", null) }
+        SectionPanel("Core Setup") {
+            ActionCard("Engine Constants", "Fueling constants, load algorithm and base engine layout.") { RowButtons(onOpenEngineConstants, null, "Open", null) }
+            ActionCard("Injector Config", "Focused injector setup for required fuel and injection layout.") { RowButtons(onOpenInjectorConfig, null, "Open", null) }
+            ActionCard("Ignition Config", "Dedicated ignition baseline and trigger setup view.") { RowButtons(onOpenIgnitionConfig, null, "Open", null) }
+        }
+        SectionPanel("Hardware") {
+            ActionCard("Input / Output", "I/O channels and live pin snapshot.") { RowButtons(onOpenInputOutput, null, "Open", null) }
+            ActionCard("Sensors", "Pressure and TPS calibration from the ECU.") { RowButtons(onOpenSensorCalibration, null, "Open", null) }
+            ActionCard("Secondary Serial", "Secondary serial protocol setup.") { RowButtons(onOpenSecondarySerial, null, "Open", null) }
+        }
     }
 }
 
@@ -130,12 +144,12 @@ internal fun EngineOperationScreenDesktop(
 
 @Composable
 internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController) {
-    EngineConstantsScreenDesktop(controller)
+    com.speeduino.manager.desktop.feature.configs.InjectorConfigScreenDesktop(controller)
 }
 
 @Composable
 internal fun RevLimiterConfigScreenDesktop() {
-    EngineProtectionScreenDesktop()
+    com.speeduino.manager.desktop.feature.configs.RevLimiterConfigScreenDesktop()
 }
 
 @Composable
@@ -413,6 +427,27 @@ private fun TuningSectionScreen(
             }
         }
         content()
+    }
+}
+
+@Composable
+private fun SectionPanel(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            content()
+        }
     }
 }
 

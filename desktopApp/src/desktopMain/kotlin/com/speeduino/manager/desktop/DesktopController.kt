@@ -18,10 +18,13 @@ import com.speeduino.manager.model.DwellTable
 import com.speeduino.manager.model.ClosedLoopCorrectionConfig
 import com.speeduino.manager.model.ClosedLoopCorrectionMapper
 import com.speeduino.manager.model.EngineConstants
+import com.speeduino.manager.model.EngineProtectionConfig
 import com.speeduino.manager.model.FirmwareEra
 import com.speeduino.manager.model.IdleControlSettings
 import com.speeduino.manager.model.IgnitionTable
 import com.speeduino.manager.model.OutputField
+import com.speeduino.manager.model.PressureCalibration
+import com.speeduino.manager.model.TpsCalibration
 import com.speeduino.manager.model.TriggerSettings
 import com.speeduino.manager.model.VeTable
 import com.speeduino.manager.model.RusefiInputOutputSnapshot
@@ -101,6 +104,9 @@ internal class DesktopSpeeduinoController(
 
     private val _idleControlSettings = MutableStateFlow<IdleControlSettings?>(null)
     val idleControlSettings = _idleControlSettings.asStateFlow()
+
+    private val _engineProtectionConfig = MutableStateFlow<EngineProtectionConfig?>(null)
+    val engineProtectionConfig = _engineProtectionConfig.asStateFlow()
 
     private val _closedLoopCorrections = MutableStateFlow<ClosedLoopCorrectionConfig?>(null)
     val closedLoopCorrections = _closedLoopCorrections.asStateFlow()
@@ -592,6 +598,59 @@ internal class DesktopSpeeduinoController(
                 _lastError.value = e.message
             }
         }
+    }
+
+    fun loadEngineProtectionConfig() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                _engineProtectionConfig.value = withPausedLiveDataStream { it.readEngineProtectionConfig() }
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    fun saveEngineProtectionConfig(config: EngineProtectionConfig) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                withPausedLiveDataStream { it.writeEngineProtectionConfig(config, burn = true) }
+                _engineProtectionConfig.value = config
+            } catch (e: Exception) {
+                _lastError.value = e.message
+            }
+        }
+    }
+
+    suspend fun readPressureCalibration(): PressureCalibration? = withContext(Dispatchers.IO) {
+        try {
+            withPausedLiveDataStream { it.readPressureCalibration() }
+        } catch (e: Exception) {
+            _lastError.value = e.message
+            null
+        }
+    }
+
+    suspend fun writePressureCalibration(calibration: PressureCalibration): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            withPausedLiveDataStream { it.writePressureCalibration(calibration, burn = true) }
+            Unit
+        }.onFailure { _lastError.value = it.message }
+    }
+
+    suspend fun readTpsCalibration(): TpsCalibration? = withContext(Dispatchers.IO) {
+        try {
+            withPausedLiveDataStream { it.readTpsCalibration() }
+        } catch (e: Exception) {
+            _lastError.value = e.message
+            null
+        }
+    }
+
+    suspend fun writeTpsCalibration(calibration: TpsCalibration): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            withPausedLiveDataStream { it.writeTpsCalibration(calibration, burn = true) }
+            Unit
+        }.onFailure { _lastError.value = it.message }
     }
 
     fun veTableState(mapIndex: Int): StateFlow<VeTable?> = if (mapIndex == 2) veTable2 else veTable

@@ -166,6 +166,7 @@ internal fun DesktopAppShell() {
                                     onOpenUsbSerialConnection = { appState.currentRoute = DesktopRoute.UsbSerialConnection },
                                     onOpenVeTable = { appState.currentRoute = DesktopRoute.VeTable },
                                     onOpenVeTable2 = { appState.currentRoute = DesktopRoute.VeTable2 },
+                                    onOpenIgnitionConfig = { appState.currentRoute = DesktopRoute.IgnitionConfig },
                                     onOpenIgnitionTable = { appState.currentRoute = DesktopRoute.IgnitionTable },
                                     onOpenIgnitionTable2 = { appState.currentRoute = DesktopRoute.IgnitionTable2 },
                                     onOpenAfrTable = { appState.currentRoute = DesktopRoute.AfrTable },

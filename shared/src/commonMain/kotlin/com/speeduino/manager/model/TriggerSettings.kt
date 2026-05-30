@@ -22,7 +22,12 @@ data class TriggerSettings(
     val skipRevolutions: Int,
     val triggerFilter: TriggerFilter,
     val reSyncEveryCycle: Boolean,
+    val coilSignalMode: CoilSignalMode = CoilSignalMode.GOING_LOW,
+    val crankingAdvanceDeg: Int = 10,
+    val fixedTimingAngleDeg: Int = 10,
+    val dwellErrorCorrectionEnabled: Boolean = false,
     val extraFields: Map<String, String> = emptyMap(),
+    val sparkMode: Int = 0,
 ) {
     enum class SignalEdge {
         RISING,
@@ -39,6 +44,11 @@ data class TriggerSettings(
         WEAK,
         MEDIUM,
         AGGRESSIVE
+    }
+
+    enum class CoilSignalMode {
+        GOING_LOW,
+        GOING_HIGH
     }
 
     companion object {
@@ -109,10 +119,13 @@ data class TriggerSettings(
             val trigPatternSecByte = data[8].toInt() and 0xFF
             val secondaryTriggerType = trigPatternSecByte and 0x7F
             val levelForFirstPhaseHigh = (trigPatternSecByte and 0x80) != 0
+            val coilSignalMode = if (byte5 and 0x04 != 0) CoilSignalMode.GOING_HIGH else CoilSignalMode.GOING_LOW
+            val crankingAdvanceDeg = data[3].toInt()
 
             val skipRevolutions = data[11].toInt() and 0xFF
 
             val byte12 = data[12].toInt() and 0xFF
+            val sparkMode = (byte12 shr 2) and 0x07
             val triggerFilter = when ((byte12 shr 5) and 0x03) {
                 0 -> TriggerFilter.OFF
                 1 -> TriggerFilter.WEAK
@@ -122,6 +135,8 @@ data class TriggerSettings(
 
             val primaryBaseTeeth = data[15].toInt() and 0xFF
             val missingTeeth = data[16].toInt() and 0xFF
+            val fixedTimingAngleDeg = data[2].toInt()
+            val dwellErrorCorrectionEnabled = (data[123].toInt() and 0x08) != 0
 
             return TriggerSettings(
                 triggerAngleDeg = triggerAngle,
@@ -136,7 +151,12 @@ data class TriggerSettings(
                 levelForFirstPhaseHigh = levelForFirstPhaseHigh,
                 skipRevolutions = skipRevolutions,
                 triggerFilter = triggerFilter,
-                reSyncEveryCycle = reSyncEveryCycle
+                reSyncEveryCycle = reSyncEveryCycle,
+                coilSignalMode = coilSignalMode,
+                crankingAdvanceDeg = crankingAdvanceDeg,
+                fixedTimingAngleDeg = fixedTimingAngleDeg,
+                dwellErrorCorrectionEnabled = dwellErrorCorrectionEnabled,
+                sparkMode = sparkMode,
             )
         }
 
@@ -174,6 +194,11 @@ data class TriggerSettings(
                     else -> TriggerFilter.OFF
                 },
                 reSyncEveryCycle = resyncFlag,
+                coilSignalMode = CoilSignalMode.GOING_LOW,
+                crankingAdvanceDeg = 10,
+                fixedTimingAngleDeg = 10,
+                dwellErrorCorrectionEnabled = false,
+                sparkMode = sparkMode,
             )
         }
 
@@ -216,6 +241,10 @@ data class TriggerSettings(
                 skipRevolutions = 0,
                 triggerFilter = if (noiseless) TriggerFilter.MEDIUM else TriggerFilter.OFF,
                 reSyncEveryCycle = false,
+                coilSignalMode = CoilSignalMode.GOING_LOW,
+                crankingAdvanceDeg = 10,
+                fixedTimingAngleDeg = 10,
+                dwellErrorCorrectionEnabled = false,
                 extraFields = linkedMapOf(
                     "rusefi_trigger_type" to triggerTypeName(triggerTypeIndex),
                     "rusefi_trigger_primary_input" to triggerInputName(primaryInput),
@@ -227,6 +256,7 @@ data class TriggerSettings(
                     "rusefi_trigger_vvt_mode_1" to vvtModeName(vvtMode1),
                     "rusefi_trigger_vvt_mode_2" to vvtModeName(vvtMode2),
                 ),
+                sparkMode = 0,
             )
         }
 
@@ -392,10 +422,13 @@ data class TriggerSettings(
         data[1] = ((angleRaw shr 8) and 0xFF).toByte()
 
         data[4] = triggerAngleMultiplier.coerceIn(0, 0xFF).toByte()
+        data[2] = fixedTimingAngleDeg.coerceIn(-64, 64).toByte()
+        data[3] = crankingAdvanceDeg.coerceIn(-10, 80).toByte()
 
         var byte5 = data[5].toInt() and 0xFF
         byte5 = if (triggerEdge == SignalEdge.FALLING) byte5 or 0x01 else byte5 and 0xFE
         byte5 = if (primaryTriggerSpeed == TriggerSpeed.CAM) byte5 or 0x02 else byte5 and 0xFD
+        byte5 = if (coilSignalMode == CoilSignalMode.GOING_HIGH) byte5 or 0x04 else byte5 and 0xFB
         byte5 = (byte5 and 0x07) or ((triggerPattern and 0x1F) shl 3)
         data[5] = byte5.toByte()
 
@@ -412,11 +445,19 @@ data class TriggerSettings(
         data[11] = skipRevolutions.coerceIn(0, 0xFF).toByte()
 
         var byte12 = data[12].toInt() and 0xFF
+        byte12 = (byte12 and 0xE3) or ((sparkMode and 0x07) shl 2)
         byte12 = (byte12 and 0x9F) or ((triggerFilter.ordinal and 0x03) shl 5)
         data[12] = byte12.toByte()
 
         data[15] = primaryBaseTeeth.coerceIn(0, 0xFF).toByte()
         data[16] = missingTeeth.coerceIn(0, 0xFF).toByte()
+
+        val byte123 = data[123].toInt() and 0xFF
+        data[123] = if (dwellErrorCorrectionEnabled) {
+            (byte123 or 0x08).toByte()
+        } else {
+            (byte123 and 0xF7).toByte()
+        }
 
         return data
     }

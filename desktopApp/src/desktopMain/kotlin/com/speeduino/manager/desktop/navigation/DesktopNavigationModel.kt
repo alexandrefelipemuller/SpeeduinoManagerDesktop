@@ -52,6 +52,7 @@ internal enum class DesktopRoute(
     BaseMapWizard("route.baseMapWizard", "route.baseMapWizard", Icons.Default.TableChart),
     EngineConstants("route.engineConstants", "route.engineConstants", Icons.Default.Settings),
     TriggerSettings("route.triggerSettings", "route.triggerSettings", Icons.Default.Settings),
+    IgnitionConfig("route.ignition", "route.ignition", Icons.Default.Settings),
     IdleControl("route.idleControl", "route.idleControl", Icons.Default.Settings),
     ClosedLoopCorrections("route.closedLoopCorrections", "route.closedLoopCorrections", Icons.Default.Settings),
     SensorsConfig("route.sensorsConfig", "route.sensorsConfig", Icons.Default.Settings),
@@ -105,7 +106,8 @@ internal fun parentRoute(route: DesktopRoute): DesktopRoute? {
         DesktopRoute.IgnitionTable,
         DesktopRoute.IgnitionTable2,
         DesktopRoute.DwellTable,
-        DesktopRoute.TriggerSettings -> DesktopRoute.Ignition
+        DesktopRoute.TriggerSettings,
+        DesktopRoute.IgnitionConfig -> DesktopRoute.Ignition
         DesktopRoute.InjectorConfig,
         DesktopRoute.InputOutputConfig,
         DesktopRoute.EngineConstants,

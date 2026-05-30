@@ -5,6 +5,7 @@ internal fun ignitionNavSection(): NavSection {
         titleKey = "nav.sectionIgnition",
         entries = listOf(
             NavEntry(DesktopRoute.Ignition),
+            NavEntry(DesktopRoute.IgnitionConfig),
             NavEntry(DesktopRoute.IgnitionTable),
             NavEntry(DesktopRoute.IgnitionTable2),
             NavEntry(DesktopRoute.DwellTable),

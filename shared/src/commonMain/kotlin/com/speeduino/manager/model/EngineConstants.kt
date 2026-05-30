@@ -20,6 +20,14 @@ data class EngineConstants(
     val injectorPortType: InjectorPortType, // Offset 36 bit 3: Port/Throttle Body
     val numberOfInjectors: Int,       // Offset 37 bits 4-7: 1-8 injectors
     val engineType: EngineType = EngineType.EVEN_FIRE, // Even fire / Odd fire
+    val injectorOpenTimeMs: Float = 1.0f, // Offset 27: injOpen, scale 0.1
+    val injectorDutyLimit: Int = 85, // Offset 40: dutyLim
+    val injectorCloseAngle: Int = 355, // Offset 28-29: first injAng point
+    val ignitionFixedTimingEnabled: Boolean = false, // Offset 37 bit 3
+    val ignitionPerToothEnabled: Boolean = false, // Offset 38 bit 6
+    val injectorBatteryCorrectionMode: InjectorBatteryCorrectionMode = InjectorBatteryCorrectionMode.OPEN_TIME_ONLY, // Offset 3 bit 2
+    val batteryVoltageBins: List<Float> = DEFAULT_BATTERY_VOLTAGE_BINS,
+    val injectorVoltageCorrectionRates: List<Int> = DEFAULT_INJECTOR_VOLTAGE_RATES,
 
     // Board & Advanced Settings
     val boardLayout: String = "Speeduino v0.4", // Not in page 1, using default
@@ -45,6 +53,18 @@ data class EngineConstants(
             require(data.size >= 128) { "Page 1 deve ter 128 bytes" }
             val pinLayoutInfo = PinLayoutDetector.fromPage1(data)
 
+            val injectorBatteryCorrectionMode = if (((data[3].toInt() and 0x04) != 0)) {
+                InjectorBatteryCorrectionMode.OPEN_TIME_ONLY
+            } else {
+                InjectorBatteryCorrectionMode.WHOLE_PULSE
+            }
+            val batteryVoltageBins = List(6) { index ->
+                (data[15 + index].toInt() and 0xFF) * 0.1f
+            }
+            val injectorVoltageCorrectionRates = List(6) { index ->
+                data[21 + index].toInt() and 0xFF
+            }
+
             // Offset 24: reqFuel (U08, scale 0.1)
             val reqFuel = (data[24].toInt() and 0xFF) * 0.1f
 
@@ -66,7 +86,21 @@ data class EngineConstants(
             // Offset 37: Config2 byte
             val config2 = data[37].toInt() and 0xFF
             val algorithmBits = config2 and 0x07 // bits 0-2
+            val fixAngEnable = (config2 and 0x08) != 0 // bit 3
             val nInjectors = (config2 shr 4) and 0x0F // bits 4-7
+
+            // Offset 27: injector open time (U08, scale 0.1)
+            val injectorOpenTimeMs = (data[27].toInt() and 0xFF) * 0.1f
+
+            // Offset 28-35: injector close angle curve (U16 little-endian x4)
+            val injectorCloseAngle = ((data[29].toInt() and 0xFF) shl 8) or (data[28].toInt() and 0xFF)
+
+            // Offset 40: duty limit (U08)
+            val injectorDutyLimit = data[40].toInt() and 0xFF
+
+            // Offset 38 bit 6: per tooth ignition
+            val config3 = data[38].toInt() and 0xFF
+            val perToothIgnitionEnabled = (config3 and 0x40) != 0
 
             // Offset 50: stoich (U08, scale 0.1)
             val stoich = (data[50].toInt() and 0xFF) * 0.1f
@@ -86,6 +120,14 @@ data class EngineConstants(
                 numberOfCylinders = mapCylinders(nCylinders),
                 injectorPortType = if (injType) InjectorPortType.THROTTLE_BODY else InjectorPortType.PORT,
                 numberOfInjectors = mapInjectors(nInjectors),
+                injectorOpenTimeMs = injectorOpenTimeMs,
+                injectorDutyLimit = injectorDutyLimit,
+                injectorCloseAngle = injectorCloseAngle,
+                ignitionFixedTimingEnabled = fixAngEnable,
+                ignitionPerToothEnabled = perToothIgnitionEnabled,
+                injectorBatteryCorrectionMode = injectorBatteryCorrectionMode,
+                batteryVoltageBins = batteryVoltageBins,
+                injectorVoltageCorrectionRates = injectorVoltageCorrectionRates,
                 boardLayout = pinLayoutInfo.name ?: "Speeduino v0.4",
                 stoichiometricRatio = stoich,
                 mapSampleMethod = MapSampleMethod.fromBits(mapSample),
@@ -141,6 +183,14 @@ data class EngineConstants(
                 injectorPortType = InjectorPortType.PORT,
                 numberOfInjectors = nInjectors.coerceAtLeast(1),
                 engineType = if (engineTypeOdd) EngineType.ODD_FIRE else EngineType.EVEN_FIRE,
+                injectorOpenTimeMs = 1.0f,
+                injectorDutyLimit = 85,
+                injectorCloseAngle = oddFireAngle,
+                ignitionFixedTimingEnabled = false,
+                ignitionPerToothEnabled = false,
+                injectorBatteryCorrectionMode = InjectorBatteryCorrectionMode.OPEN_TIME_ONLY,
+                batteryVoltageBins = DEFAULT_BATTERY_VOLTAGE_BINS,
+                injectorVoltageCorrectionRates = DEFAULT_INJECTOR_VOLTAGE_RATES,
                 boardLayout = boardType,
                 stoichiometricRatio = stoich,
                 injectorLayout = InjectorLayout.SEQUENTIAL,
@@ -195,6 +245,11 @@ data class EngineConstants(
                 injectorPortType = InjectorPortType.PORT,
                 numberOfInjectors = cylindersCount,
                 engineType = EngineType.EVEN_FIRE,
+                ignitionFixedTimingEnabled = false,
+                ignitionPerToothEnabled = false,
+                injectorBatteryCorrectionMode = InjectorBatteryCorrectionMode.OPEN_TIME_ONLY,
+                batteryVoltageBins = DEFAULT_BATTERY_VOLTAGE_BINS,
+                injectorVoltageCorrectionRates = DEFAULT_INJECTOR_VOLTAGE_RATES,
                 boardLayout = "rusEFI",
                 stoichiometricRatio = 14.7f,
                 injectorLayout = when (injectionModeIndex) {
@@ -430,6 +485,25 @@ data class EngineConstants(
 
         val data = basePage.copyOf()
 
+        // Offset 3 bit 2: battery voltage correction mode
+        val correctionModeBase = data[3].toInt() and 0xFF
+        data[3] = when (injectorBatteryCorrectionMode) {
+            InjectorBatteryCorrectionMode.WHOLE_PULSE -> (correctionModeBase and 0xFB).toByte()
+            InjectorBatteryCorrectionMode.OPEN_TIME_ONLY -> (correctionModeBase or 0x04).toByte()
+        }
+
+        // Offsets 15-20: battery voltage bins (U08, scale 0.1)
+        repeat(6) { index ->
+            val value = batteryVoltageBins.getOrElse(index) { DEFAULT_BATTERY_VOLTAGE_BINS[index] }
+            data[15 + index] = (value / 0.1f).toInt().coerceIn(0, 255).toByte()
+        }
+
+        // Offsets 21-26: injector voltage correction rates (U08)
+        repeat(6) { index ->
+            val value = injectorVoltageCorrectionRates.getOrElse(index) { DEFAULT_INJECTOR_VOLTAGE_RATES[index] }
+            data[21 + index] = value.coerceIn(0, 255).toByte()
+        }
+
         // Offset 24: reqFuel (U08, scale 0.1)
         data[24] = (reqFuel / 0.1f).toInt().coerceIn(0, 255).toByte()
 
@@ -452,10 +526,32 @@ data class EngineConstants(
 
         // Offset 37: Config2 byte
         val config2Base = data[37].toInt() and 0xFF
-        var config2 = config2Base and 0x08 // Preserve unknown bit 3
+        var config2 = config2Base and 0x08
         config2 = config2 or algorithm.toBits()
+        if (ignitionFixedTimingEnabled) config2 = config2 or 0x08
         config2 = config2 or (injectorsToBits(numberOfInjectors) shl 4)
         data[37] = config2.toByte()
+
+        // Offset 38 bit 6: per tooth ignition
+        val config3Base = data[38].toInt() and 0xFF
+        data[38] = if (ignitionPerToothEnabled) {
+            (config3Base or 0x40).toByte()
+        } else {
+            (config3Base and 0xBF).toByte()
+        }
+
+        // Offset 27: injector open time (U08, scale 0.1)
+        data[27] = (injectorOpenTimeMs / 0.1f).toInt().coerceIn(1, 255).toByte()
+
+        // Offset 28-35: keep a flat injector close angle curve for the simplified UI.
+        repeat(4) { index ->
+            val offset = 28 + (index * 2)
+            data[offset] = (injectorCloseAngle and 0xFF).toByte()
+            data[offset + 1] = ((injectorCloseAngle shr 8) and 0xFF).toByte()
+        }
+
+        // Offset 40: duty limit (U08)
+        data[40] = injectorDutyLimit.coerceIn(0, 95).toByte()
 
         // Offset 50: stoich (U08, scale 0.1)
         data[50] = (stoichiometricRatio / 0.1f).toInt().coerceIn(0, 255).toByte()
@@ -516,6 +612,14 @@ data class EngineConstants(
 
         return data
     }
+}
+
+private val DEFAULT_BATTERY_VOLTAGE_BINS = listOf(6.0f, 8.0f, 10.0f, 12.0f, 14.0f, 16.0f)
+private val DEFAULT_INJECTOR_VOLTAGE_RATES = listOf(160, 135, 115, 100, 92, 88)
+
+enum class InjectorBatteryCorrectionMode {
+    WHOLE_PULSE,
+    OPEN_TIME_ONLY,
 }
 
 fun EngineConstants.fuelTableLoadType(): VeTable.LoadType {
