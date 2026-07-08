@@ -55,6 +55,7 @@ internal fun ScreenHost(
     onOpenRealTimeMonitor: () -> Unit,
     onOpenLogAnalyzer: () -> Unit,
     onOpenBeforeAfter: () -> Unit,
+    onOpenVirtualDyno: () -> Unit,
     onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     when (route) {
@@ -189,7 +190,8 @@ internal fun ScreenHost(
         DesktopRoute.LogViewer,
         DesktopRoute.RealTimeMonitor,
         DesktopRoute.LogAnalyzer,
-        DesktopRoute.BeforeAfter -> LogsRouteHost(
+        DesktopRoute.BeforeAfter,
+        DesktopRoute.VirtualDyno -> LogsRouteHost(
             route = route,
             controller = controller,
             liveData = liveData,
@@ -197,6 +199,7 @@ internal fun ScreenHost(
             onOpenRealTimeMonitor = onOpenRealTimeMonitor,
             onOpenLogAnalyzer = onOpenLogAnalyzer,
             onOpenBeforeAfter = onOpenBeforeAfter,
+            onOpenVirtualDyno = onOpenVirtualDyno,
             onOpenHistoricalLogViewer = onOpenHistoricalLogViewer
         )
     }

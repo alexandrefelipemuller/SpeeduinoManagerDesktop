@@ -61,7 +61,8 @@ internal enum class DesktopRoute(
     LogViewer("route.logViewer", "route.logViewer", Icons.Default.Build),
     LogsEcuTools("route.logsEcuTools", "label.logsEcuToolsTitle", Icons.Default.Build),
     LogAnalyzer("route.logAnalyzer", "route.logAnalyzer", Icons.Default.Build),
-    BeforeAfter("route.beforeAfter", "route.beforeAfter", Icons.Default.Build)
+    BeforeAfter("route.beforeAfter", "route.beforeAfter", Icons.Default.Build),
+    VirtualDyno("route.virtualDyno", "route.virtualDyno", Icons.Default.Build)
 }
 
 internal fun navSections(): List<NavSection> {
@@ -120,7 +121,8 @@ internal fun parentRoute(route: DesktopRoute): DesktopRoute? {
         DesktopRoute.LogViewer,
         DesktopRoute.RealTimeMonitor,
         DesktopRoute.LogAnalyzer,
-        DesktopRoute.BeforeAfter -> DesktopRoute.Tools
+        DesktopRoute.BeforeAfter,
+        DesktopRoute.VirtualDyno -> DesktopRoute.Tools
         DesktopRoute.MapsTables -> DesktopRoute.Fuel
         DesktopRoute.ConfigsTuning -> DesktopRoute.EngineSetup
         DesktopRoute.LogsEcuTools -> DesktopRoute.Tools

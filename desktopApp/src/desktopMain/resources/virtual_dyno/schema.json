@@ -1,0 +1,253 @@
+{
+  "format": "virtual_dyno_tflite_linear_v1",
+  "created_from": "database_compare_real_bridge_v1",
+  "model_file": "virtual_dyno_linear.tflite",
+  "targets": [
+    "power_whp",
+    "torq_nm"
+  ],
+  "input_tensor": {
+    "name": "features",
+    "shape": [
+      1,
+      37
+    ],
+    "dtype": "float32",
+    "description": "standardized feature vector in feature_names order"
+  },
+  "output_tensor": {
+    "shape": [
+      1,
+      2
+    ],
+    "dtype": "float32",
+    "order": [
+      "power_whp",
+      "torq_nm"
+    ],
+    "units": [
+      "whp",
+      "Nm"
+    ]
+  },
+  "encoder": {
+    "numeric_features": [
+      "weight_kg",
+      "corrected_frontal_area_m2",
+      "rpm",
+      "tps_pct",
+      "lambda_wb",
+      "lambda_target",
+      "lambda_correction_pct",
+      "map_kpa_abs",
+      "map_bar_gauge",
+      "engine_temp_c",
+      "air_temp_c",
+      "oil_pressure_bar",
+      "fuel_pressure_bar",
+      "inj_ms",
+      "injection_timing_deg",
+      "ignition_deg",
+      "battery_v",
+      "injector_flow_lb_hr",
+      "distance_m",
+      "speed_kmh"
+    ],
+    "categorical_features": [
+      "source_type",
+      "drivetrain",
+      "synthetic"
+    ],
+    "engineered_features": [
+      "rpm_x_tps",
+      "rpm_x_map_abs",
+      "tps_x_map_abs",
+      "speed_x_rpm",
+      "rpm_sq",
+      "tps_sq",
+      "map_abs_sq",
+      "speed_sq",
+      "load_index",
+      "aero_speed_index",
+      "source_type=bridge",
+      "source_type=real",
+      "drivetrain=",
+      "drivetrain=FWD",
+      "drivetrain=RWD",
+      "synthetic=0",
+      "synthetic=1"
+    ],
+    "feature_names": [
+      "weight_kg",
+      "corrected_frontal_area_m2",
+      "rpm",
+      "tps_pct",
+      "lambda_wb",
+      "lambda_target",
+      "lambda_correction_pct",
+      "map_kpa_abs",
+      "map_bar_gauge",
+      "engine_temp_c",
+      "air_temp_c",
+      "oil_pressure_bar",
+      "fuel_pressure_bar",
+      "inj_ms",
+      "injection_timing_deg",
+      "ignition_deg",
+      "battery_v",
+      "injector_flow_lb_hr",
+      "distance_m",
+      "speed_kmh",
+      "rpm_x_tps",
+      "rpm_x_map_abs",
+      "tps_x_map_abs",
+      "speed_x_rpm",
+      "rpm_sq",
+      "tps_sq",
+      "map_abs_sq",
+      "speed_sq",
+      "load_index",
+      "aero_speed_index",
+      "source_type=bridge",
+      "source_type=real",
+      "drivetrain=",
+      "drivetrain=FWD",
+      "drivetrain=RWD",
+      "synthetic=0",
+      "synthetic=1"
+    ],
+    "numeric_fills": {
+      "weight_kg": 1025.0,
+      "corrected_frontal_area_m2": 0.229,
+      "rpm": 4929.5,
+      "tps_pct": 52.2,
+      "lambda_wb": 0.885,
+      "lambda_target": 0.87,
+      "lambda_correction_pct": -0.18,
+      "map_kpa_abs": 98.8,
+      "map_bar_gauge": -0.009,
+      "engine_temp_c": 94.9,
+      "air_temp_c": 27.9,
+      "oil_pressure_bar": 2.9,
+      "fuel_pressure_bar": 8.57,
+      "inj_ms": 1.79,
+      "injection_timing_deg": 360.7,
+      "ignition_deg": 17.7,
+      "battery_v": 13.9,
+      "injector_flow_lb_hr": 90.0,
+      "distance_m": 237.9,
+      "speed_kmh": 143.2
+    },
+    "categorical_maps": {
+      "source_type": [
+        "bridge",
+        "real"
+      ],
+      "drivetrain": [
+        "",
+        "FWD",
+        "RWD"
+      ],
+      "synthetic": [
+        "0",
+        "1"
+      ]
+    },
+    "mean": [
+      1046.072625698324,
+      0.35762102590140676,
+      4465.8624174707975,
+      51.857282884713186,
+      0.8833500253934716,
+      0.8760035043171984,
+      -0.4667018791266959,
+      96.9986089385482,
+      0.021500152361605764,
+      95.63132554596264,
+      31.311914677501246,
+      2.8964819705443974,
+      8.25675622143606,
+      2.2936909090909285,
+      361.65665820225405,
+      17.191714068055536,
+      13.893767902485504,
+      89.01804977145764,
+      362.27519522621657,
+      129.98467242254904,
+      246819.3286947681,
+      476503.00358811615,
+      6502.04514568314,
+      637611.357267653,
+      22000088.685881156,
+      3975.489961909566,
+      12960.311656792905,
+      22204.6780639911,
+      32871.300591295745,
+      5408.468459897094,
+      0.8125952260030472,
+      0.18740477399695277,
+      0.021990858303707467,
+      0.9769426104621636,
+      0.0010665312341289995,
+      0.18740477399695277,
+      0.8125952260030472
+    ],
+    "scale": [
+      149.0683776530589,
+      0.3254629352151164,
+      1433.9321999673832,
+      35.865194460986395,
+      0.06719358252847475,
+      0.03088652107741725,
+      2.1236115927956045,
+      59.59514678880734,
+      0.5656841492871064,
+      8.539468425821001,
+      9.820118456596417,
+      0.4103734383063851,
+      1.181778461102963,
+      2.3694924605950396,
+      13.716995519421495,
+      4.505400546095783,
+      0.13780300365688453,
+      8.170484807920438,
+      791.2311183242495,
+      72.86057232272032,
+      182373.1154962693,
+      366972.1663638507,
+      6571.756616978053,
+      442119.7926101001,
+      11256768.809710864,
+      3815.1874385019023,
+      14056.647972558643,
+      17613.61252005003,
+      39993.86359437389,
+      6506.462665105876,
+      0.39023611401340835,
+      0.39023611401340835,
+      0.14665353884161195,
+      0.15008579654829388,
+      0.032640369870073,
+      0.39023611401340835,
+      0.39023611401340835
+    ]
+  },
+  "classifier": {
+    "type": "power_band_from_predicted_power",
+    "classes": [
+      "low",
+      "mid",
+      "high"
+    ],
+    "thresholds": {
+      "low_mid_whp": 31.29,
+      "mid_high_whp": 99.82
+    }
+  },
+  "postprocess": {
+    "power_whp_min": 0.0,
+    "torq_nm_min": 0.0,
+    "smooth_window_rows_recommended": 5,
+    "report_peak_from_valid_pull_window": true
+  }
+}

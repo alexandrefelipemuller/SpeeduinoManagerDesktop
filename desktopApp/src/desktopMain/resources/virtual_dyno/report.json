@@ -1,0 +1,75 @@
+{
+  "data_root": "database_compare_real_bridge_v1",
+  "model": "tflite_ridge_linear",
+  "alpha": 250.0,
+  "rows": 26920,
+  "train_rows": 19690,
+  "test_rows": 7230,
+  "files": [
+    "1 PASSADA DINO 155_20260416-0113_clio_155whp_ready_v10_cleaned.csv",
+    "1 passada ademir_20260416-0110_gol_g2_ready_v10_cleaned.csv",
+    "10 183WHP 1866 TORQUE - 16-4-2026_peugeot_ready_v10_cleaned.csv",
+    "2 PASSADA DINO 165 22KGFM_20260416-0106_clio_165whp_ready_v10_cleaned.csv",
+    "2- 2,594 6,365 9,360 (-1,27-11,00)_20260416-1728_golf_ready_v10_cleaned.csv",
+    "2024-08-17_10.37.48_fusca_enriched_clean_inferred_v1_cleaned.csv",
+    "3 PASSADA 185_20260416-0107_clio_185whp_ready_v10_cleaned.csv",
+    "4 PASSADA 200 35_20260416-0106_clio_200whp_ready_v10_cleaned.csv",
+    "ECU Pandoo-1-mapa alcool-#399_cleaned.csv",
+    "ECU Pandoo-1-mapa alcool-#405_cleaned.csv",
+    "ECU Pandoo-1-mapa alcool-#408_cleaned.csv",
+    "ECU Pandoo-1-mapa alcool-#414_cleaned.csv",
+    "ECU Pandoo-1-mapa alcool-#418 - ALEX_cleaned.csv",
+    "clio_1_std_cleaned.csv",
+    "clio_k4m_190_bridge_coast_b4.csv",
+    "clio_k4m_190_bridge_full_pull_b5.csv",
+    "clio_k4m_190_bridge_launch_b3.csv",
+    "clio_k4m_190_bridge_mixed_b2.csv",
+    "clio_k4m_190_bridge_street_b1.csv",
+    "ecu_pandoo_1_mapa_rua_064_v10_cleaned.csv",
+    "gol_ap18_250_bridge_coast_b4.csv",
+    "gol_ap18_250_bridge_full_pull_b5.csv",
+    "gol_ap18_250_bridge_launch_b1.csv",
+    "gol_ap18_250_bridge_mixed_b2.csv",
+    "gol_ap18_250_bridge_street_b3.csv",
+    "kia_soul_1_6_2010_bridge_coast_b2.csv",
+    "kia_soul_1_6_2010_bridge_launch_b5.csv",
+    "kia_soul_1_6_2010_bridge_mixed_b4.csv",
+    "kia_soul_1_6_2010_bridge_stationary_b1.csv",
+    "kia_soul_1_6_2010_bridge_street_b3.csv"
+  ],
+  "test_files": [
+    "4 PASSADA 200 35_20260416-0106_clio_200whp_ready_v10_cleaned.csv",
+    "clio_k4m_190_bridge_launch_b3.csv",
+    "gol_ap18_250_bridge_launch_b1.csv",
+    "gol_ap18_250_bridge_street_b3.csv",
+    "kia_soul_1_6_2010_bridge_coast_b2.csv",
+    "kia_soul_1_6_2010_bridge_street_b3.csv"
+  ],
+  "power_whp": {
+    "mae": 9.744662674775158,
+    "rmse": 12.494725024169046,
+    "r2": 0.9769341993329325
+  },
+  "torq_nm": {
+    "mae": 17.34386777085226,
+    "rmse": 23.55138242724414,
+    "r2": 0.9660761727136353
+  },
+  "classifier": {
+    "classes": [
+      "low",
+      "mid",
+      "high"
+    ],
+    "thresholds": {
+      "low_mid_whp": 31.29,
+      "mid_high_whp": 99.82
+    }
+  },
+  "package_files": [
+    "virtual_dyno_linear.tflite",
+    "schema.json",
+    "report.json",
+    "android_integration.md"
+  ]
+}

@@ -9,7 +9,8 @@ internal fun toolsNavSection(): NavSection {
             NavEntry(DesktopRoute.RealTimeMonitor),
             NavEntry(DesktopRoute.LogViewer),
             NavEntry(DesktopRoute.LogAnalyzer),
-            NavEntry(DesktopRoute.BeforeAfter)
+            NavEntry(DesktopRoute.BeforeAfter),
+            NavEntry(DesktopRoute.VirtualDyno)
         )
     )
 }

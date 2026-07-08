@@ -188,6 +188,7 @@ internal fun DesktopAppShell() {
                                     onOpenRealTimeMonitor = { appState.currentRoute = DesktopRoute.RealTimeMonitor },
                                     onOpenLogAnalyzer = { appState.currentRoute = DesktopRoute.LogAnalyzer },
                                     onOpenBeforeAfter = { appState.currentRoute = DesktopRoute.BeforeAfter },
+                                    onOpenVirtualDyno = { appState.currentRoute = DesktopRoute.VirtualDyno },
                                     onOpenHistoricalLogViewer = { path ->
                                         controller.loadLogSnapshotFromCsv(path)
                                         appState.currentRoute = DesktopRoute.LogViewer

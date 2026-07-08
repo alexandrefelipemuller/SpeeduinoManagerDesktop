@@ -32,6 +32,7 @@ internal fun LogsEcuToolsScreenDesktop(
     onOpenRealTimeMonitor: () -> Unit,
     onOpenLogAnalyzer: () -> Unit,
     onOpenBeforeAfter: () -> Unit,
+    onOpenVirtualDyno: () -> Unit,
     onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     val strings = LocalStrings.current
@@ -70,6 +71,12 @@ internal fun LogsEcuToolsScreenDesktop(
             description = "Compare before and after logs to see AFR improvements.",
             buttonLabel = strings["label.institutionalBeforeAfterCta"],
             onClick = onOpenBeforeAfter
+        )
+        UtilityActionCard(
+            title = strings["route.virtualDyno"],
+            description = "Estimate WHP and torque locally from a CSV log and rebuild a synthetic power/torque curve.",
+            buttonLabel = strings["action.open"],
+            onClick = onOpenVirtualDyno
         )
     }
 }
