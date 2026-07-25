@@ -22,6 +22,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -30,20 +31,26 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import com.speeduino.manager.desktop.ConnectionType
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
+import com.speeduino.manager.desktop.InitialScreen
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.navigation.DesktopRoute
 import com.speeduino.manager.desktop.navigation.NavigationSidebar
 import com.speeduino.manager.desktop.navigation.ScreenHost
 import com.speeduino.manager.desktop.navigation.parentRoute
 import com.speeduino.manager.desktop.ui.HeaderBar
+import com.speeduino.manager.desktop.ui.chooseSaveFile
 import kotlinx.coroutines.launch
 
 @Composable
@@ -52,7 +59,15 @@ internal fun DesktopAppShell() {
     val controller = remember { DesktopSpeeduinoController(scope) }
     val desktopSettings by controller.desktopSettings.collectAsState()
     val appState = rememberDesktopAppState(desktopSettings)
+    if (appState.currentRoute == DesktopRoute.Home) {
+        when (desktopSettings.initialScreen) {
+            InitialScreen.HOME -> Unit
+            InitialScreen.DASHBOARD -> appState.currentRoute = DesktopRoute.Dashboard
+        }
+    }
     val strings = LocalStrings.current
+    var showReportProblemDialog by remember { mutableStateOf(false) }
+    var reportProblemText by remember { mutableStateOf("") }
 
     val connectionState by controller.connectionState.collectAsState()
     val liveData by controller.liveData.collectAsState()
@@ -82,6 +97,41 @@ internal fun DesktopAppShell() {
     }
     val onOpenRoute: (DesktopRoute) -> Unit = { route ->
         appState.currentRoute = route
+    }
+    val onReportProblem = {
+        reportProblemText = buildString {
+            appendLine("Desktop report summary")
+            appendLine("App version: ${com.speeduino.manager.desktop.APP_VERSION}")
+            appendLine("Timestamp: ${java.time.ZonedDateTime.now()}")
+            appendLine("Route: ${appState.currentRoute}")
+            appendLine("Connection: ${connectionState.status}")
+            appendLine("Firmware: ${controller.diagnosticSummary.value.firmwareSignature ?: "unknown"}")
+            appendLine("Product: ${controller.diagnosticSummary.value.productString ?: "unknown"}")
+            appendLine("INI: ${controller.diagnosticSummary.value.activeIniSource ?: "unknown"}")
+            appendLine("Logger: ${controller.diagnosticSummary.value.diagnosticLoggerMode}")
+            appendLine("Last error: ${controller.lastError.value ?: "none"}")
+        }
+        showReportProblemDialog = true
+    }
+    val issueUrl = "https://github.com/alexandrefelipemuller/SpeeduinoManagerDesktop/issues/new"
+    val copyReportToClipboard = {
+        runCatching {
+            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(reportProblemText), null)
+        }
+    }
+    val openIssueTracker = {
+        runCatching {
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop.getDesktop().browse(java.net.URI(issueUrl))
+            }
+        }
+    }
+    val exportReport = {
+        chooseSaveFile("Export report", "speeduino_desktop_report.txt")?.let { file ->
+            runCatching {
+                file.writeText(reportProblemText)
+            }
+        }
     }
 
     val backgroundBrush = Brush.linearGradient(
@@ -159,6 +209,7 @@ internal fun DesktopAppShell() {
                                     onToggleConnection = onToggleConnection,
                                     onOpenSettings = { appState.currentRoute = DesktopRoute.Settings },
                                     onOpenInstitutional = { appState.currentRoute = DesktopRoute.Institutional },
+                                    onReportProblem = onReportProblem,
                                     onOpenRoute = onOpenRoute,
                                     onOpenConnectionSettings = { appState.currentRoute = DesktopRoute.ConnectionSettings },
                                     onOpenConnection = { appState.currentRoute = DesktopRoute.Connection },
@@ -231,6 +282,38 @@ internal fun DesktopAppShell() {
                         }
                     }
                 }
+            }
+
+            if (showReportProblemDialog) {
+                AlertDialog(
+                    onDismissRequest = { showReportProblemDialog = false },
+                    title = { Text(strings["route.institutional"]) },
+                    text = { Text(reportProblemText) },
+                    confirmButton = {
+                        FilledTonalButton(onClick = { showReportProblemDialog = false }) {
+                            Text(strings["action.cancel"])
+                        }
+                    },
+                    dismissButton = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = {
+                                copyReportToClipboard()
+                            }) {
+                                Text(strings["label.copy"])
+                            }
+                            OutlinedButton(onClick = {
+                                exportReport()
+                            }) {
+                                Text(strings["label.export"])
+                            }
+                            FilledTonalButton(onClick = {
+                                openIssueTracker()
+                            }) {
+                                Text(strings["label.openIssue"])
+                            }
+                        }
+                    }
+                )
             }
 
             if (useDrawer) {

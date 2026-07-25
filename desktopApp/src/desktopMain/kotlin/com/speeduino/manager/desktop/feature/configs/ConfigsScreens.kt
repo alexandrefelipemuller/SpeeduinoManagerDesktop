@@ -47,7 +47,6 @@ import com.speeduino.manager.compare.LogCompareResult
 import com.speeduino.manager.compare.LogHeatCellState
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.LocalStrings
-import com.speeduino.manager.desktop.PlaceholderScreen
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.InfoRow
 import com.speeduino.manager.desktop.ui.NumberField
@@ -668,9 +667,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMarkerDesktop(
 }
 
 @Composable
-internal fun SensorsConfigScreenDesktop() {
-    val strings = LocalStrings.current
-    PlaceholderScreen(strings["route.sensorsConfig"], strings["label.sensorsNotSupported"])
+internal fun SensorsConfigScreenDesktop(controller: DesktopSpeeduinoController) {
+    SensorsCalibrationScreenDesktop(controller)
 }
 
 @Composable

@@ -24,6 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.speeduino.manager.desktop.AppLanguage
+import com.speeduino.manager.desktop.ConnectionType
+import com.speeduino.manager.desktop.DiagnosticLoggerMode
+import com.speeduino.manager.desktop.InitialScreen
+import com.speeduino.manager.desktop.DesktopDashboardMode
 import com.speeduino.manager.desktop.AppProtocol
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.IniSelectionMode
@@ -51,6 +55,8 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
     val desktopSettings by controller.desktopSettings.collectAsState()
     val availableIniDefinitions by controller.availableIniDefinitions.collectAsState()
     val importedIniDefinitions by controller.importedIniDefinitions.collectAsState()
+    val diagnosticSummary by controller.diagnosticSummary.collectAsState()
+    val readOnlySafeMode by controller.readOnlySafeMode.collectAsState()
     val languageOptions = listOf(
         AppLanguage.EN to strings["app.languageEnglish"],
         AppLanguage.PT to strings["app.languagePortuguese"],
@@ -111,44 +117,95 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                 }
 
                 DropdownField(
-                    label = "Protocol",
+                    label = strings["label.protocol"],
                     value = when (draftSettings.protocol) {
-                        AppProtocol.MS_PROTOCOL -> "Speeduino / MS"
-                        AppProtocol.ELM327_OBD2 -> "ELM327 OBD2"
+                        AppProtocol.MS_PROTOCOL -> strings["label.speeduinoMs"]
+                        AppProtocol.ELM327_OBD2 -> strings["label.elm327Obd2"]
                     },
-                    options = listOf("Speeduino / MS", "ELM327 OBD2")
+                    options = listOf(strings["label.speeduinoMs"], strings["label.elm327Obd2"])
                 ) { label ->
                     draftSettings = draftSettings.copy(
-                        protocol = if (label == "ELM327 OBD2") AppProtocol.ELM327_OBD2 else AppProtocol.MS_PROTOCOL
+                        protocol = if (label == strings["label.elm327Obd2"]) AppProtocol.ELM327_OBD2 else AppProtocol.MS_PROTOCOL
                     )
                 }
 
                 DropdownField(
-                    label = "Unit system",
+                    label = strings["label.unitSystem"],
                     value = when (draftSettings.unitSystem) {
-                        UnitSystem.AUTO -> "Automatic"
-                        UnitSystem.METRIC -> "Metric"
-                        UnitSystem.IMPERIAL -> "Imperial"
+                        UnitSystem.AUTO -> strings["label.automaticDetection"]
+                        UnitSystem.METRIC -> strings["label.metric"]
+                        UnitSystem.IMPERIAL -> strings["label.imperial"]
                     },
-                    options = listOf("Automatic", "Metric", "Imperial")
+                    options = listOf(strings["label.automaticDetection"], strings["label.metric"], strings["label.imperial"])
                 ) { label ->
                     draftSettings = draftSettings.copy(
                         unitSystem = when (label) {
-                            "Metric" -> UnitSystem.METRIC
-                            "Imperial" -> UnitSystem.IMPERIAL
+                            strings["label.metric"] -> UnitSystem.METRIC
+                            strings["label.imperial"] -> UnitSystem.IMPERIAL
                             else -> UnitSystem.AUTO
                         }
                     )
                 }
                 Text(
-                    text = "Effective unit system: " + when (effectiveUnitSystem) {
-                        UnitSystem.AUTO -> "Automatic"
-                        UnitSystem.METRIC -> "Metric"
-                        UnitSystem.IMPERIAL -> "Imperial"
-                    },
+                    text = strings.format("label.effectiveUnitSystemValue", when (effectiveUnitSystem) {
+                        UnitSystem.AUTO -> strings["label.automaticDetection"]
+                        UnitSystem.METRIC -> strings["label.metric"]
+                        UnitSystem.IMPERIAL -> strings["label.imperial"]
+                    }),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                DropdownField(
+                    label = strings["label.dashboardModeTitle"],
+                    value = dashboardModeLabel(draftSettings.dashboardMode, strings),
+                    options = DesktopDashboardMode.entries.map { dashboardModeLabel(it, strings) }
+                ) { label ->
+                    draftSettings = draftSettings.copy(
+                        dashboardMode = DesktopDashboardMode.entries.first { dashboardModeLabel(it, strings) == label }
+                    )
+                }
+
+                DropdownField(
+                    label = strings["label.connectionType"],
+                    value = connectionTypeLabel(draftSettings.lastConnectionType ?: ConnectionType.TCP, strings),
+                    options = ConnectionType.entries.map { connectionTypeLabel(it, strings) }
+                ) { label ->
+                    draftSettings = draftSettings.copy(
+                        lastConnectionType = ConnectionType.entries.first { connectionTypeLabel(it, strings) == label }
+                    )
+                }
+
+                DropdownField(
+                    label = strings["label.diagLoggerMode"],
+                    value = diagnosticLoggerLabel(draftSettings.diagnosticLoggerMode, strings),
+                    options = listOf(
+                        diagnosticLoggerLabel(DiagnosticLoggerMode.OFF, strings),
+                        diagnosticLoggerLabel(DiagnosticLoggerMode.TOOTH, strings),
+                        diagnosticLoggerLabel(DiagnosticLoggerMode.COMPOSITE, strings)
+                    )
+                ) { label ->
+                    draftSettings = draftSettings.copy(
+                        diagnosticLoggerMode = when (label) {
+                            diagnosticLoggerLabel(DiagnosticLoggerMode.TOOTH, strings) -> DiagnosticLoggerMode.TOOTH
+                            diagnosticLoggerLabel(DiagnosticLoggerMode.COMPOSITE, strings) -> DiagnosticLoggerMode.COMPOSITE
+                            else -> DiagnosticLoggerMode.OFF
+                        }
+                    )
+                }
+
+                DropdownField(
+                    label = strings["label.initialScreenTitle"],
+                    value = when (draftSettings.initialScreen) {
+                        InitialScreen.HOME -> strings["label.initialScreenHome"]
+                        InitialScreen.DASHBOARD -> strings["label.initialScreenDashboard"]
+                    },
+                    options = listOf(strings["label.initialScreenHome"], strings["label.initialScreenDashboard"])
+                ) { label ->
+                    draftSettings = draftSettings.copy(
+                        initialScreen = if (label == strings["label.initialScreenDashboard"]) InitialScreen.DASHBOARD else InitialScreen.HOME
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -157,11 +214,11 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Auto-connect on start",
+                            text = strings["label.autoConnectOnStart"],
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
-                            text = "Reconnects the last successful endpoint when the app opens.",
+                            text = strings["label.autoConnectOnStartHelp"],
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -175,7 +232,7 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                 }
 
                 NumberField(
-                    label = "Shift light RPM",
+                    label = strings["label.shiftLightRpm"],
                     value = shiftLightRpmText,
                     onValueChange = { value ->
                         val filtered = value.filter(Char::isDigit)
@@ -190,7 +247,7 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                     }
                 )
                 Text(
-                    text = "Range: $SHIFT_LIGHT_RPM_MIN - $SHIFT_LIGHT_RPM_MAX RPM",
+                    text = strings.format("label.shiftLightRpmRange", SHIFT_LIGHT_RPM_MIN, SHIFT_LIGHT_RPM_MAX),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -207,28 +264,28 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "INI Definition",
+                    text = strings["label.iniDefinition"],
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
                 DropdownField(
-                    label = "Definition mode",
-                    value = if (draftSettings.iniSelectionMode == IniSelectionMode.AUTOMATIC) "Automatic" else "Manual",
-                    options = listOf("Automatic", "Manual")
+                    label = strings["label.definitionMode"],
+                    value = if (draftSettings.iniSelectionMode == IniSelectionMode.AUTOMATIC) strings["label.automaticDetection"] else strings["label.manual"],
+                    options = listOf(strings["label.automaticDetection"], strings["label.manual"])
                 ) { label ->
                     draftSettings = draftSettings.copy(
-                        iniSelectionMode = if (label == "Automatic") IniSelectionMode.AUTOMATIC else IniSelectionMode.MANUAL,
-                        iniDefinitionId = if (label == "Automatic") null else draftSettings.iniDefinitionId
+                        iniSelectionMode = if (label == strings["label.automaticDetection"]) IniSelectionMode.AUTOMATIC else IniSelectionMode.MANUAL,
+                        iniDefinitionId = if (label == strings["label.automaticDetection"]) null else draftSettings.iniDefinitionId
                     )
                 }
                 if (draftSettings.iniSelectionMode == IniSelectionMode.MANUAL) {
                     DropdownField(
-                        label = "Definition source",
-                        value = if (draftSettings.iniSelectionSource == IniSelectionSource.CATALOG) "Remote catalog" else "Imported file",
-                        options = listOf("Remote catalog", "Imported file")
+                        label = strings["label.definitionSource"],
+                        value = if (draftSettings.iniSelectionSource == IniSelectionSource.CATALOG) strings["label.remoteCatalog"] else strings["label.importedFile"],
+                        options = listOf(strings["label.remoteCatalog"], strings["label.importedFile"])
                     ) { label ->
                         draftSettings = draftSettings.copy(
-                            iniSelectionSource = if (label == "Remote catalog") IniSelectionSource.CATALOG else IniSelectionSource.IMPORTED,
+                            iniSelectionSource = if (label == strings["label.remoteCatalog"]) IniSelectionSource.CATALOG else IniSelectionSource.IMPORTED,
                             iniDefinitionId = null
                         )
                     }
@@ -244,7 +301,7 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                             ?.let { "${it.fileName} (${it.signature})" }
                     }.orEmpty()
                     DropdownField(
-                        label = "INI definition",
+                        label = strings["label.definitionValue"],
                         value = selectedDefinition.ifBlank { strings["app.noOptions"] },
                         options = definitionOptions.ifEmpty { listOf(strings["app.noOptions"]) }
                     ) { label ->
@@ -257,39 +314,69 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         FilledTonalButton(onClick = { controller.refreshIniDefinitions(forceCatalogRefresh = true) }) {
-                            Text("Refresh catalog")
+                            Text(strings["label.refreshCatalog"])
                         }
                         FilledTonalButton(onClick = {
-                            val source = chooseOpenFile("Import .ini file")
+                            val source = chooseOpenFile(strings["label.importIniFileDialog"])
                             if (source != null) {
                                 controller.importIniDefinition(source)
                             }
                         }) {
-                            Text("Import .ini")
+                            Text(strings["label.importIni"])
                         }
                     }
                 }
                 DropdownField(
-                    label = "Manual firmware profile",
+                    label = strings["label.diagLoggerMode"],
+                    value = when (draftSettings.diagnosticLoggerMode) {
+                        DiagnosticLoggerMode.OFF -> strings["label.off"]
+                        DiagnosticLoggerMode.TOOTH -> strings["label.tooth"]
+                        DiagnosticLoggerMode.COMPOSITE -> strings["label.composite"]
+                    },
+                    options = listOf(strings["label.off"], strings["label.tooth"], strings["label.composite"])
+                ) { label ->
+                    draftSettings = draftSettings.copy(
+                        diagnosticLoggerMode = when (label) {
+                            strings["label.tooth"] -> DiagnosticLoggerMode.TOOTH
+                            strings["label.composite"] -> DiagnosticLoggerMode.COMPOSITE
+                            else -> DiagnosticLoggerMode.OFF
+                        }
+                    )
+                }
+
+                DropdownField(
+                    label = strings["label.manualFirmwareProfile"],
                     value = MANUAL_FIRMWARE_PROFILES.firstOrNull { it.signature == draftSettings.manualFirmwareProfile }?.label
-                        ?: "Automatic detection",
-                    options = listOf("Automatic detection") + MANUAL_FIRMWARE_PROFILES.map { it.label }
+                        ?: strings["label.automaticDetection"],
+                    options = listOf(strings["label.automaticDetection"]) + MANUAL_FIRMWARE_PROFILES.map { it.label }
                 ) { label ->
                     draftSettings = draftSettings.copy(
                         manualFirmwareProfile = MANUAL_FIRMWARE_PROFILES.firstOrNull { it.label == label }?.signature
                     )
                 }
                 Text(
-                    text = "Manual firmware profile forces read-only safe mode, like Android.",
+                    text = strings["label.manualFirmwareHelp"],
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text(
+                    text = strings.format("label.currentLoggerValue", diagnosticSummary.diagnosticLoggerMode.name.lowercase().replace('_', ' ')),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (readOnlySafeMode || diagnosticSummary.readOnlySafeMode) {
+                    Text(
+                        text = strings["label.readOnlySafeModeActive"],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 FilledTonalButton(
                     onClick = { controller.saveDesktopSettings(draftSettings) },
                     enabled = draftSettings != desktopSettings &&
                         (draftSettings.iniSelectionMode != IniSelectionMode.MANUAL || draftSettings.iniDefinitionId != null)
                 ) {
-                    Text("Save definition settings")
+                    Text(strings["label.saveDefinitionSettings"])
                 }
             }
         }
@@ -367,5 +454,29 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                 }
             }
         }
+    }
+}
+
+
+private fun dashboardModeLabel(mode: DesktopDashboardMode, strings: com.speeduino.manager.desktop.Strings): String {
+    return when (mode) {
+        DesktopDashboardMode.DEFAULT -> strings["label.dashboardModeDefault"]
+        DesktopDashboardMode.PETROL -> strings["label.dashboardModePetrol"]
+        DesktopDashboardMode.FUTURE -> strings["label.dashboardModeFuture"]
+        DesktopDashboardMode.APEX -> strings["label.dashboardModeApex"]
+    }
+}
+
+
+private fun connectionTypeLabel(type: ConnectionType, strings: com.speeduino.manager.desktop.Strings): String {
+    return type.label(strings)
+}
+
+
+private fun diagnosticLoggerLabel(mode: DiagnosticLoggerMode, strings: com.speeduino.manager.desktop.Strings): String {
+    return when (mode) {
+        DiagnosticLoggerMode.OFF -> strings["label.off"]
+        DiagnosticLoggerMode.TOOTH -> strings["label.tooth"]
+        DiagnosticLoggerMode.COMPOSITE -> strings["label.composite"]
     }
 }

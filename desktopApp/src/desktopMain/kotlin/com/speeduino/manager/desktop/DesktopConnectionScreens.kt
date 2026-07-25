@@ -48,12 +48,12 @@ internal fun ConnectionSettingsScreenDesktop(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Connection Settings",
+                    text = strings["label.connectionSettings"],
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "Saved connection profile and protocol shortcuts.",
+                    text = strings["label.toolsConnectionSettingsDesc"],
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -61,7 +61,7 @@ internal fun ConnectionSettingsScreenDesktop(
         }
         ConnectionProfileCard(
             title = strings["label.connectionTypeTcp"],
-            subtitle = "TCP host and port used by the desktop app.",
+            subtitle = strings["label.toolsConnectionSettingsDesc"],
         ) {
             OutlinedTextField(
                 value = host,
@@ -90,13 +90,13 @@ internal fun ConnectionSettingsScreenDesktop(
                         }
                     }
                 ) {
-                    Text("Save TCP profile")
+                    Text(strings["label.saveTcpProfile"])
                 }
                 FilledTonalButton(onClick = onOpenBluetoothConnection) {
-                    Text("Bluetooth")
+                    Text(strings["label.bluetooth"])
                 }
                 FilledTonalButton(onClick = onOpenUsbSerialConnection) {
-                    Text("USB Serial")
+                    Text(strings["label.usbSerial"])
                 }
             }
         }
@@ -106,20 +106,22 @@ internal fun ConnectionSettingsScreenDesktop(
 
 @Composable
 internal fun BluetoothConnectionScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
     ConnectionEndpointScreenDesktop(
         controller = controller,
-        title = "Bluetooth Connection",
-        subtitle = "Desktop uses OS-exposed serial ports for Bluetooth adapters.",
+        title = strings["label.bluetoothConnectionTitle"],
+        subtitle = strings["label.bluetoothConnectionSubtitle"],
         connectionType = ConnectionType.BLUETOOTH
     )
 }
 
 @Composable
 internal fun UsbSerialConnectionScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
     ConnectionEndpointScreenDesktop(
         controller = controller,
-        title = "USB Serial Connection",
-        subtitle = "Select a serial port and baud rate for USB adapters.",
+        title = strings["label.usbSerialConnectionTitle"],
+        subtitle = strings["label.usbSerialConnectionSubtitle"],
         connectionType = ConnectionType.USB
     )
 }
@@ -131,6 +133,7 @@ private fun ConnectionEndpointScreenDesktop(
     subtitle: String,
     connectionType: ConnectionType
 ) {
+    val strings = LocalStrings.current
     val serialPorts by controller.serialPorts.collectAsState()
     val settings by controller.desktopSettings.collectAsState()
     var selectedPort by remember(settings.lastSerialPort, serialPorts) {
@@ -168,21 +171,21 @@ private fun ConnectionEndpointScreenDesktop(
         }
         ConnectionProfileCard(
             title = if (connectionType == ConnectionType.BLUETOOTH) {
-                "Bluetooth device"
+                strings["label.bluetoothDevice"]
             } else {
-                "USB serial port"
+                strings["label.usbSerialPort"]
             },
             subtitle = if (connectionType == ConnectionType.BLUETOOTH) {
-                "Bluetooth adapters appear here when the OS exposes them as serial ports."
+                strings["label.bluetoothDeviceHelp"]
             } else {
-                "Pick a port from the discovered list or type one manually."
+                strings["label.usbSerialPortHelp"]
             }
         ) {
             if (serialPorts.isNotEmpty()) {
                 DropdownField(
-                    label = "Discovered ports",
+                    label = strings["label.discoveredPorts"],
                     value = serialPorts.firstOrNull { it.systemPortName == selectedPort }?.displayName
-                        ?: selectedPort.ifBlank { "No selection" },
+                        ?: selectedPort.ifBlank { strings["label.noSelection"] },
                     options = serialPorts.map { it.displayName }
                 ) { label ->
                     selectedPort = serialPorts.firstOrNull { it.displayName == label }?.systemPortName.orEmpty()
@@ -195,20 +198,20 @@ private fun ConnectionEndpointScreenDesktop(
                     manualPort = it
                     selectedPort = it
                 },
-                label = { Text("Port path / device") },
+                label = { Text(strings["label.portPathDevice"]) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = baudRate,
                 onValueChange = { baudRate = it.filter(Char::isDigit) },
-                label = { Text("Baud rate") },
+                label = { Text(strings["label.baudRateLabel"]) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilledTonalButton(onClick = { controller.refreshSerialPorts() }) {
-                    Text("Refresh ports")
+                    Text(strings["label.refreshPorts"])
                 }
                 FilledTonalButton(
                     onClick = {
@@ -218,7 +221,7 @@ private fun ConnectionEndpointScreenDesktop(
                         }
                     }
                 ) {
-                    Text("Connect")
+                    Text(strings["action.connect"])
                 }
                 FilledTonalButton(
                     onClick = {
@@ -232,7 +235,7 @@ private fun ConnectionEndpointScreenDesktop(
                         }
                     }
                 ) {
-                    Text("Save profile")
+                    Text(strings["label.saveProfile"])
                 }
             }
         }
@@ -273,6 +276,7 @@ private fun ConnectionProfileCard(
 
 @Composable
 private fun ConnectionSettingsSummary(settings: DesktopSettingsState) {
+    val strings = LocalStrings.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -284,22 +288,22 @@ private fun ConnectionSettingsSummary(settings: DesktopSettingsState) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Saved profile",
+                text = strings["label.savedProfile"],
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium
             )
-            InfoRow("Auto-connect", if (settings.autoConnectOnStart) "Enabled" else "Disabled")
+            InfoRow(strings["label.autoConnectOnStart"], if (settings.autoConnectOnStart) strings["label.enabled"] else strings["label.disabled"])
             InfoRow(
-                "Last connection",
+                strings["label.lastConnection"],
                 when (settings.lastConnectionType) {
-                    ConnectionType.TCP -> "TCP ${settings.lastTcpHost ?: "-"}:${settings.lastTcpPort ?: "-"}"
+                    ConnectionType.TCP -> strings.format("label.connectionProfileTcp", settings.lastTcpHost ?: "-", settings.lastTcpPort ?: "-")
                     ConnectionType.USB,
-                    ConnectionType.BLUETOOTH -> "${settings.lastConnectionType.name} ${settings.lastSerialPort ?: "-"} @ ${settings.lastSerialBaudRate ?: "-"}"
-                    null -> "No saved connection"
+                    ConnectionType.BLUETOOTH -> strings.format("label.connectionProfileSerial", settings.lastConnectionType.name, settings.lastSerialPort ?: "-", settings.lastSerialBaudRate ?: "-")
+                    null -> strings["label.noSavedConnection"]
                 }
             )
-            InfoRow("Unit system", settings.unitSystem.storageValue)
-            InfoRow("Shift light RPM", settings.shiftLightRpm.toString())
+            InfoRow(strings["label.unitSystem"], settings.unitSystem.storageValue)
+            InfoRow(strings["label.shiftLightRpm"], settings.shiftLightRpm.toString())
         }
     }
 }

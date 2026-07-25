@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
+import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.model.EngineConstants
@@ -31,6 +32,7 @@ import com.speeduino.manager.model.InjectorBatteryCorrectionMode
 
 @Composable
 internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
     val constants by controller.engineConstants.collectAsState()
 
     var openTime by remember(constants) { mutableStateOf(constants?.injectorOpenTimeMs?.toString() ?: "1.0") }
@@ -53,10 +55,10 @@ internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController)
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Injector Config", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text("Dedicated injector setup brought over from the Android flow using the newer shared fields.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(strings["label.injectorConfigTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(strings["label.injectorConfigSubtitle"], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = controller::loadEngineConstants) { Text("Load from ECU") }
+                    FilledTonalButton(onClick = controller::loadEngineConstants) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         enabled = hasChanges && constants != null,
                         onClick = {
@@ -74,7 +76,7 @@ internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController)
                             }
                             hasChanges = false
                         }
-                    ) { Text("Save") }
+                    ) { Text(strings["action.saveEcu"]) }
                 }
             }
         }
@@ -86,22 +88,22 @@ internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController)
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Core Injector Values", style = MaterialTheme.typography.titleMedium)
+                Text(strings["label.coreInjectorValues"], style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NumberField("Open time (ms)", openTime, { openTime = it; hasChanges = true }, Modifier.weight(1f))
-                    NumberField("Duty limit (%)", dutyLimit, { dutyLimit = it; hasChanges = true }, Modifier.weight(1f))
-                    NumberField("Close angle", closeAngle, { closeAngle = it; hasChanges = true }, Modifier.weight(1f))
+                    NumberField(strings["label.openTimeMs"], openTime, { openTime = it; hasChanges = true }, Modifier.weight(1f))
+                    NumberField(strings["label.dutyLimitPct"], dutyLimit, { dutyLimit = it; hasChanges = true }, Modifier.weight(1f))
+                    NumberField(strings["label.closeAngle"], closeAngle, { closeAngle = it; hasChanges = true }, Modifier.weight(1f))
                 }
-                DropdownField("Battery correction target", correctionMode.name, InjectorBatteryCorrectionMode.values().map { it.name }) { value ->
+                DropdownField(strings["label.batteryCorrectionTarget"], correctionMode.name, InjectorBatteryCorrectionMode.values().map { it.name }) { value ->
                     correctionMode = InjectorBatteryCorrectionMode.valueOf(value)
                     hasChanges = true
                 }
                 HorizontalDivider()
-                Text("Voltage Correction Table", style = MaterialTheme.typography.titleMedium)
+                Text(strings["label.voltageCorrectionTable"], style = MaterialTheme.typography.titleMedium)
                 voltageBins.indices.forEach { index ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        NumberField("Voltage ${index + 1}", voltageBins[index], { value -> voltageBins[index] = value; hasChanges = true }, Modifier.weight(1f))
-                        NumberField("Rate ${index + 1}", correctionRates[index], { value -> correctionRates[index] = value; hasChanges = true }, Modifier.weight(1f))
+                        NumberField(strings.format("label.voltageCorrectionBin", index + 1), voltageBins[index], { value -> voltageBins[index] = value; hasChanges = true }, Modifier.weight(1f))
+                        NumberField(strings.format("label.voltageCorrectionRate", index + 1), correctionRates[index], { value -> correctionRates[index] = value; hasChanges = true }, Modifier.weight(1f))
                     }
                 }
             }

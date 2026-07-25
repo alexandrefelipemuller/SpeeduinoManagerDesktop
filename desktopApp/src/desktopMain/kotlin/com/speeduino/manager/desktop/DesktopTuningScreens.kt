@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -44,6 +46,7 @@ import com.speeduino.manager.model.RusefiInputOutputSnapshot
 import com.speeduino.manager.model.SecondarySerialConfig
 import com.speeduino.manager.model.SecondarySerialProtocol
 import com.speeduino.manager.tuning.CellRef
+import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.tuning.TuningStrategy
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.InfoRow
@@ -60,21 +63,24 @@ internal fun MapsTablesScreenDesktop(
     onOpenBaseMapWizard: () -> Unit,
     onOpenTuningAssistant: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
-    onOpenBeforeAfter: () -> Unit
+    onOpenBeforeAfter: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
+    val strings = LocalStrings.current
     TuningSectionScreen(
-        title = "Maps & Tuning",
-        subtitle = "Fuel, ignition and workflow shortcuts aligned with the Android hub.",
+        title = strings["route.mapsTables"],
+        subtitle = strings["label.mapsTablesSubtitle"],
     ) {
-        SectionPanel("Fuel") {
-            ActionCard("Injector Config", "Quick access to injector-related setup.") { RowButtons(onOpenInjectorConfig, null, "Open", null) }
-            ActionCard("VE Table", "Fuel table editor.") { RowButtons(onOpenVeTable, onOpenVeTable2, "VE 1", "VE 2") }
-            ActionCard("AFR Table", "Target lambda / AFR table editor.") { RowButtons(onOpenAfrTable, null, "Open AFR", null) }
+        SectionPanel(strings["label.fuelSection"]) {
+            ActionCard(strings["label.injectorConfigTitle"], strings["label.injectorConfigSubtitle"]) { RowButtons(onOpenInjectorConfig, null, strings["action.open"], null) }
+            ActionCard(strings["route.veTable"], strings["label.veTableDesc"]) { RowButtons(onOpenVeTable, onOpenVeTable2, strings["label.veTable1"], strings["label.veTable2"]) }
+            ActionCard(strings["route.afrTable"], strings["label.afrTableDesc"]) { RowButtons(onOpenAfrTable, null, strings["action.open"], null) }
         }
-        SectionPanel("Workflow") {
-            ActionCard("Base Map Wizard", "Generate a starter fuel and ignition map.") { RowButtons(onOpenBaseMapWizard, null, "Open Wizard", null) }
-            ActionCard("Tuning Assistant", "Analyze logs and apply VE suggestions.") { RowButtons(onOpenTuningAssistant, null, "Open Assistant", null) }
-            ActionCard("Before / After", "Compare two logs to validate tuning changes.") { RowButtons(onOpenBeforeAfter, null, "Open Compare", null) }
+        SectionPanel(strings["label.workflowSection"]) {
+            ActionCard(strings["route.baseMapWizard"], strings["label.baseMapWizardDesc"]) { RowButtons(onOpenBaseMapWizard, null, strings["action.open"], null) }
+            ActionCard(strings["label.tuningAssistantTitle"], strings["label.tuningAssistantSubtitle"]) { RowButtons(onOpenTuningAssistant, null, strings["action.open"], null) }
+            ActionCard(strings["route.beforeAfter"], strings["label.beforeAfterSubtitle"]) { RowButtons(onOpenBeforeAfter, null, strings["action.open"], null) }
+            ActionCard(strings["home.openBackupSettings"], strings["maps_tables_backup_action_desc"]) { RowButtons(onOpenSettings, null, strings["action.open"], null) }
         }
     }
 }
@@ -87,14 +93,15 @@ internal fun IgnitionScreenDesktop(
     onOpenDwellTable: () -> Unit,
     onOpenTriggerSettings: () -> Unit
 ) {
+    val strings = LocalStrings.current
     TuningSectionScreen(
-        title = "Ignition",
-        subtitle = "Ignition setup, timing tables, dwell and trigger workflows.",
+        title = strings["route.ignition"],
+        subtitle = strings["label.ignitionHubSubtitle"],
     ) {
-        ActionCard("Ignition Config", "Load reference, trigger strategy and ignition baseline.") { RowButtons(onOpenIgnitionConfig, null, "Open", null) }
-        ActionCard("Ignition Table", "Ignition timing table editor.") { RowButtons(onOpenIgnitionTable, onOpenIgnitionTable2, "Ign 1", "Ign 2") }
-        ActionCard("Dwell Table", "Ignition coil charge time editor.") { RowButtons(onOpenDwellTable, null, "Open Dwell", null) }
-        ActionCard("Trigger Settings", "Trigger wheel and signal configuration.") { RowButtons(onOpenTriggerSettings, null, "Open", null) }
+        ActionCard(strings["label.ignitionConfigTitle"], strings["label.ignitionConfigSubtitle"]) { RowButtons(onOpenIgnitionConfig, null, strings["action.open"], null) }
+        ActionCard(strings["route.ignitionTable"], strings["label.ignitionTableDesc"]) { RowButtons(onOpenIgnitionTable, onOpenIgnitionTable2, strings["label.ignitionTable1"], strings["label.ignitionTable2"]) }
+        ActionCard(strings["route.dwellTable"], strings["label.dwellTableDesc"]) { RowButtons(onOpenDwellTable, null, strings["action.open"], null) }
+        ActionCard(strings["route.triggerSettings"], strings["label.triggerSettingsDesc"]) { RowButtons(onOpenTriggerSettings, null, strings["action.open"], null) }
     }
 }
 
@@ -107,19 +114,20 @@ internal fun ConfigsTuningScreenDesktop(
     onOpenSecondarySerial: () -> Unit,
     onOpenIgnitionConfig: () -> Unit,
 ) {
+    val strings = LocalStrings.current
     TuningSectionScreen(
-        title = "Configs & Tuning",
-        subtitle = "Core ECU setup grouped like the Android project: core, operation and hardware.",
+        title = strings["route.configsTuning"],
+        subtitle = strings["label.configsTuningSubtitle"],
     ) {
-        SectionPanel("Core Setup") {
-            ActionCard("Engine Constants", "Fueling constants, load algorithm and base engine layout.") { RowButtons(onOpenEngineConstants, null, "Open", null) }
-            ActionCard("Injector Config", "Focused injector setup for required fuel and injection layout.") { RowButtons(onOpenInjectorConfig, null, "Open", null) }
-            ActionCard("Ignition Config", "Dedicated ignition baseline and trigger setup view.") { RowButtons(onOpenIgnitionConfig, null, "Open", null) }
+        SectionPanel(strings["label.coreSetupSection"]) {
+            ActionCard(strings["label.engineConstantsTitle"], strings["label.engineConstantsSubtitle"]) { RowButtons(onOpenEngineConstants, null, strings["action.open"], null) }
+            ActionCard(strings["label.injectorConfigTitle"], strings["label.injectorConfigSubtitle"]) { RowButtons(onOpenInjectorConfig, null, strings["action.open"], null) }
+            ActionCard(strings["label.ignitionConfigTitle"], strings["label.ignitionConfigSubtitle"]) { RowButtons(onOpenIgnitionConfig, null, strings["action.open"], null) }
         }
-        SectionPanel("Hardware") {
-            ActionCard("Input / Output", "I/O channels and live pin snapshot.") { RowButtons(onOpenInputOutput, null, "Open", null) }
-            ActionCard("Sensors", "Pressure and TPS calibration from the ECU.") { RowButtons(onOpenSensorCalibration, null, "Open", null) }
-            ActionCard("Secondary Serial", "Secondary serial protocol setup.") { RowButtons(onOpenSecondarySerial, null, "Open", null) }
+        SectionPanel(strings["label.hardwareSection"]) {
+            ActionCard(strings["label.inputOutputTitle"], strings["label.inputOutputDesc"]) { RowButtons(onOpenInputOutput, null, strings["action.open"], null) }
+            ActionCard(strings["route.sensorsConfig"], strings["label.sensorsCalibrationSubtitle"]) { RowButtons(onOpenSensorCalibration, null, strings["action.open"], null) }
+            ActionCard(strings["label.secondarySerialTitle"], strings["label.secondarySerialSubtitle"]) { RowButtons(onOpenSecondarySerial, null, strings["action.open"], null) }
         }
     }
 }
@@ -131,14 +139,15 @@ internal fun EngineOperationScreenDesktop(
     onOpenEngineProtection: () -> Unit,
     onOpenRevLimiter: () -> Unit,
 ) {
+    val strings = LocalStrings.current
     TuningSectionScreen(
-        title = "Engine Operation",
-        subtitle = "Idle, correction and safety controls.",
+        title = strings["route.engineOperation"],
+        subtitle = strings["label.engineOperationSubtitle"],
     ) {
-        ActionCard("Idle Control", "Idle target and actuator settings.") { RowButtons(onOpenIdleControl, null, "Open", null) }
-        ActionCard("AFR Corrections", "Closed-loop correction tuning.") { RowButtons(onOpenClosedLoopCorrections, null, "Open", null) }
-        ActionCard("Engine Protection", "Cut and protection controls.") { RowButtons(onOpenEngineProtection, null, "Open", null) }
-        ActionCard("Rev Limiter", "Dedicated rev limiter view.") { RowButtons(onOpenRevLimiter, null, "Open", null) }
+        ActionCard(strings["route.idleControl"], strings["label.idleControlSubtitle"]) { RowButtons(onOpenIdleControl, null, strings["action.open"], null) }
+        ActionCard(strings["route.closedLoopCorrections"], strings["label.closedLoopSubtitle"]) { RowButtons(onOpenClosedLoopCorrections, null, strings["action.open"], null) }
+        ActionCard(strings["route.engineProtection"], strings["label.engineProtectionSubtitle"]) { RowButtons(onOpenEngineProtection, null, strings["action.open"], null) }
+        ActionCard(strings["route.revLimiter"], strings["label.revLimiterSubtitle"]) { RowButtons(onOpenRevLimiter, null, strings["action.open"], null) }
     }
 }
 
@@ -157,31 +166,33 @@ internal fun InputOutputConfigScreenDesktop(
     controller: DesktopSpeeduinoController,
     onOpenSecondarySerial: () -> Unit
 ) {
+    val strings = LocalStrings.current
     val tuningState by controller.tuningConfigState.collectAsState()
     val snapshot = tuningState.rusefiSnapshot
     TuningSectionScreen(
-        title = "Input / Output",
-        subtitle = "rusEFI live I/O snapshot plus secondary serial shortcut.",
+        title = strings["label.inputOutputTitle"],
+        subtitle = strings["label.ioLoadInstructions"],
     ) {
-        ActionCard("Secondary Serial", "Configure the secondary serial protocol.") {
-            RowButtons(onOpenSecondarySerial, null, "Open", null)
+        ActionCard(strings["label.secondarySerialTitle"], strings["label.secondarySerialTitle"]) {
+            RowButtons(onOpenSecondarySerial, null, strings["action.open"], null)
         }
-        ActionCard("rusEFI Snapshot", "Read the current pin assignment snapshot from ECU.") {
-            RowButtons({ controller.loadRusefiInputOutputSnapshot() }, null, "Reload", null)
+        ActionCard(strings["label.rusefiSnapshotAction"], strings["label.ioLoadInstructions"]) {
+            RowButtons({ controller.loadRusefiInputOutputSnapshot() }, null, strings["action.loadEcu"], null)
         }
         if (snapshot != null) {
-            SnapshotGroup("Inputs", snapshot.inputs)
-            SnapshotGroup("Fuel Outputs", snapshot.fuelOutputs)
-            SnapshotGroup("Ignition Outputs", snapshot.ignitionOutputs)
-            SnapshotGroup("Auxiliary Outputs", snapshot.auxiliaryOutputs)
+            SnapshotGroup(strings["label.rusefiInputs"], snapshot.inputs)
+            SnapshotGroup(strings["label.rusefiFuelOutputs"], snapshot.fuelOutputs)
+            SnapshotGroup(strings["label.rusefiIgnitionOutputs"], snapshot.ignitionOutputs)
+            SnapshotGroup(strings["label.rusefiAuxOutputs"], snapshot.auxiliaryOutputs)
         } else {
-            PlaceholderScreen("rusEFI Snapshot", "Load a connected ECU snapshot to inspect pin mappings.")
+            PlaceholderScreen(strings["label.rusefiSnapshotAction"], strings["label.ioLoadInstructions"])
         }
     }
 }
 
 @Composable
 internal fun SecondarySerialScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
     val tuningState by controller.tuningConfigState.collectAsState()
     val config = tuningState.secondarySerialConfig ?: SecondarySerialConfig(
         enabled = false,
@@ -194,8 +205,8 @@ internal fun SecondarySerialScreenDesktop(controller: DesktopSpeeduinoController
     var hasChanges by remember { mutableStateOf(false) }
 
     TuningSectionScreen(
-        title = "Secondary Serial",
-        subtitle = "Configure the secondary serial protocol stored on the ECU.",
+        title = strings["label.secondarySerialTitle"],
+        subtitle = strings["label.secondarySerialTitle"],
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -213,8 +224,8 @@ internal fun SecondarySerialScreenDesktop(controller: DesktopSpeeduinoController
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Enabled", style = MaterialTheme.typography.bodyMedium)
-                        Text("Turns the secondary serial output on or off.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(strings["label.enabled"], style = MaterialTheme.typography.bodyMedium)
+                        Text(strings["label.secondarySerialHelp"], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = enabled, onCheckedChange = {
                         enabled = it
@@ -222,7 +233,7 @@ internal fun SecondarySerialScreenDesktop(controller: DesktopSpeeduinoController
                     })
                 }
                 DropdownField(
-                    label = "Protocol",
+                    label = strings["label.protocol"],
                     value = protocol.displayName(),
                     options = SecondarySerialProtocol.values().filter { it != SecondarySerialProtocol.UNKNOWN }.map { it.displayName() }
                 ) { value ->
@@ -237,12 +248,12 @@ internal fun SecondarySerialScreenDesktop(controller: DesktopSpeeduinoController
                         protocol = SecondarySerialProtocol.UNKNOWN
                         hasChanges = true
                     },
-                    label = { Text("Raw protocol") },
+                    label = { Text(strings["label.secondarySerialRawProtocol"]) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = controller::loadSecondarySerialConfig) { Text("Reload") }
+                    FilledTonalButton(onClick = controller::loadSecondarySerialConfig) { Text(strings["action.reload"]) }
                     FilledTonalButton(
                         onClick = {
                             controller.saveSecondarySerialConfig(
@@ -255,7 +266,7 @@ internal fun SecondarySerialScreenDesktop(controller: DesktopSpeeduinoController
                             hasChanges = false
                         },
                         enabled = hasChanges
-                    ) { Text("Save") }
+                    ) { Text(strings["action.saveEcu"]) }
                 }
             }
         }
@@ -269,6 +280,7 @@ internal fun TuningAssistantScreenDesktop(
 ) {
     val strings = LocalStrings.current
     val logPath by controller.analyzerLogFile.collectAsState()
+    val lastSavedLogPath by controller.lastSavedLogPath.collectAsState()
     val analyzerResult by controller.analyzerResult.collectAsState()
     val analyzerBusy by controller.analyzerBusy.collectAsState()
     val analyzerError by controller.analyzerError.collectAsState()
@@ -278,6 +290,8 @@ internal fun TuningAssistantScreenDesktop(
     val hasUndo = analyzerUndoTable != null
 
     var strategy by remember { mutableStateOf(TuningStrategy.CONSERVATIVE) }
+    var showSavedLogsDialog by remember { mutableStateOf(false) }
+    val savedLogFiles = remember(lastSavedLogPath) { collectSavedLogFiles(lastSavedLogPath) }
     var selectedClusterId by remember(analyzerResult) { mutableStateOf<String?>(null) }
     var selectedCell by remember(analyzerResult) { mutableStateOf<CellRef?>(null) }
     var includedClusterIds by remember(analyzerResult) {
@@ -294,6 +308,23 @@ internal fun TuningAssistantScreenDesktop(
         includedClusterIds = analyzerResult?.clusters?.map { it.id }?.toSet().orEmpty()
         selectedClusterId = null
         selectedCell = null
+    }
+
+    LaunchedEffect(savedLogFiles, logPath) {
+        if (logPath.isNullOrBlank()) {
+            savedLogFiles.firstOrNull()?.let { controller.selectAnalyzerLogFile(it.absolutePath) }
+        }
+    }
+
+    if (showSavedLogsDialog) {
+        SavedLogsDialogDesktop(
+            files = savedLogFiles,
+            onDismiss = { showSavedLogsDialog = false },
+            onSelect = { path ->
+                showSavedLogsDialog = false
+                controller.selectAnalyzerLogFile(path)
+            }
+        )
     }
 
     val currentResult = analyzerResult
@@ -315,7 +346,7 @@ internal fun TuningAssistantScreenDesktop(
             description = strings["label.tuningAssistantSubtitle"]
         ) {
             val currentFile = logPath?.let { File(it).name } ?: strings["label.tuningAssistantNoLogSelected"]
-            InfoRow("Log", currentFile)
+            InfoRow(strings["label.log"], currentFile)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilledTonalButton(onClick = {
                     chooseOpenFile(strings["label.tuningAssistantOpenLog"])?.let { file ->
@@ -323,6 +354,9 @@ internal fun TuningAssistantScreenDesktop(
                     }
                 }) {
                     Text(strings["label.tuningAssistantOpenLog"])
+                }
+                OutlinedButton(onClick = { showSavedLogsDialog = true }, enabled = savedLogFiles.isNotEmpty()) {
+                    Text(strings["label.logViewerSavedLogsTitle"])
                 }
                 FilledTonalButton(
                     onClick = { controller.analyzeLogFile(strategy) },
@@ -345,10 +379,10 @@ internal fun TuningAssistantScreenDesktop(
 
             currentResult?.summary?.let { summary ->
                 HorizontalDivider()
-                InfoRow("Samples", "${summary.usedSamples}/${summary.totalSamples}")
-                InfoRow("Duration", "%.1fs".format(summary.durationSeconds))
-                InfoRow("RPM range", summary.rpmRange?.let { "${it.first} - ${it.last}" } ?: "--")
-                InfoRow("Load range", summary.loadRange?.let { "${it.first} - ${it.last} $loadLabel" } ?: "--")
+                InfoRow(strings["label.samples"], "${summary.usedSamples}/${summary.totalSamples}")
+                InfoRow(strings["label.duration"], "%.1fs".format(summary.durationSeconds))
+                InfoRow(strings["label.rpmRange"], summary.rpmRange?.let { "${it.first} - ${it.last}" } ?: "--")
+                InfoRow(strings["label.loadRange"], summary.loadRange?.let { "${it.first} - ${it.last} $loadLabel" } ?: "--")
             }
         }
 
@@ -532,7 +566,7 @@ private fun SignalReadinessCard(signalStatus: com.speeduino.manager.tuning.Analy
     )
     ActionCard(
         title = strings["label.tuningAssistantSignalsTitle"],
-        description = "The analyzer needs these inputs before it can suggest VE changes."
+        description = strings["label.tuningAssistantSignalsDesc"]
     ) {
         rows.forEach { (label, ok) ->
             InfoRow(label, if (ok) "OK" else "Missing")
@@ -554,7 +588,7 @@ private fun HeatmapCard(
     }
     ActionCard(
         title = strings["label.tuningAssistantHeatmapTitle"],
-        description = "VE delta per cell. Red means increase, blue means decrease."
+        description = strings["label.tuningAssistantHeatmapDesc"]
     ) {
         Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
             result.cellSuggestions.forEachIndexed { rowIndex, row ->
@@ -588,10 +622,10 @@ private fun HeatmapCard(
             val suggestion = result.cellSuggestions.getOrNull(it.row)?.getOrNull(it.col)
             if (suggestion != null) {
                 HorizontalDivider()
-                InfoRow("Cell", "row ${suggestion.row} col ${suggestion.col}")
-                InfoRow("Delta", "%.2f%%".format(suggestion.deltaPct * 100.0))
-                InfoRow("Hits", suggestion.hitCount.toString())
-                InfoRow("AFR", "%.2f -> %.2f".format(suggestion.meanAfrMeasured, suggestion.meanAfrTarget))
+                InfoRow(strings["label.cell"], strings.format("label.cellCoords", suggestion.row, suggestion.col))
+                InfoRow(strings["label.delta"], strings.format("label.deltaPct", suggestion.deltaPct * 100.0))
+                InfoRow(strings["label.hits"], suggestion.hitCount.toString())
+                InfoRow(strings["label.afrPair"], strings.format("label.afrPairValue", suggestion.meanAfrMeasured, suggestion.meanAfrTarget))
             }
         }
     }
@@ -632,7 +666,7 @@ private fun ClusterSuggestionsCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Delta: ${"%.1f".format(cluster.avgDeltaPct * 100.0)}% | Hits: ${cluster.avgHits} | RPM ${cluster.rpmRange.first}-${cluster.rpmRange.last}",
+                                text = strings.format("label.clusterSummary", cluster.avgDeltaPct * 100.0, cluster.avgHits, cluster.rpmRange.first, cluster.rpmRange.last),
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -658,7 +692,7 @@ private fun StrategyCard(
     val strings = LocalStrings.current
     ActionCard(
         title = strings["label.tuningAssistantStrategy"],
-        description = "Choose how conservative the VE adjustments should be."
+        description = strings["label.tuningAssistantStrategyDesc"]
     ) {
         DropdownField(
             label = strings["label.tuningAssistantStrategy"],
@@ -681,8 +715,8 @@ private fun ActionsCard(
 ) {
     val strings = LocalStrings.current
     ActionCard(
-        title = "Actions",
-        description = "Apply the selected clusters, undo the last apply, or compare against a before/after log."
+        title = strings["label.tuningAssistantActions"],
+        description = strings["label.tuningAssistantActionsDesc"]
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             FilledTonalButton(onClick = onApply, enabled = !isBusy) { Text(strings["label.tuningAssistantApply"]) }
@@ -712,4 +746,41 @@ private fun chooseOpenFile(title: String): File? {
     val fileName = dialog.file ?: return null
     val dir = dialog.directory ?: return null
     return File(dir, fileName)
+}
+
+
+@Composable
+private fun SavedLogsDialogDesktop(
+    files: List<File>,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit
+) {
+    val sortedFiles = remember(files) { files.sortedByDescending { it.lastModified() } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Close") }
+        },
+        title = { Text("Saved logs") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (sortedFiles.isEmpty()) {
+                    Text("No saved logs found.")
+                } else {
+                    sortedFiles.forEach { file ->
+                        Text(
+                            text = file.name,
+                            modifier = Modifier.clickable { onSelect(file.absolutePath) }
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
+
+private fun collectSavedLogFiles(lastSavedLogPath: String?): List<File> {
+    val parent = lastSavedLogPath?.let { File(it).parentFile } ?: return emptyList()
+    if (!parent.exists()) return emptyList()
+    return parent.listFiles { file -> file.isFile && file.name.endsWith(".csv", ignoreCase = true) }?.toList().orEmpty()
 }

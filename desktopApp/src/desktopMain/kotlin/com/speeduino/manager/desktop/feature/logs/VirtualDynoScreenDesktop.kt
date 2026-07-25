@@ -105,7 +105,7 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
             val analysis = runCatching {
                 withContext(Dispatchers.IO) {
                     val file = path?.let(::File)?.takeIf { it.exists() }
-                        ?: error("Selecione um CSV de log primeiro.")
+                        ?: error(strings["label.virtualDynoSelectLogFirst"])
                     VirtualDynoModelDesktop().analyzeCsv(
                         csvText = file.readText(),
                         fileLabel = file.name,
@@ -116,7 +116,7 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
             analysis.onSuccess { result = it }
             analysis.onFailure {
                 result = null
-                error = it.message ?: "Falha ao analisar log."
+                error = it.message ?: strings["label.virtualDynoAnalyzeFailed"]
             }
             isLoading = false
         }
@@ -141,7 +141,7 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
             ) {
                 Text(strings["route.virtualDyno"], style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Estimativa local de WHP e torque a partir de CSV, com curva reconstruída e coleta opcional de feedback para iterar o modelo.",
+                    strings["label.virtualDynoHeroDesc"],
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -153,9 +153,9 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Recurso experimental", style = MaterialTheme.typography.titleMedium)
+                Text(strings["label.virtualDynoExperiment"], style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "O modelo roda localmente no desktop e usa as mesmas features, thresholds e assets empacotados no Android.",
+                    strings["label.virtualDynoExperimentDesc"],
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -170,9 +170,9 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
                 modifier = Modifier.fillMaxWidth().padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Log atual", style = MaterialTheme.typography.titleMedium)
+                Text(strings["label.virtualDynoCurrentLog"], style = MaterialTheme.typography.titleMedium)
                 Text(
-                    currentLogLabel ?: "Nenhum CSV selecionado.",
+                    currentLogLabel ?: strings["label.virtualDynoNoCsvSelected"],
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -185,7 +185,7 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
                         },
                         enabled = lastSavedLogPath != null && !isLoading,
                     ) {
-                        Text("Usar último log")
+                        Text(strings["label.virtualDynoUseLastLog"])
                     }
                     OutlinedButton(
                         onClick = {
@@ -197,18 +197,18 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
                         },
                         enabled = !isLoading,
                     ) {
-                        Text("Abrir CSV")
+                        Text(strings["label.virtualDynoOpenCsv"])
                     }
                     Button(
                         onClick = { analyzeSelected(currentLogPath) },
                         enabled = currentLogPath != null && !isLoading,
                     ) {
-                        Text("Analisar")
+                        Text(strings["label.virtualDynoAnalyze"])
                     }
                 }
                 if (lastSavedLogPath != null) {
                     Text(
-                        "Último CSV salvo pelo monitor: ${lastSavedLogPath.orEmpty()}",
+                        strings.format("label.virtualDynoLastSavedLog", lastSavedLogPath.orEmpty()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -217,7 +217,7 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
         }
 
         OutlinedButton(onClick = { showAdvanced = !showAdvanced }) {
-            Text(if (showAdvanced) "Ocultar dados avançados do carro" else "Dados do carro (avançado)")
+            Text(if (showAdvanced) strings["label.virtualDynoAdvancedToggleClose"] else strings["label.virtualDynoAdvancedToggleOpen"])
         }
 
         if (showAdvanced) {
@@ -246,7 +246,7 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
         if (isLoading) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CircularProgressIndicator()
-                Text("Analisando localmente...")
+                Text(strings["label.virtualDynoAnalyzing"])
             }
         }
 
@@ -274,7 +274,7 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
                         notes = notes,
                         sourceFile = sourceFile,
                     )
-                    feedbackStatus = "Relatório salvo em ${reportFile.absolutePath}"
+                    feedbackStatus = strings.format("label.virtualDynoLogSaved", reportFile.absolutePath)
                 },
                 onOpenMailDraft = {
                     openVirtualDynoMailDraft(
@@ -282,7 +282,7 @@ internal fun VirtualDynoScreenDesktop(controller: DesktopSpeeduinoController) {
                         expectedPower = expectedPower,
                         notes = notes,
                     )
-                    feedbackStatus = "Rascunho de e-mail aberto. Anexe manualmente o CSV e o relatório exportado."
+                    feedbackStatus = strings["label.virtualDynoMailDraftOpened"]
                 },
             )
         }
@@ -314,6 +314,7 @@ private fun VehicleSpecsCardDesktop(
     wheelTireDiameterCm: String,
     onWheelTireDiameterCmChange: (String) -> Unit,
 ) {
+    val strings = LocalStrings.current
     val corrected = correctedFrontalAreaM2.parseOptionalDouble()
         ?: dragCoefficient.parseOptionalDouble()?.let { cd -> frontalAreaM2.parseOptionalDouble()?.let { area -> cd * area } }
     Surface(
@@ -325,34 +326,34 @@ private fun VehicleSpecsCardDesktop(
             modifier = Modifier.fillMaxWidth().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Dados avançados do carro", style = MaterialTheme.typography.titleMedium)
+            Text(strings["label.virtualDynoAdvancedData"], style = MaterialTheme.typography.titleMedium)
             Text(
                 "Se o CdA estiver vazio, o desktop calcula Cx x área frontal. Relações de marcha e roda/pneu ainda entram só no relatório.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedTextField(vehicleName, onVehicleNameChange, label = { Text("Veículo") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(weightKg, onWeightKgChange, label = { Text("Peso total (kg)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(vehicleName, onVehicleNameChange, label = { Text(strings["label.virtualDynoVehicle"]) }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(weightKg, onWeightKgChange, label = { Text(strings["label.virtualDynoWeightKg"]) }, modifier = Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(dragCoefficient, onDragCoefficientChange, label = { Text("Cx/Cd") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(frontalAreaM2, onFrontalAreaM2Change, label = { Text("Área frontal m²") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(dragCoefficient, onDragCoefficientChange, label = { Text(strings["label.virtualDynoDragCoeff"]) }, modifier = Modifier.weight(1f))
+                OutlinedTextField(frontalAreaM2, onFrontalAreaM2Change, label = { Text(strings["label.virtualDynoFrontalArea"]) }, modifier = Modifier.weight(1f))
             }
             OutlinedTextField(
                 correctedFrontalAreaM2,
                 onCorrectedFrontalAreaM2Change,
-                label = { Text("CdA corrigido m²") },
+                label = { Text(strings["label.virtualDynoCorrectedCda"]) },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text("CdA usado: ${corrected?.format3() ?: "padrão do modelo"} m²", style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(drivetrain, onDrivetrainChange, label = { Text("Tração/câmbio") }, modifier = Modifier.fillMaxWidth())
+            Text(strings.format("label.virtualDynoCdAUsed", corrected?.format3() ?: strings["label.virtualDynoNoCdA"]), style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(drivetrain, onDrivetrainChange, label = { Text(strings["label.virtualDynoTraction"]) }, modifier = Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(analyzedGearRatio, onAnalyzedGearRatioChange, label = { Text("Relação da marcha") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(differentialRatio, onDifferentialRatioChange, label = { Text("Diferencial") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(analyzedGearRatio, onAnalyzedGearRatioChange, label = { Text(strings["label.virtualDynoGearRatio"]) }, modifier = Modifier.weight(1f))
+                OutlinedTextField(differentialRatio, onDifferentialRatioChange, label = { Text(strings["label.virtualDynoDiffRatio"]) }, modifier = Modifier.weight(1f))
             }
             OutlinedTextField(
                 wheelTireDiameterCm,
                 onWheelTireDiameterCmChange,
-                label = { Text("Diâmetro roda+pneu cm") },
+                label = { Text(strings["label.virtualDynoWheelDiameter"]) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -361,6 +362,7 @@ private fun VehicleSpecsCardDesktop(
 
 @Composable
 private fun ResultCardDesktop(result: VirtualDynoAnalysisResult) {
+    val strings = LocalStrings.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -370,17 +372,17 @@ private fun ResultCardDesktop(result: VirtualDynoAnalysisResult) {
             modifier = Modifier.fillMaxWidth().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Resultado inferido", style = MaterialTheme.typography.titleLarge)
-            Text("Pico WHP: ${result.peakPowerWhp.format1()} whp", style = MaterialTheme.typography.headlineSmall)
-            Text("Pico torque: ${result.peakTorqueNm.format1()} Nm", style = MaterialTheme.typography.headlineSmall)
-            Text("Média útil: ${result.averagePowerWhp.format1()} whp / ${result.averageTorqueNm.format1()} Nm")
-            Text("Faixa: ${result.powerBand}")
-            Text("Qualidade da log: ${qualityLabel(result.quality)}")
-            Text("Amostras: ${result.inferredRows} inferidas, ${result.usefulRows} úteis de ${result.totalRows}")
+            Text(strings["label.virtualDynoResult"], style = MaterialTheme.typography.titleLarge)
+            Text(strings.format("label.virtualDynoPeakWhp", result.peakPowerWhp), style = MaterialTheme.typography.headlineSmall)
+            Text(strings.format("label.virtualDynoPeakTorque", result.peakTorqueNm), style = MaterialTheme.typography.headlineSmall)
+            Text(strings.format("label.virtualDynoAvg", result.averagePowerWhp, result.averageTorqueNm))
+            Text(strings.format("label.virtualDynoBand", result.powerBand))
+            Text(strings.format("label.virtualDynoQuality", qualityLabel(result.quality)))
+            Text(strings.format("label.virtualDynoSamples", result.inferredRows, result.usefulRows, result.totalRows))
             if (result.vehicleSpecs.hasAnyValue()) {
-                Text("Specs aplicadas: ${result.vehicleSpecs.vehicleName.ifBlank { "veículo informado" }}")
-                result.vehicleSpecs.weightKg?.let { Text("Peso: ${it.format1()} kg") }
-                result.vehicleSpecs.effectiveCorrectedFrontalAreaM2?.let { Text("CdA: ${it.format3()} m²") }
+                Text(strings.format("label.virtualDynoSpecsApplied", result.vehicleSpecs.vehicleName.ifBlank { "veículo informado" }))
+                result.vehicleSpecs.weightKg?.let { Text(strings.format("label.virtualDynoWeightKg", it)) }
+                result.vehicleSpecs.effectiveCorrectedFrontalAreaM2?.let { Text(strings.format("label.virtualDynoCorrectedCda", it)) }
             }
         }
     }
@@ -388,6 +390,7 @@ private fun ResultCardDesktop(result: VirtualDynoAnalysisResult) {
 
 @Composable
 private fun CurveSummaryCardDesktop(curve: VirtualDynoCurve) {
+    val strings = LocalStrings.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -397,18 +400,18 @@ private fun CurveSummaryCardDesktop(curve: VirtualDynoCurve) {
             modifier = Modifier.fillMaxWidth().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Curva reconstruída", style = MaterialTheme.typography.titleLarge)
+            Text(strings["label.virtualDynoCurve"], style = MaterialTheme.typography.titleLarge)
             Text(
                 "Média por faixas de RPM usando pontos com TPS >= ${curve.tpsThreshold.format1()}%. A curva é sintetizada a partir da log, não de uma única puxada recortada.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (curve.points.size < 2) {
-                Text("Dados insuficientes para remontar a curva com TPS alto.", color = MaterialTheme.colorScheme.error)
+                Text(strings["label.virtualDynoCurveInsufficient"], color = MaterialTheme.colorScheme.error)
             } else {
-                Text("Potência máxima: ${curve.peakPower?.powerWhp?.format1() ?: "0.0"} whp @ ${curve.peakPower?.rpm?.format0() ?: "0"} rpm")
-                Text("Torque máximo: ${curve.peakTorque?.torqueNm?.format1() ?: "0.0"} Nm @ ${curve.peakTorque?.rpm?.format0() ?: "0"} rpm")
-                Text("Pontos reconstruídos: ${curve.points.size}")
+                Text(strings.format("label.virtualDynoCurvePeakPower", curve.peakPower?.powerWhp ?: 0.0, curve.peakPower?.rpm ?: 0.0))
+                Text(strings.format("label.virtualDynoCurvePeakTorque", curve.peakTorque?.torqueNm ?: 0.0, curve.peakTorque?.rpm ?: 0.0))
+                Text(strings.format("label.virtualDynoCurvePoints", curve.points.size))
             }
         }
     }
@@ -417,6 +420,7 @@ private fun CurveSummaryCardDesktop(curve: VirtualDynoCurve) {
 @Composable
 private fun PowerTorqueChartDesktop(curve: VirtualDynoCurve) {
     if (curve.points.size < 2) return
+    val strings = LocalStrings.current
     val powerColor = MaterialTheme.colorScheme.primary
     val torqueColor = MaterialTheme.colorScheme.tertiary
     val axisColor = MaterialTheme.colorScheme.outline
@@ -437,8 +441,8 @@ private fun PowerTorqueChartDesktop(curve: VirtualDynoCurve) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Potência (WHP)", color = powerColor, style = MaterialTheme.typography.labelLarge)
-                Text("Torque (Nm)", color = torqueColor, style = MaterialTheme.typography.labelLarge)
+                Text(strings["label.virtualDynoPowerAxis"], color = powerColor, style = MaterialTheme.typography.labelLarge)
+                Text(strings["label.virtualDynoTorqueAxis"], color = torqueColor, style = MaterialTheme.typography.labelLarge)
             }
             Box(modifier = Modifier.fillMaxWidth().height(320.dp)) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -481,12 +485,12 @@ private fun PowerTorqueChartDesktop(curve: VirtualDynoCurve) {
                 }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("500 rpm", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${maxRpm.format0()} rpm", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(strings["label.virtualDynoRpmStart"], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(strings.format("label.virtualDynoRpmEnd", maxRpm.format0()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("0-${maxPower.format0()} whp", style = MaterialTheme.typography.bodySmall, color = powerColor)
-                Text("0-${maxTorque.format0()} Nm", style = MaterialTheme.typography.bodySmall, color = torqueColor)
+                Text(strings.format("label.virtualDynoPowerAxisRange", maxPower.format0()), style = MaterialTheme.typography.bodySmall, color = powerColor)
+                Text(strings.format("label.virtualDynoTorqueAxisRange", maxTorque.format0()), style = MaterialTheme.typography.bodySmall, color = torqueColor)
             }
         }
     }
@@ -503,6 +507,7 @@ private fun FeedbackCardDesktop(
     onExportReport: () -> Unit,
     onOpenMailDraft: () -> Unit,
 ) {
+    val strings = LocalStrings.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -512,7 +517,7 @@ private fun FeedbackCardDesktop(
             modifier = Modifier.fillMaxWidth().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Feedback beta", style = MaterialTheme.typography.titleMedium)
+            Text(strings["label.virtualDynoFeedbackBeta"], style = MaterialTheme.typography.titleMedium)
             Text(
                 "No desktop o relatório é exportado para .txt. Depois disso, você pode abrir um rascunho de e-mail e anexar manualmente o CSV e o relatório.",
                 style = MaterialTheme.typography.bodySmall,
@@ -521,32 +526,32 @@ private fun FeedbackCardDesktop(
             OutlinedTextField(
                 value = expectedPower,
                 onValueChange = onExpectedPowerChange,
-                label = { Text("Potência esperada do carro") },
+                label = { Text(strings["label.virtualDynoExpectedPower"]) },
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = notes,
                 onValueChange = onNotesChange,
-                label = { Text("Dados do carro / observações") },
+                label = { Text(strings["label.virtualDynoNotes"]) },
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = consent, onCheckedChange = onConsentChange)
-                Text("Aceito compartilhar CSV e dados do carro para melhorar o modelo.")
+                Text(strings["label.virtualDynoFeedbackAccept"])
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilledTonalButton(
                     onClick = onExportReport,
                     enabled = consent && expectedPower.isNotBlank(),
                 ) {
-                    Text("Exportar relatório")
+                    Text(strings["label.virtualDynoExportReport"])
                 }
                 OutlinedButton(
                     onClick = onOpenMailDraft,
                     enabled = consent && expectedPower.isNotBlank(),
                 ) {
-                    Text("Abrir e-mail")
+                    Text(strings["label.virtualDynoOpenMail"])
                 }
             }
         }
@@ -572,7 +577,7 @@ private fun openVirtualDynoMailDraft(
     notes: String,
 ) {
     if (!Desktop.isDesktopSupported()) return
-    val subject = "Virtual Dyno beta feedback - ${analysis.fileLabel ?: "log"}"
+    val subject = "Virtual Dyno feedback - ${analysis.fileLabel ?: "log"}"
     val body = analysis.toFeedbackText(expectedPower, notes)
     val mailto = URI(
         "mailto:alexandrefelipemuller@gmail.com?subject=${URLEncoder.encode(subject, StandardCharsets.UTF_8.name())}&body=${URLEncoder.encode(body, StandardCharsets.UTF_8.name())}"

@@ -26,6 +26,7 @@ internal fun ScreenHost(
     onToggleConnection: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenInstitutional: () -> Unit,
+    onReportProblem: () -> Unit,
     onOpenRoute: (DesktopRoute) -> Unit,
     onOpenConnectionSettings: () -> Unit,
     onOpenConnection: () -> Unit,
@@ -62,6 +63,7 @@ internal fun ScreenHost(
         DesktopRoute.Home,
         DesktopRoute.Settings,
         DesktopRoute.Institutional,
+        DesktopRoute.More,
         DesktopRoute.Dashboard -> AppRouteHost(
             route = route,
             controller = controller,
@@ -69,7 +71,11 @@ internal fun ScreenHost(
             connectionState = connectionState,
             onToggleConnection = onToggleConnection,
             onOpenSettings = onOpenSettings,
-            onOpenRoute = onOpenRoute
+            onOpenRoute = onOpenRoute,
+            onOpenLogAnalyzer = onOpenLogAnalyzer,
+            onOpenBeforeAfter = onOpenBeforeAfter,
+            onReportProblem = onReportProblem,
+            onOpenInstitutional = onOpenInstitutional
         )
         DesktopRoute.Connection,
         DesktopRoute.ConnectionSettings,
@@ -111,7 +117,8 @@ internal fun ScreenHost(
             onOpenBaseMapWizard = onOpenBaseMapWizard,
             onOpenTuningAssistant = onOpenTuningAssistant,
             onOpenInjectorConfig = onOpenInjectorConfig,
-            onOpenBeforeAfter = onOpenBeforeAfter
+            onOpenBeforeAfter = onOpenBeforeAfter,
+            onOpenSettings = onOpenSettings
         )
         DesktopRoute.Ignition,
         DesktopRoute.IgnitionConfig,
@@ -195,6 +202,8 @@ internal fun ScreenHost(
             route = route,
             controller = controller,
             liveData = liveData,
+            onOpenConnection = onOpenConnection,
+            onOpenConnectionSettings = onOpenConnectionSettings,
             onOpenLogViewer = onOpenLogViewer,
             onOpenRealTimeMonitor = onOpenRealTimeMonitor,
             onOpenLogAnalyzer = onOpenLogAnalyzer,

@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.speeduino.manager.SpeeduinoLiveData
+import com.speeduino.manager.desktop.DesktopDashboardMode
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.Strings
@@ -55,15 +56,19 @@ import java.util.Locale
 
 @Composable
 internal fun DashboardScreen(
+    controller: DesktopSpeeduinoController,
     liveData: SpeeduinoLiveData?,
     onOpenSettings: () -> Unit
 ) {
     val strings = LocalStrings.current
     val availableSignals = remember(liveData, strings) { dashboardGaugeSignals(liveData, strings) }
-    var selectedGaugeKeys by remember { mutableStateOf(listOf("rpm", "map", "tps", "coolant")) }
+    val dashboardMode = controller.desktopSettings.collectAsState().value.dashboardMode
+    var selectedGaugeKeys by remember(dashboardMode) {
+        mutableStateOf(defaultGaugeKeys(dashboardMode))
+    }
 
     LaunchedEffect(availableSignals.map { it.key }) {
-        selectedGaugeKeys = selectedGaugeKeys.map { key ->
+        selectedGaugeKeys = defaultGaugeKeys(dashboardMode).map { key ->
             if (availableSignals.any { it.key == key }) key else availableSignals.first().key
         }
     }
@@ -90,8 +95,9 @@ internal fun DashboardScreen(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        AppSectionCard(onOpenSettings = onOpenSettings)
+        AppSectionCard(onOpenSettings = onOpenSettings, dashboardMode = dashboardMode)
         GaugeGrid(
+            dashboardMode = dashboardMode,
             gauges = gauges,
             availableSignals = availableSignals,
             onChangeGauge = { index, signalKey ->
@@ -105,7 +111,7 @@ internal fun DashboardScreen(
 }
 
 @Composable
-private fun AppSectionCard(onOpenSettings: () -> Unit) {
+private fun AppSectionCard(onOpenSettings: () -> Unit, dashboardMode: DesktopDashboardMode) {
     val strings = LocalStrings.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -130,8 +136,11 @@ private fun AppSectionCard(onOpenSettings: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            FilledTonalButton(onClick = onOpenSettings) {
-                Text(strings["app.settingsLabel"])
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(strings.format("label.dashboardMode", dashboardMode.name.lowercase().replaceFirstChar(Char::uppercaseChar)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FilledTonalButton(onClick = onOpenSettings) {
+                    Text(strings["app.settingsLabel"])
+                }
             }
         }
     }
@@ -139,12 +148,18 @@ private fun AppSectionCard(onOpenSettings: () -> Unit) {
 
 @Composable
 private fun GaugeGrid(
+    dashboardMode: DesktopDashboardMode,
     gauges: List<GaugeSpec>,
     availableSignals: List<GaugeSpec>,
     onChangeGauge: (Int, String) -> Unit
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val columns = if (maxWidth < 900.dp) 2 else 4
+        val columns = when (dashboardMode) {
+            DesktopDashboardMode.APEX -> 3
+            DesktopDashboardMode.FUTURE -> if (maxWidth < 900.dp) 3 else 6
+            DesktopDashboardMode.PETROL -> 4
+            DesktopDashboardMode.DEFAULT -> if (maxWidth < 900.dp) 2 else 4
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             contentPadding = PaddingValues(8.dp),
@@ -302,4 +317,11 @@ private fun dashboardGaugeSignals(liveData: SpeeduinoLiveData?, strings: Strings
         GaugeSpec("afr", strings["label.afr"], valueOrZero(afrMeasured), 8f, 22f, strings["label.afr"], display1(afrMeasured)),
         GaugeSpec("afr_target", strings["label.afrTarget"], valueOrZero(afrTarget), 8f, 22f, strings["label.afr"], display1(afrTarget))
     )
+}
+
+private fun defaultGaugeKeys(mode: DesktopDashboardMode): List<String> = when (mode) {
+    DesktopDashboardMode.DEFAULT -> listOf("rpm", "map", "tps", "coolant")
+    DesktopDashboardMode.PETROL -> listOf("rpm", "map", "afr", "advance")
+    DesktopDashboardMode.FUTURE -> listOf("rpm", "map", "tps", "coolant", "iat", "battery")
+    DesktopDashboardMode.APEX -> listOf("rpm", "advance", "afr", "battery")
 }

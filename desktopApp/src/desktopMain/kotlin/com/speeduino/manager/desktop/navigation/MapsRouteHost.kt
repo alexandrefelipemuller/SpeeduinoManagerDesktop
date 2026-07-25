@@ -18,7 +18,8 @@ internal fun MapsRouteHost(
     onOpenBaseMapWizard: () -> Unit,
     onOpenTuningAssistant: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
-    onOpenBeforeAfter: () -> Unit
+    onOpenBeforeAfter: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     when (route) {
         DesktopRoute.Fuel,
@@ -29,7 +30,8 @@ internal fun MapsRouteHost(
             onOpenBaseMapWizard = onOpenBaseMapWizard,
             onOpenTuningAssistant = onOpenTuningAssistant,
             onOpenInjectorConfig = onOpenInjectorConfig,
-            onOpenBeforeAfter = onOpenBeforeAfter
+            onOpenBeforeAfter = onOpenBeforeAfter,
+            onOpenSettings = onOpenSettings
         )
         DesktopRoute.TuningAssistant -> TuningAssistantScreenDesktop(
             controller = controller,

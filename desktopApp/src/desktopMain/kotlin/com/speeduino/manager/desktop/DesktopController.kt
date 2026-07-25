@@ -9,6 +9,10 @@ import com.speeduino.manager.compare.BeforeAfterLogComparator
 import com.speeduino.manager.compare.LogCompareException
 import com.speeduino.manager.compare.LogCompareReason
 import com.speeduino.manager.compare.LogCompareResult
+import com.speeduino.manager.compare.DesktopBeforeAfterSelection
+import com.speeduino.manager.compare.DesktopBeforeAfterSelectionStore
+import com.speeduino.manager.tuning.DesktopTuningAssistantState
+import com.speeduino.manager.tuning.DesktopTuningAssistantStateStore
 import com.speeduino.manager.connection.ISpeeduinoConnection
 import com.speeduino.manager.connection.SpeeduinoSerialConnection
 import com.speeduino.manager.connection.SpeeduinoTcpConnection
@@ -71,6 +75,17 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+internal data class DesktopDiagnosticSummary(
+    val firmwareSignature: String? = null,
+    val productString: String? = null,
+    val connectionInfo: String? = null,
+    val activeIniSource: String? = null,
+    val manualFirmwareProfile: String? = null,
+    val diagnosticLoggerMode: DiagnosticLoggerMode = DiagnosticLoggerMode.OFF,
+    val readOnlySafeMode: Boolean = false,
+    val lastError: String? = null,
+)
+
 internal class DesktopSpeeduinoController(
     private val scope: CoroutineScope
 ) {
@@ -122,6 +137,9 @@ internal class DesktopSpeeduinoController(
 
     private val _connectionInfo = MutableStateFlow<String?>(null)
     val connectionInfo = _connectionInfo.asStateFlow()
+
+    private val _diagnosticSummary = MutableStateFlow(DesktopDiagnosticSummary())
+    val diagnosticSummary = _diagnosticSummary.asStateFlow()
 
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError = _lastError.asStateFlow()
@@ -194,12 +212,19 @@ internal class DesktopSpeeduinoController(
     private var client: EcuTransport? = null
     private var localSessionDir: File? = null
     private var ecuSessionDir: File? = null
+    private val beforeAfterSelectionStore = DesktopBeforeAfterSelectionStore()
+    private val tuningAssistantStateStore = DesktopTuningAssistantStateStore()
     private val beforeAfterComparator = BeforeAfterLogComparator()
     private val syncService = ConfigSyncService(configManager)
     private val definitionRepository = DesktopDefinitionRepository()
     private val ecuCommandMutex = Mutex()
 
     init {
+        val beforeAfterState = beforeAfterSelectionStore.load()
+        _beforeAfterBeforeLogPath.value = beforeAfterState.beforeLogPath
+        _beforeAfterAfterLogPath.value = beforeAfterState.afterLogPath
+        val tuningState = tuningAssistantStateStore.load()
+        _analyzerLogFile.value = tuningState.logPath
         refreshIniDefinitions()
         maybeAutoConnect()
     }
@@ -295,6 +320,7 @@ internal class DesktopSpeeduinoController(
                 _connectionInfo.value = activeClient.getConnectionInfo()
                 _readOnlySafeMode.value = activeClient.isReadOnlySafeMode()
                 applyConfiguredIniDefinition(activeClient)
+                refreshDiagnosticSummary()
                 val configsDownloaded = downloadAllConfigs(autoRestartStream = false)
                 if (configsDownloaded && _connectionState.value.isConnected) {
                     activeClient.startLiveDataStream(_streamIntervalMs.value)
@@ -303,6 +329,7 @@ internal class DesktopSpeeduinoController(
             } catch (e: Exception) {
                 ConnectionDiagnosticsLogger.logError("desktop", "connect", "failed: ${e.message ?: "unknown"}", e)
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
                 _connectionState.value = ConnectionState(
                     status = ConnectionStatus.Failed,
                     detail = e.message
@@ -518,6 +545,20 @@ internal class DesktopSpeeduinoController(
     fun saveDesktopSettings(settings: DesktopSettingsState) {
         _desktopSettings.value = settings
         DesktopSettingsStore.saveSettings(settings)
+        refreshDiagnosticSummary()
+    }
+
+    private fun refreshDiagnosticSummary(lastError: String? = _lastError.value) {
+        _diagnosticSummary.value = DesktopDiagnosticSummary(
+            firmwareSignature = _firmwareInfo.value?.signature,
+            productString = _productString.value,
+            connectionInfo = _connectionInfo.value,
+            activeIniSource = _activeIniDefinition.value?.sourceName,
+            manualFirmwareProfile = _desktopSettings.value.manualFirmwareProfile,
+            diagnosticLoggerMode = _desktopSettings.value.diagnosticLoggerMode,
+            readOnlySafeMode = _readOnlySafeMode.value,
+            lastError = lastError,
+        )
     }
 
     fun refreshIniDefinitions(forceCatalogRefresh: Boolean = false) {
@@ -546,6 +587,7 @@ internal class DesktopSpeeduinoController(
                 saveDesktopSettings(updatedSettings)
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -559,6 +601,7 @@ internal class DesktopSpeeduinoController(
                 }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -571,6 +614,7 @@ internal class DesktopSpeeduinoController(
                 _engineConstants.value = constants
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -584,6 +628,7 @@ internal class DesktopSpeeduinoController(
                 }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -596,6 +641,7 @@ internal class DesktopSpeeduinoController(
                 _triggerSettings.value = settings
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -606,6 +652,7 @@ internal class DesktopSpeeduinoController(
                 _engineProtectionConfig.value = withPausedLiveDataStream { it.readEngineProtectionConfig() }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -617,6 +664,7 @@ internal class DesktopSpeeduinoController(
                 _engineProtectionConfig.value = config
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -667,6 +715,7 @@ internal class DesktopSpeeduinoController(
                 if (mapIndex == 2) _veTable2.value = table else _veTable.value = table
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -679,6 +728,7 @@ internal class DesktopSpeeduinoController(
                 if (mapIndex == 2) _veTable2.value = table else _veTable.value = table
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -693,6 +743,7 @@ internal class DesktopSpeeduinoController(
                 if (mapIndex == 2) _ignitionTable2.value = table else _ignitionTable.value = table
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -705,6 +756,7 @@ internal class DesktopSpeeduinoController(
                 if (mapIndex == 2) _ignitionTable2.value = table else _ignitionTable.value = table
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -718,6 +770,7 @@ internal class DesktopSpeeduinoController(
                 }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -730,6 +783,7 @@ internal class DesktopSpeeduinoController(
                 _afrTable.value = table
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -742,6 +796,7 @@ internal class DesktopSpeeduinoController(
                 _dwellTable.value = table
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
                 _dwellTable.value = DwellTable.createDefault()
             }
         }
@@ -754,6 +809,7 @@ internal class DesktopSpeeduinoController(
                 _dwellTable.value = table
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -767,6 +823,7 @@ internal class DesktopSpeeduinoController(
                 }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -779,6 +836,7 @@ internal class DesktopSpeeduinoController(
                 _idleControlSettings.value = settings
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -792,6 +850,7 @@ internal class DesktopSpeeduinoController(
                 }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -805,6 +864,7 @@ internal class DesktopSpeeduinoController(
                 _closedLoopCorrections.value = normalized
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -822,6 +882,7 @@ internal class DesktopSpeeduinoController(
                 }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -839,6 +900,7 @@ internal class DesktopSpeeduinoController(
                 }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -850,6 +912,7 @@ internal class DesktopSpeeduinoController(
                 _tuningConfigState.value = _tuningConfigState.value.copy(secondarySerialConfig = config)
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }
@@ -1467,12 +1530,14 @@ internal class DesktopSpeeduinoController(
 
     fun setBeforeAfterBeforeLogPath(path: String?) {
         _beforeAfterBeforeLogPath.value = path
+        beforeAfterSelectionStore.save(DesktopBeforeAfterSelection(beforeLogPath = path, afterLogPath = _beforeAfterAfterLogPath.value))
         _beforeAfterResult.value = null
         _beforeAfterError.value = null
     }
 
     fun setBeforeAfterAfterLogPath(path: String?) {
         _beforeAfterAfterLogPath.value = path
+        beforeAfterSelectionStore.save(DesktopBeforeAfterSelection(beforeLogPath = _beforeAfterBeforeLogPath.value, afterLogPath = path))
         _beforeAfterResult.value = null
         _beforeAfterError.value = null
     }
@@ -1629,6 +1694,7 @@ internal class DesktopSpeeduinoController(
                 }
             } catch (e: Exception) {
                 _lastError.value = e.message
+                refreshDiagnosticSummary(lastError = e.message)
             }
         }
     }

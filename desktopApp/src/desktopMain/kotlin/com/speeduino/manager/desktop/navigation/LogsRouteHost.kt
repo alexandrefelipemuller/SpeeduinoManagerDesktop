@@ -15,6 +15,8 @@ internal fun LogsRouteHost(
     route: DesktopRoute,
     controller: DesktopSpeeduinoController,
     liveData: SpeeduinoLiveData?,
+    onOpenConnection: () -> Unit,
+    onOpenConnectionSettings: () -> Unit,
     onOpenLogViewer: () -> Unit,
     onOpenRealTimeMonitor: () -> Unit,
     onOpenLogAnalyzer: () -> Unit,
@@ -25,6 +27,8 @@ internal fun LogsRouteHost(
     when (route) {
         DesktopRoute.Tools,
         DesktopRoute.LogsEcuTools -> LogsEcuToolsScreenDesktop(
+            onOpenConnection = onOpenConnection,
+            onOpenConnectionSettings = onOpenConnectionSettings,
             onOpenLogViewer = onOpenLogViewer,
             onOpenRealTimeMonitor = onOpenRealTimeMonitor,
             onOpenLogAnalyzer = onOpenLogAnalyzer,

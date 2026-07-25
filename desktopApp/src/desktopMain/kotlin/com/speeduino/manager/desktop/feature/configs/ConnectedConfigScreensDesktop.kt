@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
+import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.desktop.ui.ToggleField
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 internal fun SensorsCalibrationScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
     val connectionState by controller.connectionState.collectAsState()
     val scope = rememberCoroutineScope()
     var mapMin by remember { mutableStateOf("10") }
@@ -45,7 +47,7 @@ internal fun SensorsCalibrationScreenDesktop(controller: DesktopSpeeduinoControl
     var emapMax by remember { mutableStateOf("260") }
     var tpsMin by remember { mutableStateOf("0") }
     var tpsMax by remember { mutableStateOf("255") }
-    var status by remember { mutableStateOf("Load the current calibration from the ECU before editing.") }
+    var status by remember { mutableStateOf(strings["label.calibrationLoadHint"]) }
 
     fun loadFromEcu() {
         scope.launch {
@@ -63,7 +65,7 @@ internal fun SensorsCalibrationScreenDesktop(controller: DesktopSpeeduinoControl
                 tpsMin = tps.tpsMin.toString()
                 tpsMax = tps.tpsMax.toString()
             }
-            status = if (pressure != null || tps != null) "Calibration loaded from ECU." else "Unable to read calibration from ECU."
+            status = if (pressure != null || tps != null) strings["label.calibrationLoaded"] else strings["label.calibrationReadFailed"]
         }
     }
 
@@ -75,11 +77,11 @@ internal fun SensorsCalibrationScreenDesktop(controller: DesktopSpeeduinoControl
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Sensor Calibration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text("Pressure and TPS calibration path ported from Android, adapted to desktop.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(strings["label.sensorsCalibrationTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(strings["label.sensorsCalibrationSubtitle"], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = ::loadFromEcu, enabled = connectionState.isConnected) { Text("Load from ECU") }
+                    FilledTonalButton(onClick = ::loadFromEcu, enabled = connectionState.isConnected) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         enabled = connectionState.isConnected,
                         onClick = {
@@ -100,10 +102,10 @@ internal fun SensorsCalibrationScreenDesktop(controller: DesktopSpeeduinoControl
                                         tpsMax = tpsMax.toIntOrNull() ?: 255,
                                     )
                                 )
-                                status = if (pressureResult.isSuccess && tpsResult.isSuccess) "Calibration saved to ECU." else "Failed to save one or more calibration blocks."
+                                status = if (pressureResult.isSuccess && tpsResult.isSuccess) strings["label.calibrationSaveSuccess"] else strings["label.calibrationSaveFailed"]
                             }
                         }
-                    ) { Text("Save") }
+                    ) { Text(strings["action.saveEcu"]) }
                 }
             }
         }
@@ -115,18 +117,18 @@ internal fun SensorsCalibrationScreenDesktop(controller: DesktopSpeeduinoControl
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Pressure Sensors", style = MaterialTheme.typography.titleMedium)
+                Text(strings["label.pressureSensors"], style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NumberField("MAP min", mapMin, { mapMin = it }, Modifier.weight(1f))
-                    NumberField("MAP max", mapMax, { mapMax = it }, Modifier.weight(1f))
+                    NumberField(strings["label.mapMin"], mapMin, { mapMin = it }, Modifier.weight(1f))
+                    NumberField(strings["label.mapMax"], mapMax, { mapMax = it }, Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NumberField("BARO min", baroMin, { baroMin = it }, Modifier.weight(1f))
-                    NumberField("BARO max", baroMax, { baroMax = it }, Modifier.weight(1f))
+                    NumberField(strings["label.baroMin"], baroMin, { baroMin = it }, Modifier.weight(1f))
+                    NumberField(strings["label.baroMax"], baroMax, { baroMax = it }, Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NumberField("EMAP min", emapMin, { emapMin = it }, Modifier.weight(1f))
-                    NumberField("EMAP max", emapMax, { emapMax = it }, Modifier.weight(1f))
+                    NumberField(strings["label.emapMin"], emapMin, { emapMin = it }, Modifier.weight(1f))
+                    NumberField(strings["label.emapMax"], emapMax, { emapMax = it }, Modifier.weight(1f))
                 }
             }
         }
@@ -138,10 +140,10 @@ internal fun SensorsCalibrationScreenDesktop(controller: DesktopSpeeduinoControl
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("TPS Calibration", style = MaterialTheme.typography.titleMedium)
+                Text(strings["label.tpsCalibration"], style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NumberField("Closed ADC", tpsMin, { tpsMin = it }, Modifier.weight(1f))
-                    NumberField("Open ADC", tpsMax, { tpsMax = it }, Modifier.weight(1f))
+                    NumberField(strings["label.closedAdc"], tpsMin, { tpsMin = it }, Modifier.weight(1f))
+                    NumberField(strings["label.openAdc"], tpsMax, { tpsMax = it }, Modifier.weight(1f))
                 }
             }
         }
@@ -154,6 +156,7 @@ internal fun SensorsCalibrationScreenDesktop(controller: DesktopSpeeduinoControl
 
 @Composable
 internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
     val config by controller.engineProtectionConfig.collectAsState()
     var protectionCut by remember(config) { mutableStateOf(config?.protectionCut ?: ProtectionCut.BOTH) }
     var cutMethod by remember(config) { mutableStateOf(config?.cutMethod ?: CutMethod.FULL) }
@@ -165,9 +168,11 @@ internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoCon
     var afrEnabled by remember(config) { mutableStateOf(config?.afrProtectionEnabled ?: false) }
     var coolantEnabled by remember(config) { mutableStateOf(config?.coolantProtectionEnabled ?: false) }
     var hasChanges by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf(strings["label.calibrationLoadHint"]) }
 
     LaunchedEffect(config) {
         hasChanges = false
+        status = if (config != null) strings["label.calibrationLoaded"] else strings["label.calibrationLoadHint"]
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -178,10 +183,11 @@ internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoCon
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Engine Protection & Limiters", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text("Controller-backed editor aligned with the Android flow.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(strings["label.engineProtectionLimitersTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(strings["label.engineProtectionLimitersSubtitle"], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = controller::loadEngineProtectionConfig) { Text("Load from ECU") }
+                    FilledTonalButton(onClick = controller::loadEngineProtectionConfig) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         enabled = hasChanges,
                         onClick = {
@@ -199,8 +205,9 @@ internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoCon
                                 )
                             )
                             hasChanges = false
+                            status = strings["label.calibrationLoaded"]
                         }
-                    ) { Text("Save") }
+                    ) { Text(strings["action.saveEcu"]) }
                 }
             }
         }
@@ -212,21 +219,21 @@ internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoCon
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                DropdownField("Protection cut", protectionCut.name, ProtectionCut.values().filter { it != ProtectionCut.OFF }.map { it.name }) { value ->
+                DropdownField(strings["label.protectionCut"], protectionCut.name, ProtectionCut.values().filter { it != ProtectionCut.OFF }.map { it.name }) { value ->
                     protectionCut = ProtectionCut.valueOf(value)
                     hasChanges = true
                 }
-                DropdownField("Cut method", cutMethod.name, CutMethod.values().map { it.name }) { value ->
+                DropdownField(strings["label.cutMethod"], cutMethod.name, CutMethod.values().map { it.name }) { value ->
                     cutMethod = CutMethod.valueOf(value)
                     hasChanges = true
                 }
-                NumberField("Minimum RPM", rpmMin, { rpmMin = it; hasChanges = true })
-                ToggleField("Engine protection enabled", engineProtectEnabled) { engineProtectEnabled = it; hasChanges = true }
-                ToggleField("Rev limiter enabled", revLimiterEnabled) { revLimiterEnabled = it; hasChanges = true }
-                ToggleField("Boost limit enabled", boostLimitEnabled) { boostLimitEnabled = it; hasChanges = true }
-                ToggleField("Oil pressure protection", oilEnabled) { oilEnabled = it; hasChanges = true }
-                ToggleField("AFR protection", afrEnabled) { afrEnabled = it; hasChanges = true }
-                ToggleField("Coolant protection", coolantEnabled) { coolantEnabled = it; hasChanges = true }
+                NumberField(strings["label.minimumRpm"], rpmMin, { rpmMin = it; hasChanges = true })
+                ToggleField(strings["label.engineProtectionEnabled"], engineProtectEnabled) { engineProtectEnabled = it; hasChanges = true }
+                ToggleField(strings["label.revLimiterEnabled"], revLimiterEnabled) { revLimiterEnabled = it; hasChanges = true }
+                ToggleField(strings["label.boostLimitEnabled"], boostLimitEnabled) { boostLimitEnabled = it; hasChanges = true }
+                ToggleField(strings["label.oilPressureProtection"], oilEnabled) { oilEnabled = it; hasChanges = true }
+                ToggleField(strings["label.afrProtection"], afrEnabled) { afrEnabled = it; hasChanges = true }
+                ToggleField(strings["label.coolantProtection"], coolantEnabled) { coolantEnabled = it; hasChanges = true }
             }
         }
     }

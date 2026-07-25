@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -60,6 +61,7 @@ internal fun DiagnosticScreen(
     val firmwareInfo by controller.firmwareInfo.collectAsState()
     val productString by controller.productString.collectAsState()
     val connectionInfo by controller.connectionInfo.collectAsState()
+    val diagnosticSummary by controller.diagnosticSummary.collectAsState()
     val lastError by controller.lastError.collectAsState()
     val activeIniDefinition by controller.activeIniDefinition.collectAsState()
     val readOnlySafeMode by controller.readOnlySafeMode.collectAsState()
@@ -100,19 +102,53 @@ internal fun DiagnosticScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Connection shortcuts",
+                    text = strings["label.runtimeDiagnostics"],
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                )
+                InfoRow(strings["label.firmware"], diagnosticSummary.firmwareSignature ?: firmwareInfo?.signature ?: strings["label.noData"])
+                InfoRow(strings["label.product"], diagnosticSummary.productString ?: productString ?: strings["label.noData"])
+                InfoRow(strings["label.connection"], diagnosticSummary.connectionInfo ?: connectionInfo ?: strings["label.noData"])
+                InfoRow(strings["label.ini"], diagnosticSummary.activeIniSource ?: activeIniDefinition?.sourceName ?: strings["label.noData"])
+                InfoRow(
+                    strings["label.manualFirmware"],
+                    diagnosticSummary.manualFirmwareProfile ?: if (readOnlySafeMode) strings["label.readOnlyActive"] else strings["label.readOnlyOff"]
+                )
+                InfoRow(strings["label.currentLogger"], diagnosticSummary.diagnosticLoggerMode.name.lowercase().replace('_', ' '))
+                InfoRow(strings["label.safeMode"], if (diagnosticSummary.readOnlySafeMode || readOnlySafeMode) strings["label.readOnlyOn"] else strings["label.readOnlyOff"])
+                if (!diagnosticSummary.lastError.isNullOrBlank()) {
+                    Text(
+                        text = diagnosticSummary.lastError!!,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = strings["label.connectionShortcuts"],
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FilledTonalButton(onClick = onOpenConnectionSettings) {
-                        Text("Connection Settings")
+                        Text(strings["label.connectionSettings"])
                     }
                     FilledTonalButton(onClick = onOpenBluetoothConnection) {
-                        Text("Bluetooth")
+                        Text(strings["label.bluetooth"])
                     }
                     FilledTonalButton(onClick = onOpenUsbSerialConnection) {
-                        Text("USB Serial")
+                        Text(strings["label.usbSerial"])
                     }
                 }
             }
@@ -128,16 +164,32 @@ internal fun DiagnosticScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "More tools",
+                    text = strings["label.connectionTips"],
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                 )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(strings["label.tipTcpDesktop"])
+                        Text(strings["label.tipBluetoothSerial"])
+                        Text(strings["label.tipUsbSerial"])
+                        Text(strings["label.tipSafeMode"])
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FilledTonalButton(onClick = onOpenLogsEcuTools) {
-                        Text("Logs & ECU Tools")
+                        Text(strings["label.logsEcuToolsShort"])
                     }
                     FilledTonalButton(onClick = onOpenInstitutional) {
-                        Text("Institutional")
+                        Text(strings["label.institutionalShort"])
                     }
                 }
             }
@@ -160,8 +212,8 @@ internal fun DiagnosticScreen(
                 InfoRow(strings["label.firmware"], firmwareInfo?.signature ?: strings["label.noData"])
                 InfoRow(strings["label.product"], productString ?: strings["label.noData"])
                 InfoRow(strings["label.connection"], connectionInfo ?: strings["label.noData"])
-                InfoRow("INI", activeIniDefinition?.sourceName ?: strings["label.noData"])
-                InfoRow("Safe mode", if (readOnlySafeMode) "Read-only" else "Off")
+                InfoRow(strings["label.ini"], activeIniDefinition?.sourceName ?: strings["label.noData"])
+                InfoRow(strings["label.safeMode"], if (readOnlySafeMode) strings["label.readOnlyOn"] else strings["label.readOnlyOff"])
                 InfoRow(strings["label.appVersion"], appVersion)
                 if (!lastError.isNullOrBlank()) {
                     val errorText = lastError ?: ""

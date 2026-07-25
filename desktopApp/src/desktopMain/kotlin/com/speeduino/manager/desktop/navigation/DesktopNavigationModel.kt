@@ -26,6 +26,7 @@ internal enum class DesktopRoute(
     Home("route.home", "route.home", Icons.Default.Home, topLevel = true),
     Settings("app.settingsLabel", "app.settingsTitle", Icons.Default.Settings, topLevel = true),
     Institutional("route.institutional", "label.institutionalTitle", Icons.Default.Info, topLevel = true),
+    More("nav.sectionMore", "nav.sectionMore", Icons.Default.Info, topLevel = true),
     Dashboard("route.dashboard", "route.dashboard", Icons.Default.Dashboard, topLevel = true),
     Connection("route.connection", "route.connection", Icons.Default.Cable, topLevel = true),
     Fuel("route.fuel", "route.fuel", Icons.Default.TableChart, topLevel = true),
@@ -73,6 +74,7 @@ internal fun navSections(): List<NavSection> {
                 NavEntry(DesktopRoute.Home),
                 NavEntry(DesktopRoute.Dashboard),
                 NavEntry(DesktopRoute.Settings),
+                NavEntry(DesktopRoute.More),
             )
         ),
         connectionNavSection(),
@@ -126,6 +128,7 @@ internal fun parentRoute(route: DesktopRoute): DesktopRoute? {
         DesktopRoute.MapsTables -> DesktopRoute.Fuel
         DesktopRoute.ConfigsTuning -> DesktopRoute.EngineSetup
         DesktopRoute.LogsEcuTools -> DesktopRoute.Tools
+        DesktopRoute.More -> null
         else -> null
     }
 }

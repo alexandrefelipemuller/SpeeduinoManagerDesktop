@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.speeduino.manager.desktop.ConnectionType
 import com.speeduino.manager.desktop.DesktopSettingsState
+import com.speeduino.manager.desktop.InitialScreen
 import com.speeduino.manager.desktop.navigation.DesktopRoute
 
 @Stable
@@ -31,7 +32,10 @@ internal class DesktopAppState(
 internal fun rememberDesktopAppState(desktopSettings: DesktopSettingsState): DesktopAppState {
     return remember {
         DesktopAppState(
-            initialRoute = DesktopRoute.Home,
+            initialRoute = when (desktopSettings.initialScreen) {
+                InitialScreen.HOME -> DesktopRoute.Home
+                InitialScreen.DASHBOARD -> DesktopRoute.Dashboard
+            },
             initialHost = desktopSettings.lastTcpHost ?: "127.0.0.1",
             initialPort = desktopSettings.lastTcpPort?.toString() ?: "5555",
             initialConnectionType = desktopSettings.lastConnectionType ?: ConnectionType.TCP,

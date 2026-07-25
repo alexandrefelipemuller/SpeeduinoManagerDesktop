@@ -33,10 +33,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.Composable
@@ -77,6 +79,7 @@ import com.speeduino.manager.tuning.CellRef
 import com.speeduino.manager.tuning.CellSuggestion
 import com.speeduino.manager.tuning.TuningStrategy
 import java.io.File
+import java.nio.file.Files
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -95,6 +98,19 @@ internal fun RealTimeMonitorScreenDesktop(
     var selectedInterval by remember(intervalMs) { mutableStateOf(intervalMs.toString()) }
     var fileName by remember(strings) { mutableStateOf(strings["label.logFilenamePrefix"]) }
     var selectedSignals by remember { mutableStateOf(DefaultSelectedLogSignals) }
+    var showSavedLogsDialog by remember { mutableStateOf(false) }
+    val savedLogFiles = remember(lastSavedLogPath) { collectSavedLogFiles(lastSavedLogPath) }
+
+    if (showSavedLogsDialog) {
+        SavedLogsDialogDesktop(
+            files = savedLogFiles,
+            onDismiss = { showSavedLogsDialog = false },
+            onSelect = { path ->
+                showSavedLogsDialog = false
+                controller.loadLogSnapshotFromCsv(path)
+            }
+        )
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
@@ -273,6 +289,7 @@ internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
     val snapshot by controller.logSnapshot.collectAsState()
     val snapshotSourcePath by controller.logSnapshotSourcePath.collectAsState()
     val logViewerError by controller.logViewerError.collectAsState()
+    val lastSavedLogPath by controller.lastSavedLogPath.collectAsState()
     val entries = snapshot?.entries.orEmpty()
     val parsedCsvLog = remember(snapshotSourcePath) {
         snapshotSourcePath?.let { path ->
@@ -281,6 +298,7 @@ internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
     }
     val csvLog = parsedCsvLog?.getOrNull()
     val effectiveLogViewerError = logViewerError ?: parsedCsvLog?.exceptionOrNull()?.message
+
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
@@ -313,6 +331,18 @@ internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                var showSavedLogsDialog by remember { mutableStateOf(false) }
+                val savedLogFiles = remember(lastSavedLogPath) { collectSavedLogFiles(lastSavedLogPath) }
+                if (showSavedLogsDialog) {
+                    SavedLogsDialogDesktop(
+                        files = savedLogFiles,
+                        onDismiss = { showSavedLogsDialog = false },
+                        onSelect = { path ->
+                            showSavedLogsDialog = false
+                            controller.loadLogSnapshotFromCsv(path)
+                        }
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalButton(onClick = controller::captureSnapshot) {
                         Text(strings["action.refreshSnapshot"])
@@ -323,6 +353,9 @@ internal fun LogViewerScreenDesktop(controller: DesktopSpeeduinoController) {
                         }
                     ) {
                         Text(strings["label.logViewerChooseCsv"])
+                    }
+                    OutlinedButton(onClick = { showSavedLogsDialog = true }, enabled = savedLogFiles.isNotEmpty()) {
+                        Text(strings["label.logViewerSavedLogsTitle"])
                     }
                 }
                 effectiveLogViewerError?.let {
@@ -422,6 +455,7 @@ internal fun LogAnalyzerScreenDesktop(controller: DesktopSpeeduinoController) {
         mutableStateOf(analyzerResult?.clusters?.map { it.id }?.toSet().orEmpty())
     }
 
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -508,10 +542,10 @@ internal fun LogAnalyzerScreenDesktop(controller: DesktopSpeeduinoController) {
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(strings["label.analyzerSignals"], style = MaterialTheme.typography.titleMedium)
-                    AnalyzerSignalRow("RPM", signals.hasRpm)
-                    AnalyzerSignalRow("Load", signals.hasLoad)
-                    AnalyzerSignalRow("AFR", signals.hasAfr)
-                    AnalyzerSignalRow("AFR Target", signals.hasAfrTarget)
+                    AnalyzerSignalRow(strings["label.rpm"], signals.hasRpm)
+                    AnalyzerSignalRow(strings["label.load"], signals.hasLoad)
+                    AnalyzerSignalRow(strings["label.afr"], signals.hasAfr)
+                    AnalyzerSignalRow(strings["label.afrTarget"], signals.hasAfrTarget)
                 }
             }
         }
@@ -644,6 +678,7 @@ internal fun BeforeAfterScreenDesktop(controller: DesktopSpeeduinoController) {
     val error by controller.beforeAfterError.collectAsState()
     val result by controller.beforeAfterResult.collectAsState()
     var selectedCell by remember(result) { mutableStateOf<Pair<Int, Int>?>(null) }
+
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
@@ -938,6 +973,7 @@ private fun LogViewerFiltersRow(
     onSelectedSignalsChange: (Set<String>) -> Unit,
     onToggle: (String) -> Unit
 ) {
+    val strings = LocalStrings.current
     var query by remember(signals) { mutableStateOf("") }
     val filterFocusRequester = remember { FocusRequester() }
     val filteredSignals = remember(signals, query) {
@@ -965,7 +1001,7 @@ private fun LogViewerFiltersRow(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text("Filter channels") },
+                label = { Text(strings["label.filterChannels"]) },
                 singleLine = true,
                 modifier = Modifier
                     .weight(1f)
@@ -975,18 +1011,18 @@ private fun LogViewerFiltersRow(
                 onClick = { onSelectedSignalsChange(selectedSignals + filteredSignals) },
                 enabled = filteredSignals.isNotEmpty()
             ) {
-                Text("Select shown")
+                Text(strings["label.selectShown"])
             }
             FilledTonalButton(
                 onClick = { onSelectedSignalsChange(selectedSignals - filteredSignals.toSet()) },
                 enabled = filteredSignals.any { selectedSignals.contains(it) }
             ) {
-                Text("Clear shown")
+                Text(strings["label.clearShown"])
             }
         }
 
         Text(
-            text = "${selectedSignals.size}/${signals.size} channels selected",
+            text = strings.format("label.channelsSelected", selectedSignals.size, signals.size),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1354,7 +1390,7 @@ private fun LogViewerChart(series: List<LogSeries>, totalSamples: Int) {
         if (selectedSignalValues.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 selectedX?.let { tappedX ->
-                    Text("t=${String.format(Locale.US, "%.2f", tappedX)} s", style = MaterialTheme.typography.labelLarge)
+                    Text(strings.format("label.timeSeconds", tappedX), style = MaterialTheme.typography.labelLarge)
                 }
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -1664,4 +1700,43 @@ private fun signalPriority(signal: String): Int {
 private fun signalMatchesAny(signal: String, tokens: List<String>): Boolean {
     val normalized = signal.lowercase()
     return tokens.any { token -> normalized == token || normalized.contains(token) }
+}
+
+
+@Composable
+private fun SavedLogsDialogDesktop(
+    files: List<File>,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit
+) {
+    val sortedFiles = remember(files) { files.sortedByDescending { it.lastModified() } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+        title = { Text("Saved logs") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (sortedFiles.isEmpty()) {
+                    Text("No saved logs found.")
+                } else {
+                    sortedFiles.forEach { file ->
+                        Text(
+                            text = file.name,
+                            modifier = Modifier.clickable { onSelect(file.absolutePath) }
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
+
+private fun collectSavedLogFiles(lastSavedLogPath: String?): List<File> {
+    val parent = lastSavedLogPath?.let { File(it).parentFile } ?: return emptyList()
+    if (!parent.exists()) return emptyList()
+    return parent.listFiles { file -> file.isFile && file.name.endsWith(".csv", ignoreCase = true) }?.toList().orEmpty()
 }

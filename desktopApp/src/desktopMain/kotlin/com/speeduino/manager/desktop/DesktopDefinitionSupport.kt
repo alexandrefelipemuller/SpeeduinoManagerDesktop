@@ -49,9 +49,24 @@ internal enum class AppProtocol(val storageValue: String) {
     }
 }
 
+internal enum class DiagnosticLoggerMode(val storageValue: String) {
+    OFF("off"),
+    TOOTH("tooth"),
+    COMPOSITE("composite");
+
+    companion object {
+        fun fromStorage(value: String?): DiagnosticLoggerMode =
+            entries.firstOrNull { it.storageValue == value } ?: OFF
+    }
+}
+
 internal const val SHIFT_LIGHT_RPM_DEFAULT = 6000
 internal const val SHIFT_LIGHT_RPM_MIN = 3000
 internal const val SHIFT_LIGHT_RPM_MAX = 8000
+
+internal enum class DesktopDashboardMode { DEFAULT, PETROL, FUTURE, APEX }
+
+internal enum class InitialScreen { HOME, DASHBOARD }
 
 internal data class DesktopSettingsState(
     val unitSystem: UnitSystem = UnitSystem.AUTO,
@@ -62,11 +77,25 @@ internal data class DesktopSettingsState(
     val iniSelectionSource: IniSelectionSource = IniSelectionSource.CATALOG,
     val iniDefinitionId: String? = null,
     val manualFirmwareProfile: String? = null,
+    val diagnosticLoggerMode: DiagnosticLoggerMode = DiagnosticLoggerMode.OFF,
     val lastConnectionType: ConnectionType? = null,
     val lastTcpHost: String? = null,
     val lastTcpPort: Int? = null,
     val lastSerialPort: String? = null,
     val lastSerialBaudRate: Int? = null,
+    val gettingStartedDismissed: Boolean = false,
+    val feedbackPromptDismissed: Boolean = false,
+    val ratingPromptDismissed: Boolean = false,
+    val appLaunchCount: Int = 0,
+    val firstBootEngineConstantsDone: Boolean = false,
+    val firstBootInjectorsDone: Boolean = false,
+    val firstBootIgnitionDone: Boolean = false,
+    val firstBootFuelDone: Boolean = false,
+    val firstBootSensorsDone: Boolean = false,
+    val firstBootOutputsDone: Boolean = false,
+    val firstBootLivePanelDone: Boolean = false,
+    val dashboardMode: DesktopDashboardMode = DesktopDashboardMode.DEFAULT,
+    val initialScreen: InitialScreen = InitialScreen.HOME,
 )
 
 internal data class ManualFirmwareProfileOption(
@@ -237,12 +266,26 @@ internal object DesktopSettingsStore {
     private const val KEY_INI_SELECTION_SOURCE = "ini_selection_source"
     private const val KEY_INI_DEFINITION_ID = "ini_definition_id"
     private const val KEY_MANUAL_FIRMWARE_PROFILE = "manual_firmware_profile"
+    private const val KEY_DIAGNOSTIC_LOGGER_MODE = "diagnostic_logger_mode"
     private const val KEY_PROTOCOL = "protocol"
     private const val KEY_LAST_CONNECTION_TYPE = "last_connection_type"
     private const val KEY_LAST_TCP_HOST = "last_tcp_host"
     private const val KEY_LAST_TCP_PORT = "last_tcp_port"
     private const val KEY_LAST_SERIAL_PORT = "last_serial_port"
     private const val KEY_LAST_SERIAL_BAUD_RATE = "last_serial_baud_rate"
+    private const val KEY_GETTING_STARTED_DISMISSED = "getting_started_dismissed"
+    private const val KEY_FEEDBACK_PROMPT_DISMISSED = "feedback_prompt_dismissed"
+    private const val KEY_RATING_PROMPT_DISMISSED = "rating_prompt_dismissed"
+    private const val KEY_APP_LAUNCH_COUNT = "app_launch_count"
+    private const val KEY_FIRST_BOOT_ENGINE_CONSTANTS_DONE = "first_boot_engine_constants_done"
+    private const val KEY_FIRST_BOOT_INJECTORS_DONE = "first_boot_injectors_done"
+    private const val KEY_FIRST_BOOT_IGNITION_DONE = "first_boot_ignition_done"
+    private const val KEY_FIRST_BOOT_FUEL_DONE = "first_boot_fuel_done"
+    private const val KEY_FIRST_BOOT_SENSORS_DONE = "first_boot_sensors_done"
+    private const val KEY_FIRST_BOOT_OUTPUTS_DONE = "first_boot_outputs_done"
+    private const val KEY_FIRST_BOOT_LIVE_PANEL_DONE = "first_boot_live_panel_done"
+    private const val KEY_DASHBOARD_MODE = "dashboard_mode"
+    private const val KEY_INITIAL_SCREEN = "initial_screen"
 
     fun settingsDir(): File = File(System.getProperty("user.home"), ".speeduino-manager-desktop").apply { mkdirs() }
 
@@ -287,12 +330,26 @@ internal object DesktopSettingsStore {
         val source = IniSelectionSource.fromStorage(properties.getProperty(KEY_INI_SELECTION_SOURCE))
         val definitionId = properties.getProperty(KEY_INI_DEFINITION_ID)?.takeIf { it.isNotBlank() }
         val manualFirmwareProfile = properties.getProperty(KEY_MANUAL_FIRMWARE_PROFILE)?.takeIf { it.isNotBlank() }
+        val diagnosticLoggerMode = DiagnosticLoggerMode.fromStorage(properties.getProperty(KEY_DIAGNOSTIC_LOGGER_MODE))
         val lastConnectionType = properties.getProperty(KEY_LAST_CONNECTION_TYPE)?.takeIf { it.isNotBlank() }
             ?.let { runCatching { ConnectionType.valueOf(it) }.getOrNull() }
         val lastTcpHost = properties.getProperty(KEY_LAST_TCP_HOST)?.takeIf { it.isNotBlank() }
         val lastTcpPort = properties.getProperty(KEY_LAST_TCP_PORT)?.toIntOrNull()
         val lastSerialPort = properties.getProperty(KEY_LAST_SERIAL_PORT)?.takeIf { it.isNotBlank() }
         val lastSerialBaudRate = properties.getProperty(KEY_LAST_SERIAL_BAUD_RATE)?.toIntOrNull()
+        val gettingStartedDismissed = properties.getProperty(KEY_GETTING_STARTED_DISMISSED)?.toBooleanStrictOrNull() ?: false
+        val feedbackPromptDismissed = properties.getProperty(KEY_FEEDBACK_PROMPT_DISMISSED)?.toBooleanStrictOrNull() ?: false
+        val ratingPromptDismissed = properties.getProperty(KEY_RATING_PROMPT_DISMISSED)?.toBooleanStrictOrNull() ?: false
+        val appLaunchCount = properties.getProperty(KEY_APP_LAUNCH_COUNT)?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val firstBootEngineConstantsDone = properties.getProperty(KEY_FIRST_BOOT_ENGINE_CONSTANTS_DONE)?.toBooleanStrictOrNull() ?: false
+        val firstBootInjectorsDone = properties.getProperty(KEY_FIRST_BOOT_INJECTORS_DONE)?.toBooleanStrictOrNull() ?: false
+        val firstBootIgnitionDone = properties.getProperty(KEY_FIRST_BOOT_IGNITION_DONE)?.toBooleanStrictOrNull() ?: false
+        val firstBootFuelDone = properties.getProperty(KEY_FIRST_BOOT_FUEL_DONE)?.toBooleanStrictOrNull() ?: false
+        val firstBootSensorsDone = properties.getProperty(KEY_FIRST_BOOT_SENSORS_DONE)?.toBooleanStrictOrNull() ?: false
+        val firstBootOutputsDone = properties.getProperty(KEY_FIRST_BOOT_OUTPUTS_DONE)?.toBooleanStrictOrNull() ?: false
+        val firstBootLivePanelDone = properties.getProperty(KEY_FIRST_BOOT_LIVE_PANEL_DONE)?.toBooleanStrictOrNull() ?: false
+        val dashboardMode = runCatching { DesktopDashboardMode.valueOf(properties.getProperty(KEY_DASHBOARD_MODE) ?: DesktopDashboardMode.DEFAULT.name) }.getOrDefault(DesktopDashboardMode.DEFAULT)
+        val initialScreen = runCatching { InitialScreen.valueOf(properties.getProperty(KEY_INITIAL_SCREEN) ?: InitialScreen.HOME.name) }.getOrDefault(InitialScreen.HOME)
         return DesktopSettingsState(
             unitSystem = unitSystem,
             autoConnectOnStart = autoConnectOnStart,
@@ -302,11 +359,25 @@ internal object DesktopSettingsStore {
             iniSelectionSource = if (mode == IniSelectionMode.MANUAL) source else IniSelectionSource.CATALOG,
             iniDefinitionId = if (mode == IniSelectionMode.MANUAL) definitionId else null,
             manualFirmwareProfile = manualFirmwareProfile,
+            diagnosticLoggerMode = diagnosticLoggerMode,
             lastConnectionType = lastConnectionType,
             lastTcpHost = lastTcpHost,
             lastTcpPort = lastTcpPort,
             lastSerialPort = lastSerialPort,
             lastSerialBaudRate = lastSerialBaudRate,
+            gettingStartedDismissed = gettingStartedDismissed,
+            feedbackPromptDismissed = feedbackPromptDismissed,
+            ratingPromptDismissed = ratingPromptDismissed,
+            appLaunchCount = appLaunchCount,
+            firstBootEngineConstantsDone = firstBootEngineConstantsDone,
+            firstBootInjectorsDone = firstBootInjectorsDone,
+            firstBootIgnitionDone = firstBootIgnitionDone,
+            firstBootFuelDone = firstBootFuelDone,
+            firstBootSensorsDone = firstBootSensorsDone,
+            firstBootOutputsDone = firstBootOutputsDone,
+            firstBootLivePanelDone = firstBootLivePanelDone,
+            dashboardMode = dashboardMode,
+            initialScreen = initialScreen,
         )
     }
 
@@ -328,6 +399,7 @@ internal object DesktopSettingsStore {
         } else {
             properties.remove(KEY_MANUAL_FIRMWARE_PROFILE)
         }
+        properties.setProperty(KEY_DIAGNOSTIC_LOGGER_MODE, settings.diagnosticLoggerMode.storageValue)
         if (settings.lastConnectionType != null) {
             properties.setProperty(KEY_LAST_CONNECTION_TYPE, settings.lastConnectionType.name)
         } else {
@@ -353,6 +425,19 @@ internal object DesktopSettingsStore {
         } else {
             properties.remove(KEY_LAST_SERIAL_BAUD_RATE)
         }
+        properties.setProperty(KEY_GETTING_STARTED_DISMISSED, settings.gettingStartedDismissed.toString())
+        properties.setProperty(KEY_FEEDBACK_PROMPT_DISMISSED, settings.feedbackPromptDismissed.toString())
+        properties.setProperty(KEY_RATING_PROMPT_DISMISSED, settings.ratingPromptDismissed.toString())
+        properties.setProperty(KEY_APP_LAUNCH_COUNT, settings.appLaunchCount.coerceAtLeast(0).toString())
+        properties.setProperty(KEY_FIRST_BOOT_ENGINE_CONSTANTS_DONE, settings.firstBootEngineConstantsDone.toString())
+        properties.setProperty(KEY_FIRST_BOOT_INJECTORS_DONE, settings.firstBootInjectorsDone.toString())
+        properties.setProperty(KEY_FIRST_BOOT_IGNITION_DONE, settings.firstBootIgnitionDone.toString())
+        properties.setProperty(KEY_FIRST_BOOT_FUEL_DONE, settings.firstBootFuelDone.toString())
+        properties.setProperty(KEY_FIRST_BOOT_SENSORS_DONE, settings.firstBootSensorsDone.toString())
+        properties.setProperty(KEY_FIRST_BOOT_OUTPUTS_DONE, settings.firstBootOutputsDone.toString())
+        properties.setProperty(KEY_FIRST_BOOT_LIVE_PANEL_DONE, settings.firstBootLivePanelDone.toString())
+        properties.setProperty(KEY_DASHBOARD_MODE, settings.dashboardMode.name)
+        properties.setProperty(KEY_INITIAL_SCREEN, settings.initialScreen.name)
         storeProperties(settingsFile(), properties)
     }
 
@@ -360,6 +445,7 @@ internal object DesktopSettingsStore {
         val key = signature.trim().lowercase(Locale.US)
         return loadProperties(iniCacheFile()).getProperty(key)?.takeIf { it.isNotBlank() }
     }
+
 
     fun persistCachedRemoteIniId(signature: String, definitionId: String) {
         val properties = loadProperties(iniCacheFile())

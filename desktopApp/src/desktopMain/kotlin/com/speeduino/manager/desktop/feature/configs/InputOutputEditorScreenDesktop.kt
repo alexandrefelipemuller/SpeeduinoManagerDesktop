@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.speeduino.manager.desktop.LocalStrings
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +49,7 @@ internal fun InputOutputEditorScreenDesktop(
     controller: DesktopSpeeduinoController,
     onOpenSecondarySerial: () -> Unit,
 ) {
+    val strings = LocalStrings.current
     val tuningState by controller.tuningConfigState.collectAsState()
     val liveData by controller.liveData.collectAsState()
     val snapshot = tuningState.rusefiSnapshot
@@ -72,18 +74,22 @@ internal fun InputOutputEditorScreenDesktop(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Input / Output", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text("Local I/O rules and rusEFI snapshot workflow brought closer to the Android implementation.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(strings["label.inputOutputCardTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(strings["label.ioLoadInstructions"], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = onOpenSecondarySerial) { Text("Secondary Serial") }
-                    FilledTonalButton(onClick = controller::loadRusefiInputOutputSnapshot) { Text("Load rusEFI Snapshot") }
+                    FilledTonalButton(onClick = onOpenSecondarySerial) { Text(strings["label.secondarySerialTitle"]) }
+                    FilledTonalButton(onClick = controller::loadRusefiInputOutputSnapshot) { Text(strings["label.rusefiSnapshotAction"]) }
                 }
             }
         }
 
         TabRow(selectedTabIndex = selectedTab.ordinal) {
             IoChannelType.values().forEach { tab ->
-                Tab(selected = selectedTab == tab, onClick = { selectedTab = tab }, text = { Text(tab.name) })
+                Tab(selected = selectedTab == tab, onClick = { selectedTab = tab }, text = { Text(when (tab) {
+                    IoChannelType.SENSOR -> strings["label.ioTabSensors"]
+                    IoChannelType.ACTUATOR -> strings["label.ioTabActuators"]
+                    IoChannelType.VIRTUAL -> strings["label.ioTabVirtual"]
+                }) })
             }
         }
 
@@ -96,10 +102,10 @@ internal fun InputOutputEditorScreenDesktop(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("No local channels configured for ${selectedTab.name.lowercase()}.")
+                    Text(strings.format("label.ioNoChannels", selectedTab.name.lowercase()))
                     Button(onClick = { editing = defaultChannel(selectedTab) }) {
                         androidx.compose.material3.Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text("Add Channel")
+                        Text(strings["label.ioAddChannel"])
                     }
                 }
             }
@@ -123,16 +129,16 @@ internal fun InputOutputEditorScreenDesktop(
                             })
                         }
                         Text(buildChannelSummary(channel), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Preview: ${computed.displayValue}${computed.unit?.let { " $it" } ?: ""}", style = MaterialTheme.typography.bodySmall)
+                        Text(strings.format("label.ioPreviewPrefix", "${computed.displayValue}${computed.unit?.let { " $it" } ?: ""}"), style = MaterialTheme.typography.bodySmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             TextButton(onClick = { previewing = channel }) {
                                 androidx.compose.material3.Icon(Icons.Default.PlayArrow, contentDescription = null)
-                                Text("Test")
+                                Text(strings["label.ioTest"])
                             }
-                            TextButton(onClick = { editing = channel }) { Text("Edit") }
+                            TextButton(onClick = { editing = channel }) { Text(strings["label.ioEdit"]) }
                             TextButton(onClick = { deleting = channel }) {
                                 androidx.compose.material3.Icon(Icons.Default.Delete, contentDescription = null)
-                                Text("Remove")
+                                Text(strings["label.ioRemoveChannel"])
                             }
                         }
                     }
@@ -142,14 +148,14 @@ internal fun InputOutputEditorScreenDesktop(
 
         Button(onClick = { editing = defaultChannel(selectedTab) }) {
             androidx.compose.material3.Icon(Icons.Default.Add, contentDescription = null)
-            Text("Add ${selectedTab.name.lowercase().replaceFirstChar { it.uppercase() }}")
+            Text(strings["label.ioAddChannel"])
         }
 
         snapshot?.let {
-            SnapshotSection("rusEFI Inputs", it.inputs.map { entry -> "${entry.label}: ${entry.value}" })
-            SnapshotSection("rusEFI Fuel Outputs", it.fuelOutputs.map { entry -> "${entry.label}: ${entry.value}" })
-            SnapshotSection("rusEFI Ignition Outputs", it.ignitionOutputs.map { entry -> "${entry.label}: ${entry.value}" })
-            SnapshotSection("rusEFI Aux Outputs", it.auxiliaryOutputs.map { entry -> "${entry.label}: ${entry.value}" })
+            SnapshotSection(strings["label.rusefiInputs"], it.inputs.map { entry -> "${entry.label}: ${entry.value}" })
+            SnapshotSection(strings["label.rusefiFuelOutputs"], it.fuelOutputs.map { entry -> "${entry.label}: ${entry.value}" })
+            SnapshotSection(strings["label.rusefiIgnitionOutputs"], it.ignitionOutputs.map { entry -> "${entry.label}: ${entry.value}" })
+            SnapshotSection(strings["label.rusefiAuxOutputs"], it.auxiliaryOutputs.map { entry -> "${entry.label}: ${entry.value}" })
         }
     }
 
@@ -170,24 +176,24 @@ internal fun InputOutputEditorScreenDesktop(
         val computed = engine.evaluate(channel, liveData)
         AlertDialog(
             onDismissRequest = { previewing = null },
-            title = { Text("Channel Preview") },
-            text = { Text("${channel.name}: ${computed.displayValue}${computed.unit?.let { " $it" } ?: ""}") },
-            confirmButton = { TextButton(onClick = { previewing = null }) { Text("Close") } }
+            title = { Text(strings["label.ioChannelPreview"]) },
+            text = { Text(strings.format("label.ioPreviewValue", channel.name, computed.displayValue, computed.unit ?: "")) },
+            confirmButton = { TextButton(onClick = { previewing = null }) { Text(strings["label.ioClose"]) } }
         )
     }
 
     deleting?.let { channel ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("Remove Channel") },
-            text = { Text("Remove ${channel.name}?") },
+            title = { Text(strings["label.ioRemoveChannel"]) },
+            text = { Text(strings.format("label.ioRemoveChannelBody", channel.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     persist(channels.filter { it.id != channel.id })
                     deleting = null
-                }) { Text("Remove") }
+                }) { Text(strings["label.ioRemoveChannel"]) }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(strings["label.ioCancel"]) } }
         )
     }
 }
@@ -230,6 +236,7 @@ private fun IoChannelEditorDialog(
     onDismiss: () -> Unit,
     onSave: (IoChannel) -> Unit,
 ) {
+    val strings = LocalStrings.current
     val catalog = remember { SpeeduinoOutputChannels.getCatalog().map { it.name } }
     var name by remember(initial) { mutableStateOf(initial.name) }
     var type by remember(initial) { mutableStateOf(initial.type) }
@@ -255,55 +262,55 @@ private fun IoChannelEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit I/O Channel") },
+        title = { Text(strings["label.ioEdit"]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
-                DropdownField("Type", type.name, IoChannelType.values().map { it.name }) { value -> type = IoChannelType.valueOf(value) }
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(strings["label.ioName"]) }, modifier = Modifier.fillMaxWidth())
+                DropdownField(strings["label.ioType"], type.name, IoChannelType.values().map { it.name }) { value -> type = IoChannelType.valueOf(value) }
                 when (type) {
                     IoChannelType.SENSOR -> {
-                        DropdownField("Source", sourceChannel, catalog) { sourceChannel = it }
-                        DropdownField("Conversion", conversionType, listOf("LINEAR", "TABLE", "EXPRESSION")) { conversionType = it }
+                        DropdownField(strings["label.ioSource"], sourceChannel, catalog) { sourceChannel = it }
+                        DropdownField(strings["label.ioConversion"], conversionType, listOf(strings["label.ioLinear"], strings["label.ioTable"], strings["label.ioExpression"])) { conversionType = when (it) { strings["label.ioTable"] -> "TABLE"; strings["label.ioExpression"] -> "EXPRESSION"; else -> "LINEAR" } }
                         if (conversionType == "LINEAR") {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                NumberField("x1", x1, { x1 = it }, Modifier.weight(1f))
-                                NumberField("y1", y1, { y1 = it }, Modifier.weight(1f))
+                                NumberField(strings["label.ioLinearX1"], x1, { x1 = it }, Modifier.weight(1f))
+                                NumberField(strings["label.ioLinearY1"], y1, { y1 = it }, Modifier.weight(1f))
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                NumberField("x2", x2, { x2 = it }, Modifier.weight(1f))
-                                NumberField("y2", y2, { y2 = it }, Modifier.weight(1f))
+                                NumberField(strings["label.ioLinearX2"], x2, { x2 = it }, Modifier.weight(1f))
+                                NumberField(strings["label.ioLinearY2"], y2, { y2 = it }, Modifier.weight(1f))
                             }
                         } else if (conversionType == "TABLE") {
-                            OutlinedTextField(value = pointsText, onValueChange = { pointsText = it }, label = { Text("Points x:y,x:y") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = pointsText, onValueChange = { pointsText = it }, label = { Text(strings["label.ioPoints"]) }, modifier = Modifier.fillMaxWidth())
                         } else {
-                            OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text("Expression") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text(strings["label.ioExpression"]) }, modifier = Modifier.fillMaxWidth())
                         }
-                        OutlinedTextField(value = unit, onValueChange = { unit = it }, label = { Text("Unit") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = unit, onValueChange = { unit = it }, label = { Text(strings["label.ioUnit"]) }, modifier = Modifier.fillMaxWidth())
                     }
                     IoChannelType.VIRTUAL -> {
-                        DropdownField("Mode", virtualMode.name, VirtualMode.values().map { it.name }) { value -> virtualMode = VirtualMode.valueOf(value) }
+                        DropdownField(strings["label.ioMode"], virtualMode.name, VirtualMode.values().map { it.name }) { value -> virtualMode = VirtualMode.valueOf(value) }
                         if (virtualMode == VirtualMode.SIMPLE) {
-                            DropdownField("Source", sourceChannel, catalog) { sourceChannel = it }
-                            DropdownField("Operation", virtualOpType, listOf("BIT", "COMPARE")) { virtualOpType = it }
+                            DropdownField(strings["label.ioSource"], sourceChannel, catalog) { sourceChannel = it }
+                            DropdownField(strings["label.ioOperation"], virtualOpType, listOf(strings["label.ioBit"], strings["label.ioCompare"])) { virtualOpType = when (it) { strings["label.ioBit"] -> "BIT"; else -> "COMPARE" } }
                             if (virtualOpType == "BIT") {
-                                NumberField("Bit", bit, { bit = it }, Modifier.fillMaxWidth())
+                                NumberField(strings["label.ioBit"], bit, { bit = it }, Modifier.fillMaxWidth())
                             } else {
-                                DropdownField("Compare", compareOp.name, CompareOp.values().map { it.name }) { value -> compareOp = CompareOp.valueOf(value) }
-                                NumberField("Compare value", compareValue, { compareValue = it }, Modifier.fillMaxWidth())
+                                DropdownField(strings["label.ioCompare"], compareOp.name, CompareOp.values().map { it.name }) { value -> compareOp = CompareOp.valueOf(value) }
+                                NumberField(strings["label.ioCompareValue"], compareValue, { compareValue = it }, Modifier.fillMaxWidth())
                             }
-                            DropdownField("Output format", virtualFormat.name, VirtualOutputFormat.values().map { it.name }) { value -> virtualFormat = VirtualOutputFormat.valueOf(value) }
+                            DropdownField(strings["label.ioOutputFormat"], virtualFormat.name, VirtualOutputFormat.values().map { it.name }) { value -> virtualFormat = VirtualOutputFormat.valueOf(value) }
                         } else {
-                            OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text("Expression") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text(strings["label.ioExpression"]) }, modifier = Modifier.fillMaxWidth())
                         }
                     }
                     IoChannelType.ACTUATOR -> {
-                        OutlinedTextField(value = actuatorOutput, onValueChange = { actuatorOutput = it }, label = { Text("Output") }, modifier = Modifier.fillMaxWidth())
-                        DropdownField("Actuator type", actuatorType.name, ActuatorType.values().map { it.name }) { value -> actuatorType = ActuatorType.valueOf(value) }
-                        DropdownField("Control", actuatorControl.name, ActuatorControlMode.values().map { it.name }) { value -> actuatorControl = ActuatorControlMode.valueOf(value) }
+                        OutlinedTextField(value = actuatorOutput, onValueChange = { actuatorOutput = it }, label = { Text(strings["label.ioOutput"]) }, modifier = Modifier.fillMaxWidth())
+                        DropdownField(strings["label.ioActuatorType"], actuatorType.name, ActuatorType.values().map { it.name }) { value -> actuatorType = ActuatorType.valueOf(value) }
+                        DropdownField(strings["label.ioControl"], actuatorControl.name, ActuatorControlMode.values().map { it.name }) { value -> actuatorControl = ActuatorControlMode.valueOf(value) }
                         if (actuatorControl == ActuatorControlMode.MANUAL) {
-                            NumberField("Manual value", manualValue, { manualValue = it }, Modifier.fillMaxWidth())
+                            NumberField(strings["label.ioManualValue"], manualValue, { manualValue = it }, Modifier.fillMaxWidth())
                         } else {
-                            OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text("Expression") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = expression, onValueChange = { expression = it }, label = { Text(strings["label.ioExpression"]) }, modifier = Modifier.fillMaxWidth())
                         }
                     }
                 }
@@ -337,8 +344,8 @@ private fun IoChannelEditorDialog(
                     IoChannelType.ACTUATOR -> initial.copy(name = name, type = type, config = ActuatorConfig(outputName = actuatorOutput, outputType = actuatorType, controlMode = actuatorControl, expression = if (actuatorControl == ActuatorControlMode.EXPRESSION) expression else null, manualValue = if (actuatorControl == ActuatorControlMode.MANUAL) manualValue.toDoubleOrNull() else null))
                 }
                 onSave(updated)
-            }) { Text("Save") }
+            }) { Text(strings["label.ioSave"]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(strings["label.ioCancel"]) } }
     )
 }

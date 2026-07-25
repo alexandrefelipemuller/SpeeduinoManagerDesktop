@@ -10,12 +10,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.speeduino.manager.desktop.LocalStrings
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun RevLimiterConfigScreenDesktop() {
+    val strings = LocalStrings.current
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -24,8 +26,8 @@ internal fun RevLimiterConfigScreenDesktop() {
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Rev Limiter", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text("Separated from engine protection to match the Android navigation. This area still needs the deeper limiter model to become fully editable.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(strings["label.revLimiterTitleShort"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(strings["label.revLimiterSubtitleShort"], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
