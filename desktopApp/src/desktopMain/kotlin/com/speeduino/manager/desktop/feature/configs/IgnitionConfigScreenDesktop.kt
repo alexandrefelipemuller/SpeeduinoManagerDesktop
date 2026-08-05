@@ -27,8 +27,8 @@ import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.desktop.ui.ToggleField
-import com.speeduino.manager.model.Algorithm
-import com.speeduino.manager.model.TriggerSettings
+import io.ecucore.model.Algorithm
+import io.ecucore.model.TriggerSettings
 
 private val sparkModeLabels = listOf("Wasted Spark", "Distributor", "Wasted COP", "Sequential", "Rotary")
 

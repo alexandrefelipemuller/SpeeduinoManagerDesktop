@@ -1,0 +1,75 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+Cross-platform client for Speeduino and MegaSquirt/rusEFI-family ECUs, built with Kotlin Multiplatform + Compose Multiplatform. It reuses protocol/model/connection code from the SpeeduinoManager Android project and ships it to desktop (Windows/macOS/Linux) and iOS. New functionality should prioritize the `shared` module so Android, desktop, and iOS stay on the same core.
+
+## Commands
+
+```bash
+# Run the desktop app
+./gradlew :desktopApp:run
+
+# Build
+./gradlew :desktopApp:build
+
+# Tests (shared module logic — protocol, models, parsers)
+./gradlew :shared:desktopTest
+./gradlew :shared:desktopTest --tests "com.speeduino.manager.model.TableValidatorTest"
+
+# Package distributables
+./build-release.sh                       # auto-detects OS (dmg/deb+AppImage/exe)
+./gradlew :desktopApp:packageReleaseDmg   # macOS
+./gradlew :desktopApp:packageReleaseDeb :desktopApp:packageReleaseAppImage   # Linux
+./gradlew :desktopApp:packageReleaseExe  # Windows
+
+# iOS (macOS only, needs Xcode)
+sh iosApp/build-ios.sh
+# equivalently, what Xcode runs pre-compile:
+./gradlew --console=plain :desktopApp:embedAndSignAppleFrameworkForXcode
+```
+
+There is no Android target wired into `shared`/`desktopApp` currently (an `androidMain` source set exists for shared expect/actuals but is not attached to a target in the Gradle config).
+
+Local protocol testing without real hardware: run `python3 simulator/speeduino_tcp_simulator.py --host 0.0.0.0 --port 5555` (from the separate main SpeeduinoManager repo, not this one) and connect the desktop app to `127.0.0.1:5555`.
+
+## Module layout
+
+- `shared/` — Kotlin Multiplatform core: protocol parsing/CRC, connection transports, ECU models/table definitions, live-data parsing, storage, tuning analysis. Targets: `jvm("desktop")`, `iosArm64()`, `iosSimulatorArm64()`.
+- `desktopApp/` — Compose UI. Also multiplatform: `desktopMain` (Compose Desktop windowed app) and `iosMain` (Compose UIViewController embedded via `SpeeduinoManagerKit` framework). Same module, two very different UIs sharing navigation-adjacent code.
+- `iosApp/` — thin Xcode project (`AppDelegate.swift`, `Info.plist`) that hosts the `SpeeduinoManagerKit` framework produced by `desktopApp`'s iOS targets.
+
+### `shared` source set structure
+
+Gradle target `jvm("desktop")` produces `desktopMain`/`desktopTest` automatically; `jvmMain`/`jvmTest` are hand-created intermediate source sets that `desktopMain` depends on (a seam for a future non-desktop JVM target, e.g. Android). Platform-specific pieces use `expect`/`actual` across `commonMain` → `{android,desktop,ios}Main`:
+
+- `com.speeduino.manager.shared.Logger` — actual per platform
+- `com.speeduino.manager.storage.PlatformFileSystem` — actual per platform
+- `com.speeduino.manager.units.PlatformLocale` — actual per platform
+- `com.speeduino.manager.connection.{BleConnection,NativeTcpConnection}` — actual per platform
+
+Desktop-only additions live in `jvmMain`/`desktopMain`: `SpeeduinoProtocol`, `SpeeduinoClient`, `ConfigManager`, `ConfigSyncService`, serial/TCP connection implementations (using `jSerialComm`), `LiveLogRecorder`, `BeforeAfterLogCompare`.
+
+### ECU abstraction
+
+- `connection.ISpeeduinoConnection` — low-level transport interface (TCP/serial/BLE), byte-level send/receive, handshake retry hooks, legacy vs. "modern" (CRC32) protocol negotiation.
+- `transport.EcuTransport` — higher-level interface consumed by the UI: connection lifecycle, live-data streaming, and per-table/per-config read/write operations (VE table, ignition table, AFR table, engine constants, trigger settings, idle control, closed-loop correction, TPS/pressure calibration, etc). Most operations default to `UnsupportedOperationException` — a given ECU family only overrides what it actually supports.
+- `desktopApp` provides concrete `EcuTransport` implementations per ECU family/protocol: `AutoDetectEcuTransport`, `Obd2Transport`/`PromotingObd2Transport`, `PsaTransport`, `RenaultTransport`, `VagTransport`.
+- `model.EcuDefinitionRegistry` resolves a firmware signature string to an `EcuDefinition` via a list of `EcuDefinitionProvider`s (Speeduino, MegaSpeed/MS2Extra, MS2, MS3, rusEFI). Each provider declares its own page catalog, byte order, and block size. When adding support for a new firmware variant, add a provider here rather than branching on signature strings elsewhere.
+- Table/config models (`VeTable`, `IgnitionTable`, `AfrTable`, `EngineConstants`, `TriggerSettings`, `EngineProtectionConfig`, `IdleControlSettings`, etc.) are plain data classes in `model/`, independent of any one ECU family's on-wire layout — family-specific definitions (`SpeeduinoTableDefinitions`, `Ms2TableDefinitions`, `Ms3TableDefinitions`, `RusefiTableDefinitions`, `MegaSpeedIniTableDefinitions`) map wire format to these models.
+
+### Desktop UI structure
+
+`desktopApp/src/desktopMain` follows a feature/navigation split:
+- `feature/{app,configs,connection,logs,maps}/` — screen composables per feature area.
+- `navigation/` — one `*Navigation.kt` (route enum/sealed type) + `*RouteHost.kt` (renders the route) pair per feature area, wired together by `AppNavigation.kt`/`AppRouteHost.kt`.
+- `DesktopController.kt` / `app/DesktopAppState.kt` — cross-cutting app state (current route, connection settings) and the controller that bridges UI to `EcuTransport`.
+- `telemetry/` — diagnostics/logging support (`ConnectionDiagnosticsLogger`, `LiveDataPipelineProbe`, `Obd2InvestigationRecorder`) for debugging connection issues in the field, not user-facing features.
+
+`desktopApp/src/iosMain` is a separate, simpler app shell (`Main.kt: createAppViewController()`): three-tab bottom navigation (Home/Dashboard/Settings) with an in-tab back-stack, screens under `screens/Ios*.kt`. It does not reuse `desktopMain`'s navigation system — it's a parallel, iOS-idiomatic UI over the same `shared` core.
+
+## Docs in this repo
+
+`docs/PLAN.md` and `docs/ARCHITECTURE.md` are early planning documents (in Portuguese) written before the KMP project existed and describe an initial Linux-only scope — they're out of date relative to the current multi-platform (desktop + iOS), multi-ECU-family (Speeduino/MS2/MS3/rusEFI) state of the code. Prefer reading the actual source over these when they conflict. `docs/BUILD.md` is similarly a planning doc with placeholder command names, not the current build instructions.

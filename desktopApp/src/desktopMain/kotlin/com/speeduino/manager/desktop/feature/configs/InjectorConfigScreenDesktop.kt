@@ -27,8 +27,8 @@ import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
-import com.speeduino.manager.model.EngineConstants
-import com.speeduino.manager.model.InjectorBatteryCorrectionMode
+import io.ecucore.model.EngineConstants
+import io.ecucore.model.InjectorBatteryCorrectionMode
 
 @Composable
 internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController) {

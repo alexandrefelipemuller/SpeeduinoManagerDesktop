@@ -1,7 +1,7 @@
 package com.speeduino.manager.io
 
-import com.speeduino.manager.SpeeduinoLiveData
-import com.speeduino.manager.model.SpeeduinoOutputChannels
+import io.ecucore.SpeeduinoLiveData
+import io.ecucore.model.SpeeduinoOutputChannels
 import kotlin.math.abs
 
 class IoConfigEngine {

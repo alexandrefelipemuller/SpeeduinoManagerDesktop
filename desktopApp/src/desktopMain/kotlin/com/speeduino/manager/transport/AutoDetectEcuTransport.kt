@@ -1,23 +1,24 @@
 package com.speeduino.manager.transport
 
-import com.speeduino.manager.definition.IniDefinition
-import com.speeduino.manager.ecu.FirmwareInfo
-import com.speeduino.manager.model.AfrTable
-import com.speeduino.manager.model.EcuCapabilities
-import com.speeduino.manager.model.EcuFamily
-import com.speeduino.manager.model.EcuPageDescriptor
-import com.speeduino.manager.model.EngineConstants
-import com.speeduino.manager.model.EngineProtectionConfig
-import com.speeduino.manager.model.IgnitionTable
-import com.speeduino.manager.model.PinLayoutInfo
-import com.speeduino.manager.model.PressureCalibration
-import com.speeduino.manager.model.RusefiInputOutputSnapshot
-import com.speeduino.manager.model.SecondarySerialConfig
-import com.speeduino.manager.model.TableDefinitions
-import com.speeduino.manager.model.TpsCalibration
-import com.speeduino.manager.model.TriggerSettings
-import com.speeduino.manager.model.VeTable
-import com.speeduino.manager.protocol.SerialCapability
+import io.ecucore.transport.EcuTransport
+import io.ecucore.definition.IniDefinition
+import io.ecucore.ecu.FirmwareInfo
+import io.ecucore.model.AfrTable
+import io.ecucore.model.EcuCapabilities
+import io.ecucore.model.EcuFamily
+import io.ecucore.model.EcuPageDescriptor
+import io.ecucore.model.EngineConstants
+import io.ecucore.model.EngineProtectionConfig
+import io.ecucore.model.IgnitionTable
+import io.ecucore.model.PinLayoutInfo
+import io.ecucore.model.PressureCalibration
+import io.ecucore.model.RusefiInputOutputSnapshot
+import io.ecucore.model.SecondarySerialConfig
+import io.ecucore.model.TableDefinitions
+import io.ecucore.model.TpsCalibration
+import io.ecucore.model.TriggerSettings
+import io.ecucore.model.VeTable
+import io.ecucore.protocol.SerialCapability
 import com.speeduino.manager.telemetry.ConnectionDiagnosticsLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -152,14 +153,14 @@ class AutoDetectEcuTransport(
     override suspend fun readIdleControlSettings() = selected().readIdleControlSettings()
 
     override suspend fun writeIdleControlSettings(
-        settings: com.speeduino.manager.model.IdleControlSettings,
+        settings: io.ecucore.model.IdleControlSettings,
         burn: Boolean,
     ) = selected().writeIdleControlSettings(settings, burn)
 
     override suspend fun readClosedLoopCorrectionConfig() = selected().readClosedLoopCorrectionConfig()
 
     override suspend fun writeClosedLoopCorrectionConfig(
-        config: com.speeduino.manager.model.ClosedLoopCorrectionConfig,
+        config: io.ecucore.model.ClosedLoopCorrectionConfig,
         burn: Boolean,
     ) = selected().writeClosedLoopCorrectionConfig(config, burn)
 

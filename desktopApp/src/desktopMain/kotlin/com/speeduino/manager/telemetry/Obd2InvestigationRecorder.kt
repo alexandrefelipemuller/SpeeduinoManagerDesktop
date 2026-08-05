@@ -1,6 +1,6 @@
 package com.speeduino.manager.telemetry
 
-import com.speeduino.manager.SpeeduinoLiveData
+import io.ecucore.SpeeduinoLiveData
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File

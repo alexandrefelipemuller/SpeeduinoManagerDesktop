@@ -42,12 +42,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.speeduino.manager.model.RusefiInputOutputSnapshot
-import com.speeduino.manager.model.SecondarySerialConfig
-import com.speeduino.manager.model.SecondarySerialProtocol
-import com.speeduino.manager.tuning.CellRef
+import io.ecucore.model.RusefiInputOutputSnapshot
+import io.ecucore.model.SecondarySerialConfig
+import io.ecucore.model.SecondarySerialProtocol
+import io.ecucore.tuning.CellRef
 import com.speeduino.manager.desktop.LocalStrings
-import com.speeduino.manager.tuning.TuningStrategy
+import io.ecucore.tuning.TuningStrategy
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.InfoRow
 import java.awt.FileDialog
@@ -335,7 +335,7 @@ internal fun TuningAssistantScreenDesktop(
         ?.toSet()
         ?: emptySet()
     val loadLabel = currentResult?.summary?.loadLabel
-        ?: if (veTable?.loadType == com.speeduino.manager.model.VeTable.LoadType.MAP) "kPa" else "%"
+        ?: if (veTable?.loadType == io.ecucore.model.VeTable.LoadType.MAP) "kPa" else "%"
 
     TuningSectionScreen(
         title = strings["label.tuningAssistantTitle"],
@@ -524,7 +524,7 @@ private fun RowButtons(
 }
 
 @Composable
-private fun SnapshotGroup(title: String, items: List<com.speeduino.manager.model.RusefiIoEntry>) {
+private fun SnapshotGroup(title: String, items: List<io.ecucore.model.RusefiIoEntry>) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -556,7 +556,7 @@ private fun SecondarySerialProtocol.displayName(): String {
 }
 
 @Composable
-private fun SignalReadinessCard(signalStatus: com.speeduino.manager.tuning.AnalyzerSignalStatus, afrAvailable: Boolean) {
+private fun SignalReadinessCard(signalStatus: io.ecucore.tuning.AnalyzerSignalStatus, afrAvailable: Boolean) {
     val strings = LocalStrings.current
     val rows = listOf(
         "RPM" to signalStatus.hasRpm,
@@ -576,7 +576,7 @@ private fun SignalReadinessCard(signalStatus: com.speeduino.manager.tuning.Analy
 
 @Composable
 private fun HeatmapCard(
-    result: com.speeduino.manager.tuning.AnalyzerResult,
+    result: io.ecucore.tuning.AnalyzerResult,
     highlightedCells: Set<CellRef>,
     selectedCell: CellRef?,
     onCellSelected: (CellRef) -> Unit
@@ -633,7 +633,7 @@ private fun HeatmapCard(
 
 @Composable
 private fun ClusterSuggestionsCard(
-    clusters: List<com.speeduino.manager.tuning.SuggestionCluster>,
+    clusters: List<io.ecucore.tuning.SuggestionCluster>,
     includedClusterIds: Set<String>,
     onToggleInclude: (String) -> Unit,
     onPreview: (String) -> Unit
