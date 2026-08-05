@@ -106,7 +106,7 @@ object SpeeduinoIniDefinitions {
         )
     }
 
-    private fun resolveAxisOffset(page: Int?, tableName: String, axis: String): Int {
+    private fun resolveAxisOffset(_page: Int?, tableName: String, axis: String): Int {
         return when {
             axis == "rpm" && tableName.equals("veTable", ignoreCase = true) -> 256
             axis == "load" && tableName.equals("veTable", ignoreCase = true) -> 272

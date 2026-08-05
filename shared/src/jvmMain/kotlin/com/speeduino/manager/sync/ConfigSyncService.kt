@@ -145,7 +145,6 @@ class ConfigSyncService(
                                     client.writeRawPageWithoutBurn(pageNum.toInt() and 0xFF, sanitized.data)
                                     wroteAnyPage = true
                                     warnings.add("Página 6 corrigida (sanitização)")
-                                    success = true
                                     break
                                 } catch (sanitizeError: Exception) {
                                     warnings.add("Falha ao corrigir página 6: ${sanitizeError.message}")
@@ -157,9 +156,7 @@ class ConfigSyncService(
                         if (stopOnRangeErr) {
                             inconsistentPages.add(pageNum)
                             stopDueToRangeErr = true
-                            break
                         }
-                        success = true
                         break
                     }
                     val message = "Falha ao gravar página $pageNum (tentativa $attempt): $errorText"

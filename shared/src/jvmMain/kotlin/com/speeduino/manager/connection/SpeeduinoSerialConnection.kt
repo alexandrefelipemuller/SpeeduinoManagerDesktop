@@ -17,6 +17,7 @@ class SpeeduinoSerialConnection(
 
     companion object {
         private const val TAG = "SpeeduinoSerial"
+        private const val POST_OPEN_SETTLE_MS = 1800L
 
         fun listPorts(): List<String> = SerialPort.getCommPorts().map { it.systemPortName }.toList()
     }
@@ -33,6 +34,7 @@ class SpeeduinoSerialConnection(
         try {
             Logger.d(TAG, "Opening serial port $portDescriptor @ $baudRate")
             val selected = SerialPort.getCommPort(portDescriptor)
+            Logger.i(TAG, "Opening serial port $portDescriptor @ $baudRate")
             selected.baudRate = baudRate
             selected.numDataBits = 8
             selected.numStopBits = SerialPort.ONE_STOP_BIT
@@ -49,13 +51,10 @@ class SpeeduinoSerialConnection(
             }
 
             selected.flushIOBuffers()
-            val dtrCleared = selected.clearDTR()
-            val rtsCleared = selected.clearRTS()
-            Logger.d(TAG, "DTR/RTS cleared: dtr=$dtrCleared rts=$rtsCleared")
-            delay(50)
-            val dtrSet = selected.setDTR()
-            val rtsSet = selected.setRTS()
-            Logger.d(TAG, "DTR/RTS set: dtr=$dtrSet rts=$rtsSet")
+            Logger.d(TAG, "Serial port aberta sem alternar DTR/RTS para evitar reset da ECU")
+            delay(POST_OPEN_SETTLE_MS)
+            selected.flushIOBuffers()
+            Logger.d(TAG, "Serial buffers limpos apos settle de ${POST_OPEN_SETTLE_MS}ms")
             delay(1500)
 
             port = selected
@@ -92,9 +91,11 @@ class SpeeduinoSerialConnection(
         if (!isConnected) throw Exception("Nao conectado")
         try {
             Logger.d(TAG, "Send ${data.size} bytes: ${data.previewHex()}")
+            ConnectionTrace.tx("serial", data)
             outputStream?.write(data)
             outputStream?.flush()
         } catch (e: Exception) {
+            ConnectionTrace.error("serial", "erro ao enviar: ${e.javaClass.simpleName}: ${e.message}", e)
             handleError("Erro ao enviar dados: ${e.message}")
             throw e
         }
@@ -109,6 +110,7 @@ class SpeeduinoSerialConnection(
                 readAvailable()
             }
         } catch (e: Exception) {
+            ConnectionTrace.error("serial", "erro ao receber: ${e.javaClass.simpleName}: ${e.message}", e)
             handleError("Erro ao receber dados: ${e.message}")
             throw e
         }
@@ -122,9 +124,9 @@ class SpeeduinoSerialConnection(
 
     override fun supportsModernProtocol(): Boolean = enableModernProtocol
 
-    override fun supportsModernProtocolFallback(): Boolean = enableModernProtocol
+    override fun supportsModernProtocolFallback(): Boolean = false
 
-    override fun prefersLegacyProtocol(): Boolean = true
+    override fun prefersLegacyProtocol(): Boolean = false
 
     override fun legacyFirmwareHandshakeAttempts(): Int = 3
 
@@ -142,6 +144,15 @@ class SpeeduinoSerialConnection(
         try {
             port?.flushIOBuffers()
         } catch (_: Exception) {
+        }
+    }
+
+    override fun clearInputBuffer() {
+        try {
+            port?.flushIOBuffers()
+            Logger.d(TAG, "Input buffer limpo")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Falha ao limpar input buffer: ${e.message}")
         }
     }
 
@@ -163,7 +174,7 @@ class SpeeduinoSerialConnection(
         val selected = port ?: return ByteArray(0)
 
         while (totalRead < size) {
-            val available = selected?.bytesAvailable() ?: -1
+            val available = selected.bytesAvailable()
             if (available > 0) {
                 val toRead = minOf(available, size - totalRead)
                 val read = selected.readBytes(buffer, toRead, totalRead)
@@ -181,12 +192,13 @@ class SpeeduinoSerialConnection(
 
         val result = buffer.copyOf(totalRead)
         Logger.d(TAG, "Receive exact got ${result.size} bytes: ${result.previewHex()}")
+        ConnectionTrace.rx("serial", result)
         return result
     }
 
     private fun readAvailable(): ByteArray {
         val selected = port ?: return ByteArray(0)
-        val available = selected?.bytesAvailable() ?: 0
+        val available = selected.bytesAvailable()
         if (available <= 0) {
             return ByteArray(0)
         }
@@ -195,6 +207,7 @@ class SpeeduinoSerialConnection(
         val read = selected.readBytes(buffer, buffer.size)
         val result = buffer.copyOf(maxOf(read, 0))
         Logger.d(TAG, "Receive (read avail) ${result.size} bytes: ${result.previewHex()}")
+        ConnectionTrace.rx("serial", result)
         return result
     }
 

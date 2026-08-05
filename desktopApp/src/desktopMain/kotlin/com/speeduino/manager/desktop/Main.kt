@@ -17,7 +17,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.speeduino.manager.connection.ConnectionTrace
+import com.speeduino.manager.connection.ConnectionTraceSink
 import com.speeduino.manager.desktop.app.DesktopAppShell
+import com.speeduino.manager.shared.Logger
+import java.io.PrintWriter
+import java.io.StringWriter
 
 private val SpeeduinoColorScheme = lightColorScheme(
     primary = Color(0xFF305C4F),
@@ -65,6 +70,10 @@ private fun SpeeduinoDesktopTheme(content: @Composable () -> Unit) {
 }
 
 fun main() = application {
+    ConnectionTrace.enabled = true
+    ConnectionTrace.sink = DesktopConnectionTraceSink
+    Logger.i("DesktopMain", "Desktop app started with ConnectionTrace enabled")
+
     val language by LocalizationManager.language.collectAsState()
     val strings = remember(language) { Strings(Translations.forLanguage(language)) }
 
@@ -78,5 +87,28 @@ fun main() = application {
                 DesktopAppShell()
             }
         }
+    }
+}
+
+private object DesktopConnectionTraceSink : ConnectionTraceSink {
+    override fun onTx(transport: String, data: ByteArray) {
+        Logger.d("Trace/$transport", "TX ${data.size} bytes: ${data.toHexString()}")
+    }
+
+    override fun onRx(transport: String, data: ByteArray) {
+        Logger.d("Trace/$transport", "RX ${data.size} bytes: ${data.toHexString()}")
+    }
+
+    override fun onInfo(transport: String, message: String) {
+        Logger.i("Trace/$transport", message)
+    }
+
+    override fun onError(transport: String, message: String, throwable: Throwable?) {
+        Logger.e("Trace/$transport", message, throwable)
+    }
+
+    private fun ByteArray.toHexString(max: Int = 96): String {
+        val shown = take(max).joinToString(" ") { "%02X".format(it) }
+        return if (size > max) "$shown ..." else shown
     }
 }

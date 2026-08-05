@@ -50,8 +50,8 @@ data class IgnitionTable(
                                  76, 83, 90, 96, 100, 105, 110, 120)
 
             // Create sample Ignition advance values (realistic spark curve)
-            val values = loadBins.mapIndexed { rowIndex, load ->
-                rpmBins.mapIndexed { colIndex, rpm ->
+            val values = loadBins.mapIndexed { _, load ->
+                rpmBins.mapIndexed { _, rpm ->
                     // Simulate realistic ignition curve
                     // Lower RPM and load = more advance
                     // Higher load = less advance (avoid knock)

@@ -57,8 +57,8 @@ data class VeTable(
                                  90, 100, 110, 120, 130, 140, 150, 160)
 
             // Create sample VE values (realistic curve)
-            val values = loadBins.mapIndexed { rowIndex, load ->
-                rpmBins.mapIndexed { colIndex, rpm ->
+            val values = loadBins.mapIndexed { _, load ->
+                rpmBins.mapIndexed { _, rpm ->
                     // Simulate realistic VE curve (peaks around mid-range)
                     val baseVE = 75
                     val rpmFactor = when {

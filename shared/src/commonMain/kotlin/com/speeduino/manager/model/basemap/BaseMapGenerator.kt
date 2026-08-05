@@ -134,7 +134,6 @@ class BaseMapGenerator(
             stoichAfr = stoichAfr,
             requiredFuelMs = requiredFuelMs,
             existing = existingConstants,
-            injectorFlowCcPerMin = injectorFlowCcPerMin,
             algorithm = algorithm,
         )
 
@@ -337,7 +336,6 @@ class BaseMapGenerator(
         stoichAfr: Double,
         requiredFuelMs: Double,
         existing: EngineConstants?,
-        injectorFlowCcPerMin: Double,
         algorithm: Algorithm,
     ): EngineConstants {
         val base = existing ?: EngineConstants(

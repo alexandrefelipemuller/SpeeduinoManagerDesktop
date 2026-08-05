@@ -5,6 +5,7 @@ import com.speeduino.manager.SpeeduinoClient
 import com.speeduino.manager.SpeeduinoLiveData
 import com.speeduino.manager.definition.IniCatalogEntry
 import com.speeduino.manager.definition.IniDefinition
+import com.speeduino.manager.shared.Logger
 import com.speeduino.manager.compare.BeforeAfterLogComparator
 import com.speeduino.manager.compare.LogCompareException
 import com.speeduino.manager.compare.LogCompareReason
@@ -89,6 +90,10 @@ internal data class DesktopDiagnosticSummary(
 internal class DesktopSpeeduinoController(
     private val scope: CoroutineScope
 ) {
+    companion object {
+        private const val TAG = "DesktopController"
+    }
+
     private val _connectionState = MutableStateFlow(ConnectionState())
     val connectionState = _connectionState.asStateFlow()
 
@@ -319,12 +324,26 @@ internal class DesktopSpeeduinoController(
                 _productString.value = activeClient.getProductString()
                 _connectionInfo.value = activeClient.getConnectionInfo()
                 _readOnlySafeMode.value = activeClient.isReadOnlySafeMode()
-                applyConfiguredIniDefinition(activeClient)
-                refreshDiagnosticSummary()
-                val configsDownloaded = downloadAllConfigs(autoRestartStream = false)
-                if (configsDownloaded && _connectionState.value.isConnected) {
-                    activeClient.startLiveDataStream(_streamIntervalMs.value)
-                    ConnectionDiagnosticsLogger.log("desktop", "stream", "started after config download")
+                runCatching {
+                    applyConfiguredIniDefinition(activeClient)
+                    refreshDiagnosticSummary()
+                    val configsDownloaded = downloadAllConfigs(autoRestartStream = false)
+                    if (configsDownloaded && _connectionState.value.isConnected) {
+                        activeClient.startLiveDataStream(_streamIntervalMs.value)
+                        ConnectionDiagnosticsLogger.log("desktop", "stream", "started after config download")
+                    }
+                }.onFailure { error ->
+                    val message = "Falha ao aplicar definicao .ini: ${error.message ?: "unknown"}"
+                    Logger.w(TAG, message)
+                    _lastError.value = message
+                }
+
+                runCatching {
+                    downloadAllConfigs(autoRestartStream = true)
+                }.onFailure { error ->
+                    val message = "Falha no download inicial das configuracoes: ${error.message ?: "unknown"}"
+                    Logger.w(TAG, message)
+                    _lastError.value = message
                 }
             } catch (e: Exception) {
                 ConnectionDiagnosticsLogger.logError("desktop", "connect", "failed: ${e.message ?: "unknown"}", e)

@@ -121,7 +121,7 @@ class TableValidator(private val metadata: TableMetadata) {
         checkExtremeVeValues(table.values, warnings)
     }
 
-    private fun validateVeValues(values: List<List<Int>>, errors: MutableList<String>, warnings: MutableList<String>) {
+    private fun validateVeValues(values: List<List<Int>>, errors: MutableList<String>, _warnings: MutableList<String>) {
         var outOfRangeCount = 0
 
         values.forEachIndexed { row, rowValues ->
@@ -187,7 +187,7 @@ class TableValidator(private val metadata: TableMetadata) {
         checkExcessiveRetard(table.values, warnings)
     }
 
-    private fun validateIgnitionValues(values: List<List<Int>>, errors: MutableList<String>, warnings: MutableList<String>) {
+    private fun validateIgnitionValues(values: List<List<Int>>, errors: MutableList<String>, _warnings: MutableList<String>) {
         var outOfRangeCount = 0
         val allowedMax = minOf(metadata.valueRange.endInclusive, IGNITION_ADVANCE_HARD_MAX)
         val allowedRange = metadata.valueRange.start..allowedMax

@@ -51,8 +51,8 @@ data class AfrTable(
                                  60, 70, 80, 90, 100, 110, 120, 130)
 
             // Create sample AFR target values (realistic curve)
-            val values = loadBins.mapIndexed { rowIndex, load ->
-                rpmBins.mapIndexed { colIndex, rpm ->
+            val values = loadBins.mapIndexed { _, load ->
+                rpmBins.mapIndexed { _, rpm ->
                     // Simulate realistic AFR targets:
                     // - Light load (cruise): Lean (15.0-15.5 AFR)
                     // - Medium load: Stoichiometric (14.7 AFR)
