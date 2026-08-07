@@ -231,6 +231,12 @@ private fun <T> MapTableScreen(
         hasChanges = false
     }
 
+    LaunchedEffect(Unit) {
+        if (table == null) {
+            onLoad()
+        }
+    }
+
     val rpm = workingTable?.let(rpmBins).orEmpty()
     val load = workingTable?.let(loadBins).orEmpty()
     val grid = workingTable?.let(values).orEmpty()
@@ -249,7 +255,7 @@ private fun <T> MapTableScreen(
                 Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                 Text(text = description, style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = onLoad) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = onLoad, enabled = workingTable == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         onClick = { workingTable?.let(onSave); hasChanges = false },
                         enabled = workingTable != null && hasChanges

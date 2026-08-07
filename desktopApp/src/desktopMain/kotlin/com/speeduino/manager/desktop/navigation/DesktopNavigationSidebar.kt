@@ -76,8 +76,8 @@ internal fun NavigationSidebar(
                             )
                         }
                         section.entries.forEach { entry ->
-                            NavigationEntryRow(
-                                route = entry.route,
+                            NavigationEntryTree(
+                                entry = entry,
                                 currentRoute = currentRoute,
                                 selectedTopLevelRoute = selectedTopLevelRoute,
                                 strings = strings,
@@ -85,19 +85,6 @@ internal fun NavigationSidebar(
                                 onRouteSelected = onRouteSelected,
                                 depth = 0,
                             )
-                            if (entry.children.isNotEmpty()) {
-                                entry.children.forEach { child ->
-                                    NavigationEntryRow(
-                                        route = child,
-                                        currentRoute = currentRoute,
-                                        selectedTopLevelRoute = selectedTopLevelRoute,
-                                        strings = strings,
-                                        compact = compact,
-                                        onRouteSelected = onRouteSelected,
-                                        depth = 1,
-                                    )
-                                }
-                            }
                         }
                         Spacer(modifier = Modifier.height(if (compact) 2.dp else 8.dp))
                     }
@@ -109,6 +96,38 @@ internal fun NavigationSidebar(
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
             )
         }
+    }
+}
+
+@Composable
+private fun NavigationEntryTree(
+    entry: NavEntry,
+    currentRoute: DesktopRoute,
+    selectedTopLevelRoute: DesktopRoute,
+    strings: com.speeduino.manager.desktop.Strings,
+    compact: Boolean,
+    onRouteSelected: (DesktopRoute) -> Unit,
+    depth: Int,
+) {
+    NavigationEntryRow(
+        route = entry.route,
+        currentRoute = currentRoute,
+        selectedTopLevelRoute = selectedTopLevelRoute,
+        strings = strings,
+        compact = compact,
+        onRouteSelected = onRouteSelected,
+        depth = depth,
+    )
+    entry.children.forEach { child ->
+        NavigationEntryTree(
+            entry = child,
+            currentRoute = currentRoute,
+            selectedTopLevelRoute = selectedTopLevelRoute,
+            strings = strings,
+            compact = compact,
+            onRouteSelected = onRouteSelected,
+            depth = depth + 1,
+        )
     }
 }
 

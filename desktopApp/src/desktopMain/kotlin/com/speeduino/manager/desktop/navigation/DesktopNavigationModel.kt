@@ -14,7 +14,7 @@ internal data class NavSection(val titleKey: String, val entries: List<NavEntry>
 
 internal data class NavEntry(
     val route: DesktopRoute,
-    val children: List<DesktopRoute> = emptyList(),
+    val children: List<NavEntry> = emptyList(),
 )
 
 internal enum class DesktopRoute(
@@ -24,16 +24,17 @@ internal enum class DesktopRoute(
     val topLevel: Boolean = false
 ) {
     Home("route.home", "route.home", Icons.Default.Home, topLevel = true),
-    Settings("app.settingsLabel", "app.settingsTitle", Icons.Default.Settings, topLevel = true),
-    Institutional("route.institutional", "label.institutionalTitle", Icons.Default.Info, topLevel = true),
-    More("nav.sectionMore", "nav.sectionMore", Icons.Default.Info, topLevel = true),
     Dashboard("route.dashboard", "route.dashboard", Icons.Default.Dashboard, topLevel = true),
-    Connection("route.connection", "route.connection", Icons.Default.Cable, topLevel = true),
-    Fuel("route.fuel", "route.fuel", Icons.Default.TableChart, topLevel = true),
-    Ignition("route.ignition", "route.ignition", Icons.Default.TableChart, topLevel = true),
-    EngineSetup("route.engineSetup", "route.engineSetup", Icons.Default.Settings, topLevel = true),
-    EngineOperation("route.engineOperation", "route.engineOperation", Icons.Default.Settings, topLevel = true),
+    Ecu("route.ecu", "route.ecu", Icons.Default.TableChart, topLevel = true),
     Tools("route.tools", "route.tools", Icons.Default.Build, topLevel = true),
+    Settings("app.settingsLabel", "app.settingsTitle", Icons.Default.Settings),
+    Institutional("route.institutional", "label.institutionalTitle", Icons.Default.Info),
+    More("nav.sectionMore", "nav.sectionMore", Icons.Default.Info),
+    Connection("route.connection", "route.connection", Icons.Default.Cable),
+    Fuel("route.fuel", "route.fuel", Icons.Default.TableChart),
+    Ignition("route.ignition", "route.ignition", Icons.Default.TableChart),
+    EngineSetup("route.engineSetup", "route.engineSetup", Icons.Default.Settings),
+    EngineOperation("route.engineOperation", "route.engineOperation", Icons.Default.Settings),
     ConnectionSettings("label.wifiTcp", "label.wifiTcp", Icons.Default.Cable),
     BluetoothConnection("label.bluetooth", "label.bluetooth", Icons.Default.Cable),
     UsbSerialConnection("label.usbSerial", "label.usbSerial", Icons.Default.Cable),
@@ -69,24 +70,31 @@ internal enum class DesktopRoute(
 internal fun navSections(): List<NavSection> {
     return listOf(
         NavSection(
-            titleKey = "nav.sectionApp",
+            titleKey = "route.home",
+            entries = listOf(NavEntry(DesktopRoute.Home))
+        ),
+        NavSection(
+            titleKey = "route.dashboard",
+            entries = listOf(NavEntry(DesktopRoute.Dashboard))
+        ),
+        NavSection(
+            titleKey = "route.ecu",
             entries = listOf(
-                NavEntry(DesktopRoute.Home),
-                NavEntry(DesktopRoute.Dashboard),
-                NavEntry(DesktopRoute.Settings),
-                NavEntry(DesktopRoute.More),
+                NavEntry(
+                    DesktopRoute.Ecu,
+                    children = listOf(
+                        fuelNavEntry(),
+                        ignitionNavEntry(),
+                        engineSetupNavEntry(),
+                        engineOperationNavEntry(),
+                    )
+                )
             )
         ),
-        connectionNavSection(),
-        fuelNavSection(),
-        ignitionNavSection(),
-        engineSetupNavSection(),
-        engineOperationNavSection(),
-        toolsNavSection(),
         NavSection(
-            titleKey = "nav.sectionMore",
-            entries = listOf(NavEntry(DesktopRoute.Institutional))
-        )
+            titleKey = "route.tools",
+            entries = listOf(toolsNavEntry())
+        ),
     )
 }
 
@@ -120,15 +128,22 @@ internal fun parentRoute(route: DesktopRoute): DesktopRoute? {
         DesktopRoute.ClosedLoopCorrections,
         DesktopRoute.EngineProtection,
         DesktopRoute.RevLimiterConfig -> DesktopRoute.EngineOperation
+        DesktopRoute.Fuel,
+        DesktopRoute.Ignition,
+        DesktopRoute.EngineSetup,
+        DesktopRoute.EngineOperation -> DesktopRoute.Ecu
         DesktopRoute.LogViewer,
         DesktopRoute.RealTimeMonitor,
         DesktopRoute.LogAnalyzer,
         DesktopRoute.BeforeAfter,
-        DesktopRoute.VirtualDyno -> DesktopRoute.Tools
+        DesktopRoute.VirtualDyno,
+        DesktopRoute.Connection,
+        DesktopRoute.Settings,
+        DesktopRoute.Institutional,
+        DesktopRoute.More -> DesktopRoute.Tools
         DesktopRoute.MapsTables -> DesktopRoute.Fuel
         DesktopRoute.ConfigsTuning -> DesktopRoute.EngineSetup
         DesktopRoute.LogsEcuTools -> DesktopRoute.Tools
-        DesktopRoute.More -> null
         else -> null
     }
 }

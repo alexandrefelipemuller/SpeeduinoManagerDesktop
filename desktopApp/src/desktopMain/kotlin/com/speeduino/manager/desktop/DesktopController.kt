@@ -59,6 +59,7 @@ import com.speeduino.manager.transport.VagTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -92,6 +93,9 @@ internal class DesktopSpeeduinoController(
 ) {
     companion object {
         private const val TAG = "DesktopController"
+        private const val CONNECT_RETRY_ATTEMPTS = 3
+        private const val CONNECT_RETRY_DELAY_MS = 1000L
+        private const val RECONNECT_DELAY_MS = 2000L
     }
 
     private val _connectionState = MutableStateFlow(ConnectionState())
@@ -217,6 +221,8 @@ internal class DesktopSpeeduinoController(
     private var client: EcuTransport? = null
     private var localSessionDir: File? = null
     private var ecuSessionDir: File? = null
+    private var manualDisconnect = false
+    private var reconnectJob: Job? = null
     private val beforeAfterSelectionStore = DesktopBeforeAfterSelectionStore()
     private val tuningAssistantStateStore = DesktopTuningAssistantStateStore()
     private val beforeAfterComparator = BeforeAfterLogComparator()
@@ -276,7 +282,11 @@ internal class DesktopSpeeduinoController(
         if (!settings.autoConnectOnStart || _connectionState.value.isConnected) {
             return
         }
+        connectUsingLastProfile()
+    }
 
+    private fun connectUsingLastProfile() {
+        val settings = _desktopSettings.value
         when (settings.lastConnectionType) {
             ConnectionType.TCP -> {
                 val host = settings.lastTcpHost
@@ -301,8 +311,27 @@ internal class DesktopSpeeduinoController(
         }
     }
 
+    /**
+     * Reconecta automaticamente apos uma queda inesperada de conexao (nunca apos
+     * desconexao manual do usuario), usando o ultimo perfil de conexao salvo.
+     */
+    private fun scheduleAutomaticReconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch(Dispatchers.IO) {
+            delay(RECONNECT_DELAY_MS)
+            if (manualDisconnect || _connectionState.value.isConnected) {
+                return@launch
+            }
+            ConnectionDiagnosticsLogger.log("desktop", "reconnect", "attempting automatic reconnect")
+            connectUsingLastProfile()
+        }
+    }
+
     private fun connectInternal(newConnection: ISpeeduinoConnection) {
-        disconnect()
+        manualDisconnect = false
+        reconnectJob?.cancel()
+        reconnectJob = null
+        teardownConnection()
 
         connection = newConnection
         client = createTransport(checkNotNull(connection))
@@ -318,7 +347,29 @@ internal class DesktopSpeeduinoController(
                     activeClient.clearManualFirmwareProfile()
                 }
 
-                activeClient.connect()
+                var connectAttempt = 0
+                var lastConnectError: Exception? = null
+                while (connectAttempt < CONNECT_RETRY_ATTEMPTS) {
+                    connectAttempt++
+                    try {
+                        activeClient.connect()
+                        lastConnectError = null
+                        break
+                    } catch (e: Exception) {
+                        lastConnectError = e
+                        if (connectAttempt < CONNECT_RETRY_ATTEMPTS) {
+                            ConnectionDiagnosticsLogger.log(
+                                "desktop",
+                                "connect",
+                                "attempt $connectAttempt/$CONNECT_RETRY_ATTEMPTS failed: ${e.message ?: "unknown"}, retrying"
+                            )
+                            delay(CONNECT_RETRY_DELAY_MS)
+                        }
+                    }
+                }
+                if (lastConnectError != null) {
+                    throw lastConnectError
+                }
                 ConnectionDiagnosticsLogger.log("desktop", "connect", "handshake complete ${activeClient.getConnectionInfo()}")
                 _firmwareInfo.value = activeClient.getFirmwareInfoCached()
                 _productString.value = activeClient.getProductString()
@@ -327,19 +378,11 @@ internal class DesktopSpeeduinoController(
                 runCatching {
                     applyConfiguredIniDefinition(activeClient)
                     refreshDiagnosticSummary()
-                    val configsDownloaded = downloadAllConfigs(autoRestartStream = false)
+                    val configsDownloaded = downloadAllConfigs(autoRestartStream = true)
                     if (configsDownloaded && _connectionState.value.isConnected) {
                         activeClient.startLiveDataStream(_streamIntervalMs.value)
                         ConnectionDiagnosticsLogger.log("desktop", "stream", "started after config download")
                     }
-                }.onFailure { error ->
-                    val message = "Falha ao aplicar definicao .ini: ${error.message ?: "unknown"}"
-                    Logger.w(TAG, message)
-                    _lastError.value = message
-                }
-
-                runCatching {
-                    downloadAllConfigs(autoRestartStream = true)
                 }.onFailure { error ->
                     val message = "Falha no download inicial das configuracoes: ${error.message ?: "unknown"}"
                     Logger.w(TAG, message)
@@ -433,10 +476,15 @@ internal class DesktopSpeeduinoController(
                 }
             },
             onConnectionStateChanged = { isConnected ->
+                val wasConnected = _connectionState.value.isConnected
                 _connectionState.value = if (isConnected) {
                     ConnectionState(ConnectionStatus.Connected)
                 } else {
                     ConnectionState(ConnectionStatus.Disconnected)
+                }
+                if (!isConnected && wasConnected && !manualDisconnect) {
+                    ConnectionDiagnosticsLogger.log("desktop", "connect", "unexpected drop, scheduling reconnect")
+                    scheduleAutomaticReconnect()
                 }
             },
             onError = { error ->
@@ -470,6 +518,13 @@ internal class DesktopSpeeduinoController(
     }
 
     fun disconnect() {
+        manualDisconnect = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        teardownConnection()
+    }
+
+    private fun teardownConnection() {
         pollingJob?.cancel()
         pollingJob = null
         client?.stopLiveDataStream()
@@ -1041,16 +1096,17 @@ internal class DesktopSpeeduinoController(
                 message = "Download concluído.",
                 lastSessionDir = sessionDir
             )
-            val localDir = localSessionDir
-            val resolvedSession = decision.sessionDir
-            if (resolvedSession != null) {
-                localSessionDir = resolvedSession
-                loadTablesFromSession(resolvedSession)
-            } else if (localDir != null) {
-                val prompt = decision.prompt
-                if (prompt != null) {
-                    _syncPrompt.value = prompt.toDesktop()
-                }
+            // A ECU e sempre a fonte de verdade: carrega os dados baixados dela imediatamente,
+            // sem esperar o usuario decidir nada. Se houver uma sessao local divergente, o prompt
+            // ainda aparece, mas apenas como opcao de restaurar o backup local por cima - nunca
+            // bloqueia o preenchimento das telas.
+            if (sessionDir != null) {
+                localSessionDir = sessionDir
+                loadTablesFromSession(sessionDir)
+            }
+            val prompt = decision.prompt
+            if (prompt != null) {
+                _syncPrompt.value = prompt.toDesktop()
             }
         } else {
             _configState.value = _configState.value.copy(

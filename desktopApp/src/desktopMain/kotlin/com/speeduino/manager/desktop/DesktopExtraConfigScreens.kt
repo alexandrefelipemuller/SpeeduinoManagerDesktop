@@ -76,7 +76,8 @@ internal fun IdleControlScreenDesktop(controller: DesktopSpeeduinoController) {
                 )
                 controller.saveIdleControlSettings(updated)
             },
-            saveEnabled = hasChanges
+            saveEnabled = hasChanges,
+            loadEnabled = settings == null || hasChanges
         )
 
         ConfigSectionCard(
@@ -192,7 +193,8 @@ internal fun ClosedLoopCorrectionsScreenDesktop(controller: DesktopSpeeduinoCont
                 )
                 controller.saveClosedLoopCorrections(updated)
             },
-            saveEnabled = hasChanges
+            saveEnabled = hasChanges,
+            loadEnabled = config == null || hasChanges
         )
 
         ConfigSectionCard(
@@ -271,6 +273,7 @@ private fun ConfigHeaderCard(
     onLoad: () -> Unit,
     onSave: () -> Unit,
     saveEnabled: Boolean,
+    loadEnabled: Boolean = saveEnabled,
 ) {
     val strings = LocalStrings.current
     Surface(
@@ -286,7 +289,7 @@ private fun ConfigHeaderCard(
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onLoad) { Text(strings["action.loadEcu"]) }
+                FilledTonalButton(onClick = onLoad, enabled = loadEnabled) { Text(strings["action.loadEcu"]) }
                 FilledTonalButton(onClick = onSave, enabled = saveEnabled) { Text(strings["action.saveEcu"]) }
             }
         }

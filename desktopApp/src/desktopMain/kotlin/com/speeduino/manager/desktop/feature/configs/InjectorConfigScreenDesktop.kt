@@ -47,6 +47,12 @@ internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController)
         hasChanges = false
     }
 
+    LaunchedEffect(Unit) {
+        if (constants == null) {
+            controller.loadEngineConstants()
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -58,7 +64,7 @@ internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController)
                 Text(strings["label.injectorConfigTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                 Text(strings["label.injectorConfigSubtitle"], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = controller::loadEngineConstants) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = controller::loadEngineConstants, enabled = constants == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         enabled = hasChanges && constants != null,
                         onClick = {

@@ -91,6 +91,12 @@ internal fun EngineConstantsScreenDesktop(controller: DesktopSpeeduinoController
         hasChanges = false
     }
 
+    LaunchedEffect(Unit) {
+        if (constants == null) {
+            controller.loadEngineConstants()
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -109,7 +115,7 @@ internal fun EngineConstantsScreenDesktop(controller: DesktopSpeeduinoController
                 )
                 Text(strings["label.engineConstantsSubtitle"], style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = controller::loadEngineConstants) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = controller::loadEngineConstants, enabled = constants == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         onClick = {
                             val updated = EngineConstants(
@@ -272,6 +278,12 @@ internal fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController
         hasChanges = false
     }
 
+    LaunchedEffect(Unit) {
+        if (settings == null) {
+            controller.loadTriggerSettings()
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -286,7 +298,7 @@ internal fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController
                 Text(strings["label.triggerTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                 Text(strings["label.triggerSubtitle"], style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = controller::loadTriggerSettings) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = controller::loadTriggerSettings, enabled = settings == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         onClick = {
                             val updated = TriggerSettings(

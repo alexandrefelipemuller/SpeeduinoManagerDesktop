@@ -1,10 +1,9 @@
 package com.speeduino.manager.desktop.navigation
 
-internal fun ignitionNavSection(): NavSection {
-    return NavSection(
-        titleKey = "nav.sectionIgnition",
-        entries = listOf(
-            NavEntry(DesktopRoute.Ignition),
+internal fun ignitionNavEntry(): NavEntry {
+    return NavEntry(
+        DesktopRoute.Ignition,
+        children = listOf(
             NavEntry(DesktopRoute.IgnitionConfig),
             NavEntry(DesktopRoute.IgnitionTable),
             NavEntry(DesktopRoute.IgnitionTable2),
@@ -14,12 +13,10 @@ internal fun ignitionNavSection(): NavSection {
     )
 }
 
-internal fun engineSetupNavSection(): NavSection {
-    return NavSection(
-        titleKey = "nav.sectionEngineSetup",
-        entries = listOf(
-            NavEntry(DesktopRoute.EngineSetup),
-            NavEntry(DesktopRoute.ConfigsTuning),
+internal fun engineSetupNavEntry(): NavEntry {
+    return NavEntry(
+        DesktopRoute.EngineSetup,
+        children = listOf(
             NavEntry(DesktopRoute.EngineConstants),
             NavEntry(DesktopRoute.InjectorConfig),
             NavEntry(DesktopRoute.InputOutputConfig),
@@ -29,11 +26,10 @@ internal fun engineSetupNavSection(): NavSection {
     )
 }
 
-internal fun engineOperationNavSection(): NavSection {
-    return NavSection(
-        titleKey = "nav.sectionEngineOperation",
-        entries = listOf(
-            NavEntry(DesktopRoute.EngineOperation),
+internal fun engineOperationNavEntry(): NavEntry {
+    return NavEntry(
+        DesktopRoute.EngineOperation,
+        children = listOf(
             NavEntry(DesktopRoute.IdleControl),
             NavEntry(DesktopRoute.ClosedLoopCorrections),
             NavEntry(DesktopRoute.EngineProtection),
