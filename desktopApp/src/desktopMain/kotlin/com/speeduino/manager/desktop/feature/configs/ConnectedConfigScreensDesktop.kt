@@ -27,11 +27,11 @@ import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.desktop.ui.ToggleField
-import com.speeduino.manager.model.CutMethod
-import com.speeduino.manager.model.EngineProtectionConfig
-import com.speeduino.manager.model.PressureCalibration
-import com.speeduino.manager.model.ProtectionCut
-import com.speeduino.manager.model.TpsCalibration
+import io.ecucore.model.CutMethod
+import io.ecucore.model.EngineProtectionConfig
+import io.ecucore.model.PressureCalibration
+import io.ecucore.model.ProtectionCut
+import io.ecucore.model.TpsCalibration
 import kotlinx.coroutines.launch
 
 @Composable

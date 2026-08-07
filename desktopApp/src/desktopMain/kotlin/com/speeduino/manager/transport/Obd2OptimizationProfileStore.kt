@@ -1,5 +1,7 @@
 package com.speeduino.manager.transport
 
+import io.ecucore.transport.Obd2ProfileStore
+import io.ecucore.transport.Obd2PersistedProfile
 import com.speeduino.manager.desktop.DesktopSettingsStore
 import java.io.File
 import java.security.MessageDigest

@@ -1,54 +1,54 @@
 package com.speeduino.manager.desktop
 
-import com.speeduino.manager.ConfigManager
-import com.speeduino.manager.SpeeduinoClient
-import com.speeduino.manager.SpeeduinoLiveData
-import com.speeduino.manager.definition.IniCatalogEntry
-import com.speeduino.manager.definition.IniDefinition
-import com.speeduino.manager.shared.Logger
-import com.speeduino.manager.compare.BeforeAfterLogComparator
-import com.speeduino.manager.compare.LogCompareException
-import com.speeduino.manager.compare.LogCompareReason
-import com.speeduino.manager.compare.LogCompareResult
+import io.ecucore.ConfigManager
+import io.ecucore.SpeeduinoClient
+import io.ecucore.SpeeduinoLiveData
+import io.ecucore.definition.IniCatalogEntry
+import io.ecucore.definition.IniDefinition
+import io.ecucore.shared.Logger
+import io.ecucore.compare.BeforeAfterLogComparator
+import io.ecucore.compare.LogCompareException
+import io.ecucore.compare.LogCompareReason
+import io.ecucore.compare.LogCompareResult
 import com.speeduino.manager.compare.DesktopBeforeAfterSelection
 import com.speeduino.manager.compare.DesktopBeforeAfterSelectionStore
 import com.speeduino.manager.tuning.DesktopTuningAssistantState
 import com.speeduino.manager.tuning.DesktopTuningAssistantStateStore
-import com.speeduino.manager.connection.ISpeeduinoConnection
-import com.speeduino.manager.connection.SpeeduinoSerialConnection
-import com.speeduino.manager.connection.SpeeduinoTcpConnection
-import com.speeduino.manager.ecu.FirmwareInfo
-import com.speeduino.manager.model.AfrTable
-import com.speeduino.manager.model.DwellTable
-import com.speeduino.manager.model.ClosedLoopCorrectionConfig
-import com.speeduino.manager.model.ClosedLoopCorrectionMapper
-import com.speeduino.manager.model.EngineConstants
-import com.speeduino.manager.model.EngineProtectionConfig
-import com.speeduino.manager.model.FirmwareEra
-import com.speeduino.manager.model.IdleControlSettings
-import com.speeduino.manager.model.IgnitionTable
-import com.speeduino.manager.model.OutputField
-import com.speeduino.manager.model.PressureCalibration
-import com.speeduino.manager.model.TpsCalibration
-import com.speeduino.manager.model.TriggerSettings
-import com.speeduino.manager.model.VeTable
-import com.speeduino.manager.model.RusefiInputOutputSnapshot
-import com.speeduino.manager.model.SecondarySerialConfig
-import com.speeduino.manager.model.SpeeduinoOutputChannels
-import com.speeduino.manager.model.basemap.GeneratedBaseMap
-import com.speeduino.manager.model.logging.LiveLogEntry
-import com.speeduino.manager.model.logging.LiveLogRecorder
-import com.speeduino.manager.model.logging.LiveLogSnapshot
-import com.speeduino.manager.sync.ConfigSyncService
-import com.speeduino.manager.sync.SessionSyncPrompt
-import com.speeduino.manager.tuning.AnalyzerResult
-import com.speeduino.manager.tuning.TuningAssistantAnalyzer
-import com.speeduino.manager.tuning.TuningStrategy
+import io.ecucore.connection.ISpeeduinoConnection
+import io.ecucore.connection.SpeeduinoSerialConnection
+import io.ecucore.connection.SpeeduinoTcpConnection
+import io.ecucore.ecu.FirmwareInfo
+import io.ecucore.model.AfrTable
+import io.ecucore.model.DwellTable
+import io.ecucore.model.ClosedLoopCorrectionConfig
+import io.ecucore.model.ClosedLoopCorrectionMapper
+import io.ecucore.model.EngineConstants
+import io.ecucore.model.EngineProtectionConfig
+import io.ecucore.model.FirmwareEra
+import io.ecucore.model.IdleControlSettings
+import io.ecucore.model.IgnitionTable
+import io.ecucore.model.OutputField
+import io.ecucore.model.PressureCalibration
+import io.ecucore.model.TpsCalibration
+import io.ecucore.model.TriggerSettings
+import io.ecucore.model.VeTable
+import io.ecucore.model.RusefiInputOutputSnapshot
+import io.ecucore.model.SecondarySerialConfig
+import io.ecucore.model.SpeeduinoOutputChannels
+import io.ecucore.model.basemap.GeneratedBaseMap
+import io.ecucore.model.logging.LiveLogEntry
+import io.ecucore.model.logging.LiveLogRecorder
+import io.ecucore.model.logging.LiveLogSnapshot
+import io.ecucore.sync.ConfigSyncService
+import io.ecucore.sync.SessionSyncPrompt
+import io.ecucore.tuning.AnalyzerResult
+import io.ecucore.tuning.TuningAssistantAnalyzer
+import io.ecucore.tuning.TuningStrategy
 import com.speeduino.manager.telemetry.ConnectionDiagnosticsLogger
 import com.speeduino.manager.telemetry.DiagnosticsFlags
 import com.speeduino.manager.telemetry.Obd2InvestigationRecorder
 import com.speeduino.manager.transport.AutoDetectEcuTransport
-import com.speeduino.manager.transport.EcuTransport
+import io.ecucore.transport.EcuTransport
 import com.speeduino.manager.transport.Obd2OptimizationProfileStore
 import com.speeduino.manager.transport.Obd2Transport
 import com.speeduino.manager.transport.PsaConnectionSessionStore
@@ -1494,6 +1494,8 @@ internal class DesktopSpeeduinoController(
                 candidateInjectionDurationMs = cells.parseOptionalDouble(candidateInjectionMsIndex),
                 candidateInjectionDurationMirrorMs = cells.parseOptionalDouble(candidateInjectionMirrorMsIndex),
                 gpsSpeedKph = cells.parseOptionalDouble(gpsSpeedIndex),
+                gpsLatitude = null,
+                gpsLongitude = null,
                 outputChannelBlockSize = 0,
                 outputChannelData = null
             )

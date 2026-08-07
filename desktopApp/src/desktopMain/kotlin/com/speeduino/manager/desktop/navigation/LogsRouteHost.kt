@@ -1,7 +1,7 @@
 package com.speeduino.manager.desktop.navigation
 
 import androidx.compose.runtime.Composable
-import com.speeduino.manager.SpeeduinoLiveData
+import io.ecucore.SpeeduinoLiveData
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.LogsEcuToolsScreenDesktop
 import com.speeduino.manager.desktop.feature.logs.BeforeAfterScreenDesktop
