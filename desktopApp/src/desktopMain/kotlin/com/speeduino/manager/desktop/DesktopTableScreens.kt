@@ -38,11 +38,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.speeduino.manager.model.AfrTable
-import com.speeduino.manager.model.DwellTable
-import com.speeduino.manager.model.Color as SharedColor
-import com.speeduino.manager.model.IgnitionTable
-import com.speeduino.manager.model.VeTable
+import io.ecucore.model.AfrTable
+import io.ecucore.model.DwellTable
+import io.ecucore.model.Color as SharedColor
+import io.ecucore.model.IgnitionTable
+import io.ecucore.model.VeTable
 
 @Composable
 internal fun PlaceholderScreen(title: String, message: String) {
@@ -167,7 +167,7 @@ internal fun DwellTableScreenDesktop(controller: DesktopSpeeduinoController) {
         append("Ignition coil charge time table.")
         table?.let {
             append(" Load axis: ")
-            append(if (it.loadType == DwellTable.LoadType.TPS) "TPS %" else "MAP kPa")
+            append(if (it.loadType == IgnitionTable.LoadType.TPS) "TPS %" else "MAP kPa")
         }
     }
     MapTableScreen(
@@ -180,7 +180,7 @@ internal fun DwellTableScreenDesktop(controller: DesktopSpeeduinoController) {
         parseValue = { it.toIntOrNull() },
         valueRange = 0..10,
         cellColor = { dwellColor(it) },
-        loadAxisLabel = { if (it.loadType == DwellTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
+        loadAxisLabel = { if (it.loadType == IgnitionTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },

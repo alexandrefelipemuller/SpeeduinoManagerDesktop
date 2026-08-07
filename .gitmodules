@@ -1,0 +1,3 @@
+[submodule "ecu-core"]
+	path = ecu-core
+	url = https://github.com/alexandrefelipemuller/ecu-core.git

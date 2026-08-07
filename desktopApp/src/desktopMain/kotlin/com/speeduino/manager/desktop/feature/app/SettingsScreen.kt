@@ -41,8 +41,8 @@ import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.SHIFT_LIGHT_RPM_MAX
 import com.speeduino.manager.desktop.SHIFT_LIGHT_RPM_MIN
-import com.speeduino.manager.units.UnitSystem
-import com.speeduino.manager.units.resolveEffectiveUnitSystem
+import io.ecucore.units.UnitSystem
+import io.ecucore.units.resolveEffectiveUnitSystem
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

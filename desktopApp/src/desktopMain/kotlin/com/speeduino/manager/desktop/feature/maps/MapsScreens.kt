@@ -24,11 +24,11 @@ import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
-import com.speeduino.manager.model.basemap.BaseMapAdjustments
-import com.speeduino.manager.model.basemap.BaseMapGenerator
-import com.speeduino.manager.model.basemap.EngineProfile
-import com.speeduino.manager.model.basemap.FuelType
-import com.speeduino.manager.model.basemap.GeneratedBaseMap
+import io.ecucore.model.basemap.BaseMapAdjustments
+import io.ecucore.model.basemap.BaseMapGenerator
+import io.ecucore.model.basemap.EngineProfile
+import io.ecucore.model.basemap.FuelType
+import io.ecucore.model.basemap.GeneratedBaseMap
 
 @Composable
 internal fun BaseMapWizardScreenDesktop(controller: DesktopSpeeduinoController) {
