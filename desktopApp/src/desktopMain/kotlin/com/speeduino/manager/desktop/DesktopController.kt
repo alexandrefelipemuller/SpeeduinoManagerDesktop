@@ -14,9 +14,14 @@ import com.speeduino.manager.compare.DesktopBeforeAfterSelection
 import com.speeduino.manager.compare.DesktopBeforeAfterSelectionStore
 import com.speeduino.manager.tuning.DesktopTuningAssistantState
 import com.speeduino.manager.tuning.DesktopTuningAssistantStateStore
+import io.ecucore.connection.AutoReconnectCoordinator
+import io.ecucore.connection.ConnectionRetryPolicy
 import io.ecucore.connection.ISpeeduinoConnection
 import io.ecucore.connection.SpeeduinoSerialConnection
 import io.ecucore.connection.SpeeduinoTcpConnection
+import io.ecucore.definition.IniCatalogErrorCategory
+import io.ecucore.definition.IniCatalogErrorClassifier
+import io.ecucore.definition.isAlreadyActiveDefinition
 import io.ecucore.ecu.FirmwareInfo
 import io.ecucore.model.AfrTable
 import io.ecucore.model.DwellTable
@@ -59,7 +64,6 @@ import com.speeduino.manager.transport.VagTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -223,6 +227,9 @@ internal class DesktopSpeeduinoController(
     private var ecuSessionDir: File? = null
     private var manualDisconnect = false
     private var reconnectJob: Job? = null
+    private var lastIniDefinitionSignature: String? = null
+    private val connectRetryPolicy = ConnectionRetryPolicy(maxAttempts = CONNECT_RETRY_ATTEMPTS, delayMs = CONNECT_RETRY_DELAY_MS)
+    private val autoReconnectCoordinator = AutoReconnectCoordinator(reconnectDelayMs = RECONNECT_DELAY_MS)
     private val beforeAfterSelectionStore = DesktopBeforeAfterSelectionStore()
     private val tuningAssistantStateStore = DesktopTuningAssistantStateStore()
     private val beforeAfterComparator = BeforeAfterLogComparator()
@@ -318,7 +325,7 @@ internal class DesktopSpeeduinoController(
     private fun scheduleAutomaticReconnect() {
         reconnectJob?.cancel()
         reconnectJob = scope.launch(Dispatchers.IO) {
-            delay(RECONNECT_DELAY_MS)
+            autoReconnectCoordinator.awaitReconnectDelay()
             if (manualDisconnect || _connectionState.value.isConnected) {
                 return@launch
             }
@@ -347,28 +354,16 @@ internal class DesktopSpeeduinoController(
                     activeClient.clearManualFirmwareProfile()
                 }
 
-                var connectAttempt = 0
-                var lastConnectError: Exception? = null
-                while (connectAttempt < CONNECT_RETRY_ATTEMPTS) {
-                    connectAttempt++
-                    try {
-                        activeClient.connect()
-                        lastConnectError = null
-                        break
-                    } catch (e: Exception) {
-                        lastConnectError = e
-                        if (connectAttempt < CONNECT_RETRY_ATTEMPTS) {
-                            ConnectionDiagnosticsLogger.log(
-                                "desktop",
-                                "connect",
-                                "attempt $connectAttempt/$CONNECT_RETRY_ATTEMPTS failed: ${e.message ?: "unknown"}, retrying"
-                            )
-                            delay(CONNECT_RETRY_DELAY_MS)
-                        }
+                connectRetryPolicy.connect(
+                    onAttemptFailed = { attempt, error ->
+                        ConnectionDiagnosticsLogger.log(
+                            "desktop",
+                            "connect",
+                            "attempt $attempt failed: ${error.message ?: "unknown"}, retrying"
+                        )
                     }
-                }
-                if (lastConnectError != null) {
-                    throw lastConnectError
+                ) {
+                    activeClient.connect()
                 }
                 ConnectionDiagnosticsLogger.log("desktop", "connect", "handshake complete ${activeClient.getConnectionInfo()}")
                 _firmwareInfo.value = activeClient.getFirmwareInfoCached()
@@ -482,7 +477,7 @@ internal class DesktopSpeeduinoController(
                 } else {
                     ConnectionState(ConnectionStatus.Disconnected)
                 }
-                if (!isConnected && wasConnected && !manualDisconnect) {
+                if (autoReconnectCoordinator.shouldReconnect(wasConnected, isConnected, manualDisconnect)) {
                     ConnectionDiagnosticsLogger.log("desktop", "connect", "unexpected drop, scheduling reconnect")
                     scheduleAutomaticReconnect()
                 }
@@ -794,9 +789,23 @@ internal class DesktopSpeeduinoController(
         }
     }
 
+    /**
+     * MS3 firmware has historically been more sensitive to partial/rejected page writes than
+     * Speeduino, so back up the last known-good session before writing to it. No-op for any
+     * other ECU family. Shared with the Android app's equivalent safety check via ecu-core.
+     */
+    private suspend fun backupBeforeMs3Write() {
+        val activeClient = client ?: return
+        val sessionDir = localSessionDir ?: return
+        runCatching {
+            syncService.ensureMs3WriteSafetyBackup(sessionDir, activeClient.getEcuFamily())
+        }.onFailure { e -> Logger.w(TAG, "Falha no backup de seguranca MS3: ${e.message}") }
+    }
+
     fun saveVeTable(table: VeTable, mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
             try {
+                backupBeforeMs3Write()
                 withPausedLiveDataStream { it.writeVeTable(table, mapIndex) }
                 updateLocalVeTable(table, mapIndex)
                 if (mapIndex == 2) _veTable2.value = table else _veTable.value = table
@@ -825,6 +834,7 @@ internal class DesktopSpeeduinoController(
     fun saveIgnitionTable(table: IgnitionTable, mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
             try {
+                backupBeforeMs3Write()
                 withPausedLiveDataStream { it.writeIgnitionTable(table, mapIndex) }
                 updateLocalIgnitionTable(table, mapIndex)
                 if (mapIndex == 2) _ignitionTable2.value = table else _ignitionTable.value = table
@@ -852,6 +862,7 @@ internal class DesktopSpeeduinoController(
     fun saveAfrTable(table: AfrTable) {
         scope.launch(Dispatchers.IO) {
             try {
+                backupBeforeMs3Write()
                 withPausedLiveDataStream { it.writeAfrTable(table) }
                 updateLocalAfrTable(table)
                 _afrTable.value = table
@@ -1784,11 +1795,16 @@ internal class DesktopSpeeduinoController(
         if (settings.iniSelectionMode == IniSelectionMode.AUTOMATIC) {
             val cachedDefinitionId = DesktopSettingsStore.loadCachedRemoteIniId(signature)
             if (!cachedDefinitionId.isNullOrBlank() && definitionRepository.hasCachedDefinitionById(cachedDefinitionId)) {
+                if (isAlreadyActiveDefinition(lastIniDefinitionSignature, _activeIniCatalogEntry.value?.id, signature, cachedDefinitionId)) {
+                    return
+                }
                 val cachedDefinition = definitionRepository.loadCachedDefinitionById(cachedDefinitionId)
                 _activeIniCatalogEntry.value = _availableIniDefinitions.value.firstOrNull { it.id == cachedDefinitionId }
                 _activeIniDefinition.value = cachedDefinition
                 if (!activeClient.applyIniDefinition(cachedDefinition)) {
                     _lastError.value = "Falha ao aplicar definicao .ini em cache $cachedDefinitionId"
+                } else {
+                    lastIniDefinitionSignature = signature
                 }
                 return
             }
@@ -1804,9 +1820,18 @@ internal class DesktopSpeeduinoController(
 
             else -> {
                 val entry = resolveCatalogEntryForSignature(signature, settings) ?: return
+                if (isAlreadyActiveDefinition(lastIniDefinitionSignature, _activeIniCatalogEntry.value?.id, signature, entry.id)) {
+                    return
+                }
                 _activeIniCatalogEntry.value = entry
                 val wasCached = definitionRepository.isDefinitionCached(entry)
-                val loaded = definitionRepository.loadDefinition(entry)
+                val loaded = runCatching {
+                    definitionRepository.loadDefinition(entry)
+                }.getOrElse { error ->
+                    val category = IniCatalogErrorClassifier.classify(error)
+                    _lastError.value = describeIniCatalogError(category, error)
+                    throw error
+                }
                 DesktopSettingsStore.persistCachedRemoteIniId(signature, entry.id)
                 if (!wasCached) {
                     _availableIniDefinitions.value = runCatching {
@@ -1820,7 +1845,21 @@ internal class DesktopSpeeduinoController(
         _activeIniDefinition.value = definition
         if (!activeClient.applyIniDefinition(definition)) {
             _lastError.value = "Falha ao aplicar definicao .ini ${definition.sourceName}"
+        } else {
+            lastIniDefinitionSignature = signature
         }
+    }
+
+    private fun describeIniCatalogError(category: IniCatalogErrorCategory, error: Throwable): String {
+        val reason = when (category) {
+            IniCatalogErrorCategory.TIMEOUT -> "tempo esgotado ao contatar o servidor"
+            IniCatalogErrorCategory.DNS -> "nao foi possivel resolver o servidor de definicoes"
+            IniCatalogErrorCategory.CONNECTION_FAILED -> "falha de conexao com o servidor de definicoes"
+            IniCatalogErrorCategory.HASH_INVALID -> "arquivo .ini baixado com hash invalido"
+            IniCatalogErrorCategory.NOT_FOUND -> "definicao .ini nao encontrada no servidor"
+            IniCatalogErrorCategory.UNKNOWN -> "erro desconhecido"
+        }
+        return "Falha ao baixar definicao .ini: $reason (${error.message ?: "sem detalhes"})"
     }
 
     private fun resolveCatalogEntryForSignature(
