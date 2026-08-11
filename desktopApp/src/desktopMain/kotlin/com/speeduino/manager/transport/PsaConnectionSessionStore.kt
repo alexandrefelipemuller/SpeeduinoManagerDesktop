@@ -1,5 +1,7 @@
 package com.speeduino.manager.transport
 
+import io.ecucore.transport.PsaSessionStore
+import io.ecucore.transport.PsaPersistedSession
 import com.speeduino.manager.desktop.DesktopSettingsStore
 import java.io.File
 import java.util.Properties

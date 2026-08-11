@@ -1,23 +1,27 @@
 plugins {
     kotlin("multiplatform")
+    kotlin("plugin.compose")
     id("org.jetbrains.compose")
 }
 
 kotlin {
     jvm("desktop") {
         compilations.all {
-            kotlinOptions.jvmTarget = "17"
+            compileTaskProvider.configure {
+                compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            }
         }
     }
 
     sourceSets {
         val desktopMain by getting {
             dependencies {
-                implementation(project(":shared"))
+                implementation("io.ecucore:core-runtime")
+                implementation("io.ecucore:core-tuning")
                 implementation(compose.desktop.currentOs)
                 implementation(compose.material3)
                 implementation(compose.materialIconsExtended)
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation("org.json:json:20240303")
             }
         }

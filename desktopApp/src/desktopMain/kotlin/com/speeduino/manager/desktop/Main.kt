@@ -17,10 +17,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import com.speeduino.manager.connection.ConnectionTrace
-import com.speeduino.manager.connection.ConnectionTraceSink
+import io.ecucore.connection.ConnectionTrace
+import io.ecucore.connection.ConnectionTraceSink
 import com.speeduino.manager.desktop.app.DesktopAppShell
-import com.speeduino.manager.shared.Logger
+import io.ecucore.shared.Logger
 import java.io.PrintWriter
 import java.io.StringWriter
 

@@ -1,7 +1,7 @@
 package com.speeduino.manager.desktop.navigation
 
 import androidx.compose.runtime.Composable
-import com.speeduino.manager.SpeeduinoLiveData
+import io.ecucore.SpeeduinoLiveData
 import com.speeduino.manager.desktop.ConnectionState
 import com.speeduino.manager.desktop.ConnectionType
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
@@ -102,6 +102,7 @@ internal fun ScreenHost(
             onOpenLogsEcuTools = onOpenLogsEcuTools,
             onOpenInstitutional = onOpenInstitutional
         )
+        DesktopRoute.Ecu,
         DesktopRoute.Fuel,
         DesktopRoute.MapsTables,
         DesktopRoute.VeTable,
@@ -109,7 +110,7 @@ internal fun ScreenHost(
         DesktopRoute.AfrTable,
         DesktopRoute.BaseMapWizard,
         DesktopRoute.TuningAssistant -> MapsRouteHost(
-            route = route,
+            route = if (route == DesktopRoute.Ecu) DesktopRoute.Fuel else route,
             controller = controller,
             onOpenVeTable = onOpenVeTable,
             onOpenVeTable2 = onOpenVeTable2,

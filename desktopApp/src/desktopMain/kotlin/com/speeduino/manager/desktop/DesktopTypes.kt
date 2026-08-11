@@ -1,8 +1,8 @@
 package com.speeduino.manager.desktop
 
 import java.io.File
-import com.speeduino.manager.model.RusefiInputOutputSnapshot
-import com.speeduino.manager.model.SecondarySerialConfig
+import io.ecucore.model.RusefiInputOutputSnapshot
+import io.ecucore.model.SecondarySerialConfig
 
 internal enum class ConnectionStatus {
     Connected,
@@ -43,7 +43,7 @@ internal data class TuningConfigState(
 )
 
 internal data class TransportCallbacks(
-    val onDataReceived: (com.speeduino.manager.SpeeduinoLiveData) -> Unit,
+    val onDataReceived: (io.ecucore.SpeeduinoLiveData) -> Unit,
     val onConnectionStateChanged: (Boolean) -> Unit,
     val onError: (String) -> Unit,
 )

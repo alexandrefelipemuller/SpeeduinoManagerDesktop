@@ -1,54 +1,59 @@
 package com.speeduino.manager.desktop
 
-import com.speeduino.manager.ConfigManager
-import com.speeduino.manager.SpeeduinoClient
-import com.speeduino.manager.SpeeduinoLiveData
-import com.speeduino.manager.definition.IniCatalogEntry
-import com.speeduino.manager.definition.IniDefinition
-import com.speeduino.manager.shared.Logger
-import com.speeduino.manager.compare.BeforeAfterLogComparator
-import com.speeduino.manager.compare.LogCompareException
-import com.speeduino.manager.compare.LogCompareReason
-import com.speeduino.manager.compare.LogCompareResult
+import io.ecucore.ConfigManager
+import io.ecucore.SpeeduinoClient
+import io.ecucore.SpeeduinoLiveData
+import io.ecucore.definition.IniCatalogEntry
+import io.ecucore.definition.IniDefinition
+import io.ecucore.shared.Logger
+import io.ecucore.compare.BeforeAfterLogComparator
+import io.ecucore.compare.LogCompareException
+import io.ecucore.compare.LogCompareReason
+import io.ecucore.compare.LogCompareResult
 import com.speeduino.manager.compare.DesktopBeforeAfterSelection
 import com.speeduino.manager.compare.DesktopBeforeAfterSelectionStore
 import com.speeduino.manager.tuning.DesktopTuningAssistantState
 import com.speeduino.manager.tuning.DesktopTuningAssistantStateStore
-import com.speeduino.manager.connection.ISpeeduinoConnection
-import com.speeduino.manager.connection.SpeeduinoSerialConnection
-import com.speeduino.manager.connection.SpeeduinoTcpConnection
-import com.speeduino.manager.ecu.FirmwareInfo
-import com.speeduino.manager.model.AfrTable
-import com.speeduino.manager.model.DwellTable
-import com.speeduino.manager.model.ClosedLoopCorrectionConfig
-import com.speeduino.manager.model.ClosedLoopCorrectionMapper
-import com.speeduino.manager.model.EngineConstants
-import com.speeduino.manager.model.EngineProtectionConfig
-import com.speeduino.manager.model.FirmwareEra
-import com.speeduino.manager.model.IdleControlSettings
-import com.speeduino.manager.model.IgnitionTable
-import com.speeduino.manager.model.OutputField
-import com.speeduino.manager.model.PressureCalibration
-import com.speeduino.manager.model.TpsCalibration
-import com.speeduino.manager.model.TriggerSettings
-import com.speeduino.manager.model.VeTable
-import com.speeduino.manager.model.RusefiInputOutputSnapshot
-import com.speeduino.manager.model.SecondarySerialConfig
-import com.speeduino.manager.model.SpeeduinoOutputChannels
-import com.speeduino.manager.model.basemap.GeneratedBaseMap
-import com.speeduino.manager.model.logging.LiveLogEntry
-import com.speeduino.manager.model.logging.LiveLogRecorder
-import com.speeduino.manager.model.logging.LiveLogSnapshot
-import com.speeduino.manager.sync.ConfigSyncService
-import com.speeduino.manager.sync.SessionSyncPrompt
-import com.speeduino.manager.tuning.AnalyzerResult
-import com.speeduino.manager.tuning.TuningAssistantAnalyzer
-import com.speeduino.manager.tuning.TuningStrategy
+import io.ecucore.connection.AutoReconnectCoordinator
+import io.ecucore.connection.ConnectionRetryPolicy
+import io.ecucore.connection.ISpeeduinoConnection
+import io.ecucore.connection.SpeeduinoSerialConnection
+import io.ecucore.connection.SpeeduinoTcpConnection
+import io.ecucore.definition.IniCatalogErrorCategory
+import io.ecucore.definition.IniCatalogErrorClassifier
+import io.ecucore.definition.isAlreadyActiveDefinition
+import io.ecucore.ecu.FirmwareInfo
+import io.ecucore.model.AfrTable
+import io.ecucore.model.DwellTable
+import io.ecucore.model.ClosedLoopCorrectionConfig
+import io.ecucore.model.ClosedLoopCorrectionMapper
+import io.ecucore.model.EngineConstants
+import io.ecucore.model.EngineProtectionConfig
+import io.ecucore.model.FirmwareEra
+import io.ecucore.model.IdleControlSettings
+import io.ecucore.model.IgnitionTable
+import io.ecucore.model.OutputField
+import io.ecucore.model.PressureCalibration
+import io.ecucore.model.TpsCalibration
+import io.ecucore.model.TriggerSettings
+import io.ecucore.model.VeTable
+import io.ecucore.model.RusefiInputOutputSnapshot
+import io.ecucore.model.SecondarySerialConfig
+import io.ecucore.model.SpeeduinoOutputChannels
+import io.ecucore.model.basemap.GeneratedBaseMap
+import io.ecucore.model.logging.LiveLogEntry
+import io.ecucore.model.logging.LiveLogRecorder
+import io.ecucore.model.logging.LiveLogSnapshot
+import io.ecucore.sync.ConfigSyncService
+import io.ecucore.sync.SessionSyncPrompt
+import io.ecucore.tuning.AnalyzerResult
+import io.ecucore.tuning.TuningAssistantAnalyzer
+import io.ecucore.tuning.TuningStrategy
 import com.speeduino.manager.telemetry.ConnectionDiagnosticsLogger
 import com.speeduino.manager.telemetry.DiagnosticsFlags
 import com.speeduino.manager.telemetry.Obd2InvestigationRecorder
 import com.speeduino.manager.transport.AutoDetectEcuTransport
-import com.speeduino.manager.transport.EcuTransport
+import io.ecucore.transport.EcuTransport
 import com.speeduino.manager.transport.Obd2OptimizationProfileStore
 import com.speeduino.manager.transport.Obd2Transport
 import com.speeduino.manager.transport.PsaConnectionSessionStore
@@ -92,6 +97,9 @@ internal class DesktopSpeeduinoController(
 ) {
     companion object {
         private const val TAG = "DesktopController"
+        private const val CONNECT_RETRY_ATTEMPTS = 3
+        private const val CONNECT_RETRY_DELAY_MS = 1000L
+        private const val RECONNECT_DELAY_MS = 2000L
     }
 
     private val _connectionState = MutableStateFlow(ConnectionState())
@@ -217,6 +225,11 @@ internal class DesktopSpeeduinoController(
     private var client: EcuTransport? = null
     private var localSessionDir: File? = null
     private var ecuSessionDir: File? = null
+    private var manualDisconnect = false
+    private var reconnectJob: Job? = null
+    private var lastIniDefinitionSignature: String? = null
+    private val connectRetryPolicy = ConnectionRetryPolicy(maxAttempts = CONNECT_RETRY_ATTEMPTS, delayMs = CONNECT_RETRY_DELAY_MS)
+    private val autoReconnectCoordinator = AutoReconnectCoordinator(reconnectDelayMs = RECONNECT_DELAY_MS)
     private val beforeAfterSelectionStore = DesktopBeforeAfterSelectionStore()
     private val tuningAssistantStateStore = DesktopTuningAssistantStateStore()
     private val beforeAfterComparator = BeforeAfterLogComparator()
@@ -276,7 +289,11 @@ internal class DesktopSpeeduinoController(
         if (!settings.autoConnectOnStart || _connectionState.value.isConnected) {
             return
         }
+        connectUsingLastProfile()
+    }
 
+    private fun connectUsingLastProfile() {
+        val settings = _desktopSettings.value
         when (settings.lastConnectionType) {
             ConnectionType.TCP -> {
                 val host = settings.lastTcpHost
@@ -301,8 +318,27 @@ internal class DesktopSpeeduinoController(
         }
     }
 
+    /**
+     * Reconecta automaticamente apos uma queda inesperada de conexao (nunca apos
+     * desconexao manual do usuario), usando o ultimo perfil de conexao salvo.
+     */
+    private fun scheduleAutomaticReconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch(Dispatchers.IO) {
+            autoReconnectCoordinator.awaitReconnectDelay()
+            if (manualDisconnect || _connectionState.value.isConnected) {
+                return@launch
+            }
+            ConnectionDiagnosticsLogger.log("desktop", "reconnect", "attempting automatic reconnect")
+            connectUsingLastProfile()
+        }
+    }
+
     private fun connectInternal(newConnection: ISpeeduinoConnection) {
-        disconnect()
+        manualDisconnect = false
+        reconnectJob?.cancel()
+        reconnectJob = null
+        teardownConnection()
 
         connection = newConnection
         client = createTransport(checkNotNull(connection))
@@ -318,7 +354,17 @@ internal class DesktopSpeeduinoController(
                     activeClient.clearManualFirmwareProfile()
                 }
 
-                activeClient.connect()
+                connectRetryPolicy.connect(
+                    onAttemptFailed = { attempt, error ->
+                        ConnectionDiagnosticsLogger.log(
+                            "desktop",
+                            "connect",
+                            "attempt $attempt failed: ${error.message ?: "unknown"}, retrying"
+                        )
+                    }
+                ) {
+                    activeClient.connect()
+                }
                 ConnectionDiagnosticsLogger.log("desktop", "connect", "handshake complete ${activeClient.getConnectionInfo()}")
                 _firmwareInfo.value = activeClient.getFirmwareInfoCached()
                 _productString.value = activeClient.getProductString()
@@ -327,19 +373,11 @@ internal class DesktopSpeeduinoController(
                 runCatching {
                     applyConfiguredIniDefinition(activeClient)
                     refreshDiagnosticSummary()
-                    val configsDownloaded = downloadAllConfigs(autoRestartStream = false)
+                    val configsDownloaded = downloadAllConfigs(autoRestartStream = true)
                     if (configsDownloaded && _connectionState.value.isConnected) {
                         activeClient.startLiveDataStream(_streamIntervalMs.value)
                         ConnectionDiagnosticsLogger.log("desktop", "stream", "started after config download")
                     }
-                }.onFailure { error ->
-                    val message = "Falha ao aplicar definicao .ini: ${error.message ?: "unknown"}"
-                    Logger.w(TAG, message)
-                    _lastError.value = message
-                }
-
-                runCatching {
-                    downloadAllConfigs(autoRestartStream = true)
                 }.onFailure { error ->
                     val message = "Falha no download inicial das configuracoes: ${error.message ?: "unknown"}"
                     Logger.w(TAG, message)
@@ -433,10 +471,15 @@ internal class DesktopSpeeduinoController(
                 }
             },
             onConnectionStateChanged = { isConnected ->
+                val wasConnected = _connectionState.value.isConnected
                 _connectionState.value = if (isConnected) {
                     ConnectionState(ConnectionStatus.Connected)
                 } else {
                     ConnectionState(ConnectionStatus.Disconnected)
+                }
+                if (autoReconnectCoordinator.shouldReconnect(wasConnected, isConnected, manualDisconnect)) {
+                    ConnectionDiagnosticsLogger.log("desktop", "connect", "unexpected drop, scheduling reconnect")
+                    scheduleAutomaticReconnect()
                 }
             },
             onError = { error ->
@@ -470,6 +513,13 @@ internal class DesktopSpeeduinoController(
     }
 
     fun disconnect() {
+        manualDisconnect = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        teardownConnection()
+    }
+
+    private fun teardownConnection() {
         pollingJob?.cancel()
         pollingJob = null
         client?.stopLiveDataStream()
@@ -739,9 +789,23 @@ internal class DesktopSpeeduinoController(
         }
     }
 
+    /**
+     * MS3 firmware has historically been more sensitive to partial/rejected page writes than
+     * Speeduino, so back up the last known-good session before writing to it. No-op for any
+     * other ECU family. Shared with the Android app's equivalent safety check via ecu-core.
+     */
+    private suspend fun backupBeforeMs3Write() {
+        val activeClient = client ?: return
+        val sessionDir = localSessionDir ?: return
+        runCatching {
+            syncService.ensureMs3WriteSafetyBackup(sessionDir, activeClient.getEcuFamily())
+        }.onFailure { e -> Logger.w(TAG, "Falha no backup de seguranca MS3: ${e.message}") }
+    }
+
     fun saveVeTable(table: VeTable, mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
             try {
+                backupBeforeMs3Write()
                 withPausedLiveDataStream { it.writeVeTable(table, mapIndex) }
                 updateLocalVeTable(table, mapIndex)
                 if (mapIndex == 2) _veTable2.value = table else _veTable.value = table
@@ -770,6 +834,7 @@ internal class DesktopSpeeduinoController(
     fun saveIgnitionTable(table: IgnitionTable, mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
             try {
+                backupBeforeMs3Write()
                 withPausedLiveDataStream { it.writeIgnitionTable(table, mapIndex) }
                 updateLocalIgnitionTable(table, mapIndex)
                 if (mapIndex == 2) _ignitionTable2.value = table else _ignitionTable.value = table
@@ -797,6 +862,7 @@ internal class DesktopSpeeduinoController(
     fun saveAfrTable(table: AfrTable) {
         scope.launch(Dispatchers.IO) {
             try {
+                backupBeforeMs3Write()
                 withPausedLiveDataStream { it.writeAfrTable(table) }
                 updateLocalAfrTable(table)
                 _afrTable.value = table
@@ -1041,16 +1107,17 @@ internal class DesktopSpeeduinoController(
                 message = "Download concluído.",
                 lastSessionDir = sessionDir
             )
-            val localDir = localSessionDir
-            val resolvedSession = decision.sessionDir
-            if (resolvedSession != null) {
-                localSessionDir = resolvedSession
-                loadTablesFromSession(resolvedSession)
-            } else if (localDir != null) {
-                val prompt = decision.prompt
-                if (prompt != null) {
-                    _syncPrompt.value = prompt.toDesktop()
-                }
+            // A ECU e sempre a fonte de verdade: carrega os dados baixados dela imediatamente,
+            // sem esperar o usuario decidir nada. Se houver uma sessao local divergente, o prompt
+            // ainda aparece, mas apenas como opcao de restaurar o backup local por cima - nunca
+            // bloqueia o preenchimento das telas.
+            if (sessionDir != null) {
+                localSessionDir = sessionDir
+                loadTablesFromSession(sessionDir)
+            }
+            val prompt = decision.prompt
+            if (prompt != null) {
+                _syncPrompt.value = prompt.toDesktop()
             }
         } else {
             _configState.value = _configState.value.copy(
@@ -1494,6 +1561,8 @@ internal class DesktopSpeeduinoController(
                 candidateInjectionDurationMs = cells.parseOptionalDouble(candidateInjectionMsIndex),
                 candidateInjectionDurationMirrorMs = cells.parseOptionalDouble(candidateInjectionMirrorMsIndex),
                 gpsSpeedKph = cells.parseOptionalDouble(gpsSpeedIndex),
+                gpsLatitude = null,
+                gpsLongitude = null,
                 outputChannelBlockSize = 0,
                 outputChannelData = null
             )
@@ -1726,11 +1795,16 @@ internal class DesktopSpeeduinoController(
         if (settings.iniSelectionMode == IniSelectionMode.AUTOMATIC) {
             val cachedDefinitionId = DesktopSettingsStore.loadCachedRemoteIniId(signature)
             if (!cachedDefinitionId.isNullOrBlank() && definitionRepository.hasCachedDefinitionById(cachedDefinitionId)) {
+                if (isAlreadyActiveDefinition(lastIniDefinitionSignature, _activeIniCatalogEntry.value?.id, signature, cachedDefinitionId)) {
+                    return
+                }
                 val cachedDefinition = definitionRepository.loadCachedDefinitionById(cachedDefinitionId)
                 _activeIniCatalogEntry.value = _availableIniDefinitions.value.firstOrNull { it.id == cachedDefinitionId }
                 _activeIniDefinition.value = cachedDefinition
                 if (!activeClient.applyIniDefinition(cachedDefinition)) {
                     _lastError.value = "Falha ao aplicar definicao .ini em cache $cachedDefinitionId"
+                } else {
+                    lastIniDefinitionSignature = signature
                 }
                 return
             }
@@ -1746,9 +1820,18 @@ internal class DesktopSpeeduinoController(
 
             else -> {
                 val entry = resolveCatalogEntryForSignature(signature, settings) ?: return
+                if (isAlreadyActiveDefinition(lastIniDefinitionSignature, _activeIniCatalogEntry.value?.id, signature, entry.id)) {
+                    return
+                }
                 _activeIniCatalogEntry.value = entry
                 val wasCached = definitionRepository.isDefinitionCached(entry)
-                val loaded = definitionRepository.loadDefinition(entry)
+                val loaded = runCatching {
+                    definitionRepository.loadDefinition(entry)
+                }.getOrElse { error ->
+                    val category = IniCatalogErrorClassifier.classify(error)
+                    _lastError.value = describeIniCatalogError(category, error)
+                    throw error
+                }
                 DesktopSettingsStore.persistCachedRemoteIniId(signature, entry.id)
                 if (!wasCached) {
                     _availableIniDefinitions.value = runCatching {
@@ -1762,7 +1845,21 @@ internal class DesktopSpeeduinoController(
         _activeIniDefinition.value = definition
         if (!activeClient.applyIniDefinition(definition)) {
             _lastError.value = "Falha ao aplicar definicao .ini ${definition.sourceName}"
+        } else {
+            lastIniDefinitionSignature = signature
         }
+    }
+
+    private fun describeIniCatalogError(category: IniCatalogErrorCategory, error: Throwable): String {
+        val reason = when (category) {
+            IniCatalogErrorCategory.TIMEOUT -> "tempo esgotado ao contatar o servidor"
+            IniCatalogErrorCategory.DNS -> "nao foi possivel resolver o servidor de definicoes"
+            IniCatalogErrorCategory.CONNECTION_FAILED -> "falha de conexao com o servidor de definicoes"
+            IniCatalogErrorCategory.HASH_INVALID -> "arquivo .ini baixado com hash invalido"
+            IniCatalogErrorCategory.NOT_FOUND -> "definicao .ini nao encontrada no servidor"
+            IniCatalogErrorCategory.UNKNOWN -> "erro desconhecido"
+        }
+        return "Falha ao baixar definicao .ini: $reason (${error.message ?: "sem detalhes"})"
     }
 
     private fun resolveCatalogEntryForSignature(

@@ -20,12 +20,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.speeduino.manager.model.ClosedLoopCorrectionConfig
-import com.speeduino.manager.model.ClosedLoopCorrectionMapper
-import com.speeduino.manager.model.ClosedLoopSensorType
-import com.speeduino.manager.model.ClosedLoopStrategy
-import com.speeduino.manager.model.IdleControlMode
-import com.speeduino.manager.model.IdleControlSettings
+import io.ecucore.model.ClosedLoopCorrectionConfig
+import io.ecucore.model.ClosedLoopCorrectionMapper
+import io.ecucore.model.ClosedLoopSensorType
+import io.ecucore.model.ClosedLoopStrategy
+import io.ecucore.model.IdleControlMode
+import io.ecucore.model.IdleControlSettings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.desktop.ui.ToggleField
@@ -76,7 +76,8 @@ internal fun IdleControlScreenDesktop(controller: DesktopSpeeduinoController) {
                 )
                 controller.saveIdleControlSettings(updated)
             },
-            saveEnabled = hasChanges
+            saveEnabled = hasChanges,
+            loadEnabled = settings == null || hasChanges
         )
 
         ConfigSectionCard(
@@ -192,7 +193,8 @@ internal fun ClosedLoopCorrectionsScreenDesktop(controller: DesktopSpeeduinoCont
                 )
                 controller.saveClosedLoopCorrections(updated)
             },
-            saveEnabled = hasChanges
+            saveEnabled = hasChanges,
+            loadEnabled = config == null || hasChanges
         )
 
         ConfigSectionCard(
@@ -271,6 +273,7 @@ private fun ConfigHeaderCard(
     onLoad: () -> Unit,
     onSave: () -> Unit,
     saveEnabled: Boolean,
+    loadEnabled: Boolean = saveEnabled,
 ) {
     val strings = LocalStrings.current
     Surface(
@@ -286,7 +289,7 @@ private fun ConfigHeaderCard(
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onLoad) { Text(strings["action.loadEcu"]) }
+                FilledTonalButton(onClick = onLoad, enabled = loadEnabled) { Text(strings["action.loadEcu"]) }
                 FilledTonalButton(onClick = onSave, enabled = saveEnabled) { Text(strings["action.saveEcu"]) }
             }
         }
