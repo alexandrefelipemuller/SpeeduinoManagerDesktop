@@ -38,11 +38,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.speeduino.manager.model.AfrTable
-import com.speeduino.manager.model.DwellTable
-import com.speeduino.manager.model.Color as SharedColor
-import com.speeduino.manager.model.IgnitionTable
-import com.speeduino.manager.model.VeTable
+import io.ecucore.model.AfrTable
+import io.ecucore.model.DwellTable
+import io.ecucore.model.Color as SharedColor
+import io.ecucore.model.IgnitionTable
+import io.ecucore.model.VeTable
 
 @Composable
 internal fun PlaceholderScreen(title: String, message: String) {
@@ -167,7 +167,7 @@ internal fun DwellTableScreenDesktop(controller: DesktopSpeeduinoController) {
         append("Ignition coil charge time table.")
         table?.let {
             append(" Load axis: ")
-            append(if (it.loadType == DwellTable.LoadType.TPS) "TPS %" else "MAP kPa")
+            append(if (it.loadType == IgnitionTable.LoadType.TPS) "TPS %" else "MAP kPa")
         }
     }
     MapTableScreen(
@@ -180,7 +180,7 @@ internal fun DwellTableScreenDesktop(controller: DesktopSpeeduinoController) {
         parseValue = { it.toIntOrNull() },
         valueRange = 0..10,
         cellColor = { dwellColor(it) },
-        loadAxisLabel = { if (it.loadType == DwellTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
+        loadAxisLabel = { if (it.loadType == IgnitionTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },
@@ -231,6 +231,12 @@ private fun <T> MapTableScreen(
         hasChanges = false
     }
 
+    LaunchedEffect(Unit) {
+        if (table == null) {
+            onLoad()
+        }
+    }
+
     val rpm = workingTable?.let(rpmBins).orEmpty()
     val load = workingTable?.let(loadBins).orEmpty()
     val grid = workingTable?.let(values).orEmpty()
@@ -249,7 +255,7 @@ private fun <T> MapTableScreen(
                 Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                 Text(text = description, style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = onLoad) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = onLoad, enabled = workingTable == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         onClick = { workingTable?.let(onSave); hasChanges = false },
                         enabled = workingTable != null && hasChanges

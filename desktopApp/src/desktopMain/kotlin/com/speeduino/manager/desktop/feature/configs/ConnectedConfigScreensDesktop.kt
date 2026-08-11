@@ -27,11 +27,11 @@ import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.desktop.ui.ToggleField
-import com.speeduino.manager.model.CutMethod
-import com.speeduino.manager.model.EngineProtectionConfig
-import com.speeduino.manager.model.PressureCalibration
-import com.speeduino.manager.model.ProtectionCut
-import com.speeduino.manager.model.TpsCalibration
+import io.ecucore.model.CutMethod
+import io.ecucore.model.EngineProtectionConfig
+import io.ecucore.model.PressureCalibration
+import io.ecucore.model.ProtectionCut
+import io.ecucore.model.TpsCalibration
 import kotlinx.coroutines.launch
 
 @Composable
@@ -175,6 +175,12 @@ internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoCon
         status = if (config != null) strings["label.calibrationLoaded"] else strings["label.calibrationLoadHint"]
     }
 
+    LaunchedEffect(Unit) {
+        if (config == null) {
+            controller.loadEngineProtectionConfig()
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -187,7 +193,7 @@ internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoCon
                 Text(strings["label.engineProtectionLimitersSubtitle"], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = controller::loadEngineProtectionConfig) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = controller::loadEngineProtectionConfig, enabled = config == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         enabled = hasChanges,
                         onClick = {

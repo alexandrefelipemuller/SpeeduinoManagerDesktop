@@ -1,9 +1,9 @@
 package com.speeduino.manager.desktop
 
-import com.speeduino.manager.definition.IniCatalogEntry
-import com.speeduino.manager.definition.IniDefinition
-import com.speeduino.manager.definition.IniParser
-import com.speeduino.manager.units.UnitSystem
+import io.ecucore.definition.IniCatalogEntry
+import io.ecucore.definition.IniDefinition
+import io.ecucore.definition.IniParser
+import io.ecucore.units.UnitSystem
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File

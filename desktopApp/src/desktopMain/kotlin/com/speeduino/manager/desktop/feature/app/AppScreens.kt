@@ -47,7 +47,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.speeduino.manager.SpeeduinoLiveData
+import io.ecucore.SpeeduinoLiveData
 import com.speeduino.manager.desktop.DesktopDashboardMode
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.LocalStrings

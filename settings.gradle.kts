@@ -1,5 +1,6 @@
 pluginManagement {
     repositories {
+        google()
         gradlePluginPortal()
         google()
         mavenCentral()
@@ -15,7 +16,11 @@ dependencyResolutionManagement {
     }
 }
 
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 rootProject.name = "SpeeduinoManagerDesktop"
 
-include(":shared")
+includeBuild("ecu-core")
 include(":desktopApp")

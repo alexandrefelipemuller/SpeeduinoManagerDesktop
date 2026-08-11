@@ -37,12 +37,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.speeduino.manager.SpeeduinoLiveData
+import io.ecucore.SpeeduinoLiveData
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.io.*
-import com.speeduino.manager.model.SpeeduinoOutputChannels
+import io.ecucore.model.SpeeduinoOutputChannels
 
 @Composable
 internal fun InputOutputEditorScreenDesktop(

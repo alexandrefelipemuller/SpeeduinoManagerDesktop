@@ -42,25 +42,25 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.speeduino.manager.SpeeduinoLiveData
-import com.speeduino.manager.compare.LogCompareResult
-import com.speeduino.manager.compare.LogHeatCellState
+import io.ecucore.SpeeduinoLiveData
+import io.ecucore.compare.LogCompareResult
+import io.ecucore.compare.LogHeatCellState
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.InfoRow
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.desktop.ui.ToggleField
-import com.speeduino.manager.model.Algorithm
-import com.speeduino.manager.model.EngineConstants
-import com.speeduino.manager.model.EngineStroke
-import com.speeduino.manager.model.EngineType
-import com.speeduino.manager.model.InjectorLayout
-import com.speeduino.manager.model.InjectorPortType
-import com.speeduino.manager.model.InjectorStaging
-import com.speeduino.manager.model.MapSampleMethod
-import com.speeduino.manager.model.TriggerSettings
-import com.speeduino.manager.tuning.CellRef
+import io.ecucore.model.Algorithm
+import io.ecucore.model.EngineConstants
+import io.ecucore.model.EngineStroke
+import io.ecucore.model.EngineType
+import io.ecucore.model.InjectorLayout
+import io.ecucore.model.InjectorPortType
+import io.ecucore.model.InjectorStaging
+import io.ecucore.model.MapSampleMethod
+import io.ecucore.model.TriggerSettings
+import io.ecucore.tuning.CellRef
 import kotlinx.coroutines.isActive
 import kotlin.math.abs
 
@@ -91,6 +91,12 @@ internal fun EngineConstantsScreenDesktop(controller: DesktopSpeeduinoController
         hasChanges = false
     }
 
+    LaunchedEffect(Unit) {
+        if (constants == null) {
+            controller.loadEngineConstants()
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -109,7 +115,7 @@ internal fun EngineConstantsScreenDesktop(controller: DesktopSpeeduinoController
                 )
                 Text(strings["label.engineConstantsSubtitle"], style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = controller::loadEngineConstants) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = controller::loadEngineConstants, enabled = constants == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         onClick = {
                             val updated = EngineConstants(
@@ -272,6 +278,12 @@ internal fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController
         hasChanges = false
     }
 
+    LaunchedEffect(Unit) {
+        if (settings == null) {
+            controller.loadTriggerSettings()
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -286,7 +298,7 @@ internal fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController
                 Text(strings["label.triggerTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                 Text(strings["label.triggerSubtitle"], style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = controller::loadTriggerSettings) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = controller::loadTriggerSettings, enabled = settings == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         onClick = {
                             val updated = TriggerSettings(

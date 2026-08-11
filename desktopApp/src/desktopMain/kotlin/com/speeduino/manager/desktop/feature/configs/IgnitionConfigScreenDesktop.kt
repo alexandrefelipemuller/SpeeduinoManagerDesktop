@@ -27,8 +27,8 @@ import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.NumberField
 import com.speeduino.manager.desktop.ui.ToggleField
-import com.speeduino.manager.model.Algorithm
-import com.speeduino.manager.model.TriggerSettings
+import io.ecucore.model.Algorithm
+import io.ecucore.model.TriggerSettings
 
 private val sparkModeLabels = listOf("Wasted Spark", "Distributor", "Wasted COP", "Sequential", "Rotary")
 
@@ -57,6 +57,15 @@ internal fun IgnitionConfigScreenDesktop(controller: DesktopSpeeduinoController)
 
     LaunchedEffect(constants, trigger) { hasChanges = false }
 
+    LaunchedEffect(Unit) {
+        if (constants == null) {
+            controller.loadEngineConstants()
+        }
+        if (trigger == null) {
+            controller.loadTriggerSettings()
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -68,7 +77,7 @@ internal fun IgnitionConfigScreenDesktop(controller: DesktopSpeeduinoController)
                 Text(strings["label.ignitionConfigTitle"], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                 Text(strings["label.ignitionConfigSubtitle"], style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = { controller.loadEngineConstants(); controller.loadTriggerSettings() }) { Text(strings["action.loadEcu"]) }
+                    FilledTonalButton(onClick = { controller.loadEngineConstants(); controller.loadTriggerSettings() }, enabled = constants == null || trigger == null || hasChanges) { Text(strings["action.loadEcu"]) }
                     FilledTonalButton(
                         enabled = hasChanges && constants != null && trigger != null,
                         onClick = {
