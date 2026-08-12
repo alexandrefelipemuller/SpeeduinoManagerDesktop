@@ -8,7 +8,6 @@ import com.speeduino.manager.desktop.EngineOperationScreenDesktop
 import com.speeduino.manager.desktop.IgnitionScreenDesktop
 import com.speeduino.manager.desktop.IdleControlScreenDesktop
 import com.speeduino.manager.desktop.SecondarySerialScreenDesktop
-import com.speeduino.manager.desktop.TuningAssistantScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.EngineConstantsScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.InputOutputEditorScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.InjectorConfigScreenDesktop
@@ -35,8 +34,7 @@ internal fun ConfigsRouteHost(
     onOpenIdleControl: () -> Unit,
     onOpenEngineProtection: () -> Unit,
     onOpenClosedLoopCorrections: () -> Unit,
-    onOpenRevLimiterConfig: () -> Unit,
-    onOpenBeforeAfter: () -> Unit
+    onOpenRevLimiterConfig: () -> Unit
 ) {
     when (route) {
         DesktopRoute.Ignition -> IgnitionScreenDesktop(
@@ -60,10 +58,6 @@ internal fun ConfigsRouteHost(
             onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
             onOpenEngineProtection = onOpenEngineProtection,
             onOpenRevLimiter = onOpenRevLimiterConfig
-        )
-        DesktopRoute.TuningAssistant -> TuningAssistantScreenDesktop(
-            controller = controller,
-            onOpenBeforeAfter = onOpenBeforeAfter
         )
         DesktopRoute.InjectorConfig -> InjectorConfigScreenDesktop(controller)
         DesktopRoute.InputOutputConfig -> InputOutputEditorScreenDesktop(

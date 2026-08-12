@@ -25,6 +25,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.speeduino.manager.desktop.ui.KioskFeatureCard
+import com.speeduino.manager.desktop.ui.KioskPanelCard
+import com.speeduino.manager.desktop.ui.KioskScreenScaffold
 import com.speeduino.manager.desktop.ui.chooseOpenFile
 import java.awt.Desktop
 import java.net.URI
@@ -35,72 +38,34 @@ internal fun LogsEcuToolsScreenDesktop(
     onOpenConnectionSettings: () -> Unit,
     onOpenLogViewer: () -> Unit,
     onOpenRealTimeMonitor: () -> Unit,
-    onOpenLogAnalyzer: () -> Unit,
-    onOpenBeforeAfter: () -> Unit,
-    onOpenVirtualDyno: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenInstitutional: () -> Unit,
     onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     val strings = LocalStrings.current
-    UtilityScreenFrame(
+    KioskScreenScaffold(
         title = strings["route.tools"],
         subtitle = strings["label.toolsSubtitle"]
     ) {
-        UtilityActionCard(
-            title = strings["route.connection"],
-            description = strings["label.toolsConnectionDesc"],
-            buttonLabel = strings["route.connection"],
-            onClick = onOpenConnection
-        )
-        UtilityActionCard(
-            title = strings["label.wifiTcp"],
-            description = strings["label.toolsConnectionSettingsDesc"],
-            buttonLabel = strings["app.settingsTitle"],
-            onClick = onOpenConnectionSettings
-        )
-        UtilityActionCard(
-            title = strings["label.runtimeDiagnostics"],
-            description = strings["msg_diagnostic_runtime_description"],
-            buttonLabel = strings["action.open"],
-            onClick = onOpenConnection
-        )
-        UtilityActionCard(
-            title = strings["route.realTimeMonitor"],
-            description = strings["label.realtimeUtilityDesc"],
-            buttonLabel = strings["label.institutionalRealtimeCta"],
-            onClick = onOpenRealTimeMonitor
-        )
-        UtilityActionCard(
-            title = strings["route.logViewer"],
-            description = strings["label.logViewerUtilitySummary"],
-            buttonLabel = strings["label.institutionalLogViewerCta"],
-            onClick = onOpenLogViewer
-        )
-        UtilityActionCard(
-            title = strings["route.logAnalyzer"],
-            description = strings["label.logAnalyzerUtilityDesc"],
-            buttonLabel = strings["action.analyze"],
-            onClick = onOpenLogAnalyzer
-        )
-        UtilityActionCard(
-            title = strings["label.logViewerOpenCsvAction"],
-            description = strings["label.logViewerUtilityDesc"],
-            buttonLabel = strings["label.logViewerChooseCsv"],
-            onClick = {
-                chooseOpenFile(strings["label.logViewerOpenCsvTitle"])?.absolutePath?.let(onOpenHistoricalLogViewer)
-            }
-        )
-        UtilityActionCard(
-            title = strings["route.beforeAfter"],
-            description = strings["label.beforeAfterUtilityDesc"],
-            buttonLabel = strings["label.institutionalBeforeAfterCta"],
-            onClick = onOpenBeforeAfter
-        )
-        UtilityActionCard(
-            title = strings["route.virtualDyno"],
-            description = strings["label.virtualDynoUtilityDesc"],
-            buttonLabel = strings["action.open"],
-            onClick = onOpenVirtualDyno
-        )
+        KioskPanelCard(strings["route.connection"]) {
+            KioskFeatureCard(strings["route.connection"], strings["label.toolsConnectionDesc"], onClick = onOpenConnection)
+            KioskFeatureCard(strings["label.wifiTcp"], strings["label.toolsConnectionSettingsDesc"], onClick = onOpenConnectionSettings)
+        }
+        KioskPanelCard(strings["label.logsEcuToolsTitle"]) {
+            KioskFeatureCard(strings["route.realTimeMonitor"], strings["label.realtimeUtilityDesc"], onClick = onOpenRealTimeMonitor)
+            KioskFeatureCard(strings["route.logViewer"], strings["label.logViewerUtilitySummary"], onClick = onOpenLogViewer)
+            KioskFeatureCard(
+                strings["label.logViewerOpenCsvAction"],
+                strings["label.logViewerUtilityDesc"],
+                onClick = {
+                    chooseOpenFile(strings["label.logViewerOpenCsvTitle"])?.absolutePath?.let(onOpenHistoricalLogViewer)
+                }
+            )
+        }
+        KioskPanelCard(strings["nav.sectionMore"]) {
+            KioskFeatureCard(strings["app.settingsTitle"], onClick = onOpenSettings)
+            KioskFeatureCard(strings["label.institutionalTitle"], onClick = onOpenInstitutional)
+        }
     }
 }
 

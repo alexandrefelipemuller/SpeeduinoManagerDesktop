@@ -39,7 +39,6 @@ internal fun ScreenHost(
     onOpenIgnitionTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
     onOpenDwellTable: () -> Unit,
-    onOpenBaseMapWizard: () -> Unit,
     onOpenEngineConstants: () -> Unit,
     onOpenTriggerSettings: () -> Unit,
     onOpenIdleControl: () -> Unit,
@@ -50,20 +49,15 @@ internal fun ScreenHost(
     onOpenInjectorConfig: () -> Unit,
     onOpenRevLimiterConfig: () -> Unit,
     onOpenSecondarySerial: () -> Unit,
-    onOpenTuningAssistant: () -> Unit,
     onOpenLogsEcuTools: () -> Unit,
     onOpenLogViewer: () -> Unit,
     onOpenRealTimeMonitor: () -> Unit,
-    onOpenLogAnalyzer: () -> Unit,
-    onOpenBeforeAfter: () -> Unit,
-    onOpenVirtualDyno: () -> Unit,
     onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     when (route) {
         DesktopRoute.Home,
         DesktopRoute.Settings,
         DesktopRoute.Institutional,
-        DesktopRoute.More,
         DesktopRoute.Dashboard -> AppRouteHost(
             route = route,
             controller = controller,
@@ -72,8 +66,6 @@ internal fun ScreenHost(
             onToggleConnection = onToggleConnection,
             onOpenSettings = onOpenSettings,
             onOpenRoute = onOpenRoute,
-            onOpenLogAnalyzer = onOpenLogAnalyzer,
-            onOpenBeforeAfter = onOpenBeforeAfter,
             onReportProblem = onReportProblem,
             onOpenInstitutional = onOpenInstitutional
         )
@@ -102,23 +94,23 @@ internal fun ScreenHost(
             onOpenLogsEcuTools = onOpenLogsEcuTools,
             onOpenInstitutional = onOpenInstitutional
         )
-        DesktopRoute.Ecu,
+        DesktopRoute.Ecu -> com.speeduino.manager.desktop.EcuHubScreenDesktop(
+            onOpenFuel = { onOpenRoute(DesktopRoute.Fuel) },
+            onOpenIgnition = { onOpenRoute(DesktopRoute.Ignition) },
+            onOpenEngineSetup = { onOpenRoute(DesktopRoute.EngineSetup) },
+            onOpenEngineOperation = { onOpenRoute(DesktopRoute.EngineOperation) }
+        )
         DesktopRoute.Fuel,
         DesktopRoute.MapsTables,
         DesktopRoute.VeTable,
         DesktopRoute.VeTable2,
-        DesktopRoute.AfrTable,
-        DesktopRoute.BaseMapWizard,
-        DesktopRoute.TuningAssistant -> MapsRouteHost(
-            route = if (route == DesktopRoute.Ecu) DesktopRoute.Fuel else route,
+        DesktopRoute.AfrTable -> MapsRouteHost(
+            route = route,
             controller = controller,
             onOpenVeTable = onOpenVeTable,
             onOpenVeTable2 = onOpenVeTable2,
             onOpenAfrTable = onOpenAfrTable,
-            onOpenBaseMapWizard = onOpenBaseMapWizard,
-            onOpenTuningAssistant = onOpenTuningAssistant,
             onOpenInjectorConfig = onOpenInjectorConfig,
-            onOpenBeforeAfter = onOpenBeforeAfter,
             onOpenSettings = onOpenSettings
         )
         DesktopRoute.Ignition,
@@ -142,8 +134,7 @@ internal fun ScreenHost(
             onOpenIdleControl = onOpenIdleControl,
             onOpenEngineProtection = onOpenEngineProtection,
             onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
-            onOpenRevLimiterConfig = onOpenRevLimiterConfig,
-            onOpenBeforeAfter = onOpenBeforeAfter
+            onOpenRevLimiterConfig = onOpenRevLimiterConfig
         )
         DesktopRoute.EngineSetup,
         DesktopRoute.ConfigsTuning,
@@ -167,8 +158,7 @@ internal fun ScreenHost(
             onOpenIdleControl = onOpenIdleControl,
             onOpenEngineProtection = onOpenEngineProtection,
             onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
-            onOpenRevLimiterConfig = onOpenRevLimiterConfig,
-            onOpenBeforeAfter = onOpenBeforeAfter
+            onOpenRevLimiterConfig = onOpenRevLimiterConfig
         )
         DesktopRoute.EngineOperation,
         DesktopRoute.IdleControl,
@@ -190,16 +180,12 @@ internal fun ScreenHost(
             onOpenIdleControl = onOpenIdleControl,
             onOpenEngineProtection = onOpenEngineProtection,
             onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
-            onOpenRevLimiterConfig = onOpenRevLimiterConfig,
-            onOpenBeforeAfter = onOpenBeforeAfter
+            onOpenRevLimiterConfig = onOpenRevLimiterConfig
         )
         DesktopRoute.Tools,
         DesktopRoute.LogsEcuTools,
         DesktopRoute.LogViewer,
-        DesktopRoute.RealTimeMonitor,
-        DesktopRoute.LogAnalyzer,
-        DesktopRoute.BeforeAfter,
-        DesktopRoute.VirtualDyno -> LogsRouteHost(
+        DesktopRoute.RealTimeMonitor -> LogsRouteHost(
             route = route,
             controller = controller,
             liveData = liveData,
@@ -207,9 +193,8 @@ internal fun ScreenHost(
             onOpenConnectionSettings = onOpenConnectionSettings,
             onOpenLogViewer = onOpenLogViewer,
             onOpenRealTimeMonitor = onOpenRealTimeMonitor,
-            onOpenLogAnalyzer = onOpenLogAnalyzer,
-            onOpenBeforeAfter = onOpenBeforeAfter,
-            onOpenVirtualDyno = onOpenVirtualDyno,
+            onOpenSettings = onOpenSettings,
+            onOpenInstitutional = onOpenInstitutional,
             onOpenHistoricalLogViewer = onOpenHistoricalLogViewer
         )
     }

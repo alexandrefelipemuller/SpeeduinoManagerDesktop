@@ -40,8 +40,7 @@ internal enum class IniSelectionSource(val storageValue: String) {
 }
 
 internal enum class AppProtocol(val storageValue: String) {
-    MS_PROTOCOL("ms_protocol"),
-    ELM327_OBD2("elm327_obd2");
+    MS_PROTOCOL("ms_protocol");
 
     companion object {
         fun fromStorage(value: String?): AppProtocol =

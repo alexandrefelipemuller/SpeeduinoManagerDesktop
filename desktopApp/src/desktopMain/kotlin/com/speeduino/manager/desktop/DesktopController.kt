@@ -10,10 +10,6 @@ import io.ecucore.compare.BeforeAfterLogComparator
 import io.ecucore.compare.LogCompareException
 import io.ecucore.compare.LogCompareReason
 import io.ecucore.compare.LogCompareResult
-import com.speeduino.manager.compare.DesktopBeforeAfterSelection
-import com.speeduino.manager.compare.DesktopBeforeAfterSelectionStore
-import com.speeduino.manager.tuning.DesktopTuningAssistantState
-import com.speeduino.manager.tuning.DesktopTuningAssistantStateStore
 import io.ecucore.connection.AutoReconnectCoordinator
 import io.ecucore.connection.ConnectionRetryPolicy
 import io.ecucore.connection.ISpeeduinoConnection
@@ -51,16 +47,7 @@ import io.ecucore.tuning.TuningAssistantAnalyzer
 import io.ecucore.tuning.TuningStrategy
 import com.speeduino.manager.telemetry.ConnectionDiagnosticsLogger
 import com.speeduino.manager.telemetry.DiagnosticsFlags
-import com.speeduino.manager.telemetry.Obd2InvestigationRecorder
-import com.speeduino.manager.transport.AutoDetectEcuTransport
 import io.ecucore.transport.EcuTransport
-import com.speeduino.manager.transport.Obd2OptimizationProfileStore
-import com.speeduino.manager.transport.Obd2Transport
-import com.speeduino.manager.transport.PsaConnectionSessionStore
-import com.speeduino.manager.transport.PsaTransport
-import com.speeduino.manager.transport.PromotingObd2Transport
-import com.speeduino.manager.transport.RenaultTransport
-import com.speeduino.manager.transport.VagTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -230,19 +217,12 @@ internal class DesktopSpeeduinoController(
     private var lastIniDefinitionSignature: String? = null
     private val connectRetryPolicy = ConnectionRetryPolicy(maxAttempts = CONNECT_RETRY_ATTEMPTS, delayMs = CONNECT_RETRY_DELAY_MS)
     private val autoReconnectCoordinator = AutoReconnectCoordinator(reconnectDelayMs = RECONNECT_DELAY_MS)
-    private val beforeAfterSelectionStore = DesktopBeforeAfterSelectionStore()
-    private val tuningAssistantStateStore = DesktopTuningAssistantStateStore()
     private val beforeAfterComparator = BeforeAfterLogComparator()
     private val syncService = ConfigSyncService(configManager)
     private val definitionRepository = DesktopDefinitionRepository()
     private val ecuCommandMutex = Mutex()
 
     init {
-        val beforeAfterState = beforeAfterSelectionStore.load()
-        _beforeAfterBeforeLogPath.value = beforeAfterState.beforeLogPath
-        _beforeAfterAfterLogPath.value = beforeAfterState.afterLogPath
-        val tuningState = tuningAssistantStateStore.load()
-        _analyzerLogFile.value = tuningState.logPath
         refreshIniDefinitions()
         maybeAutoConnect()
     }
@@ -373,15 +353,27 @@ internal class DesktopSpeeduinoController(
                 runCatching {
                     applyConfiguredIniDefinition(activeClient)
                     refreshDiagnosticSummary()
-                    val configsDownloaded = downloadAllConfigs(autoRestartStream = true)
-                    if (configsDownloaded && _connectionState.value.isConnected) {
-                        activeClient.startLiveDataStream(_streamIntervalMs.value)
-                        ConnectionDiagnosticsLogger.log("desktop", "stream", "started after config download")
-                    }
                 }.onFailure { error ->
-                    val message = "Falha no download inicial das configuracoes: ${error.message ?: "unknown"}"
+                    val message = "Falha ao aplicar definicao INI: ${error.message ?: "unknown"}"
                     Logger.w(TAG, message)
                     _lastError.value = message
+                }
+                val configsDownloaded = runCatching { downloadAllConfigs(autoRestartStream = true) }
+                    .onFailure { error ->
+                        val message = "Falha no download inicial das configuracoes: ${error.message ?: "unknown"}"
+                        Logger.w(TAG, message)
+                        _lastError.value = message
+                    }
+                    .getOrDefault(false)
+                // Live data must start regardless of config download outcome: the dashboard
+                // is the app's core feature and shouldn't stay blank just because table sync failed.
+                if (_connectionState.value.isConnected) {
+                    runCatching {
+                        activeClient.startLiveDataStream(_streamIntervalMs.value)
+                        ConnectionDiagnosticsLogger.log("desktop", "stream", "started (configsDownloaded=$configsDownloaded)")
+                    }.onFailure { error ->
+                        Logger.w(TAG, "Falha ao iniciar live data: ${error.message ?: "unknown"}")
+                    }
                 }
             } catch (e: Exception) {
                 ConnectionDiagnosticsLogger.logError("desktop", "connect", "failed: ${e.message ?: "unknown"}", e)
@@ -398,68 +390,12 @@ internal class DesktopSpeeduinoController(
 
     private fun createTransport(connection: ISpeeduinoConnection): EcuTransport {
         val callbacks = transportCallbacks()
-        val profileStore = Obd2OptimizationProfileStore()
-        val sessionStore = PsaConnectionSessionStore()
-        val investigationRecorder = Obd2InvestigationRecorder()
-        return when (_desktopSettings.value.protocol) {
-            AppProtocol.ELM327_OBD2 -> {
-                val obd2Transport = Obd2Transport(
-                    connection = connection,
-                    onDataReceived = callbacks.onDataReceived,
-                    onConnectionStateChanged = callbacks.onConnectionStateChanged,
-                    onError = callbacks.onError,
-                    profileStore = profileStore,
-                    investigationRecorder = investigationRecorder,
-                )
-                val psaTransport = PsaTransport(
-                    connection = connection,
-                    onDataReceived = callbacks.onDataReceived,
-                    onConnectionStateChanged = callbacks.onConnectionStateChanged,
-                    onError = callbacks.onError,
-                    obd2ProfileStore = profileStore,
-                    sessionStore = sessionStore,
-                    investigationRecorder = investigationRecorder,
-                    enableInvestigationCampaign = DiagnosticsFlags.ENABLE_ECU_INVESTIGATION,
-                )
-                val renaultTransport = RenaultTransport(
-                    connection = connection,
-                    onDataReceived = callbacks.onDataReceived,
-                    onConnectionStateChanged = callbacks.onConnectionStateChanged,
-                    onError = callbacks.onError,
-                    obd2ProfileStore = profileStore,
-                    investigationRecorder = investigationRecorder,
-                )
-                val vagTransport = VagTransport(
-                    connection = connection,
-                    onDataReceived = callbacks.onDataReceived,
-                    onConnectionStateChanged = callbacks.onConnectionStateChanged,
-                    onError = callbacks.onError,
-                    investigationRecorder = investigationRecorder,
-                )
-                val promotingObd2Transport = PromotingObd2Transport(
-                    genericTransport = obd2Transport,
-                    psaTransport = psaTransport,
-                )
-                val renaultPsaTransport = AutoDetectEcuTransport(
-                    primaryTransport = renaultTransport,
-                    obd2FallbackTransport = psaTransport,
-                )
-                val vagRenaultPsaTransport = AutoDetectEcuTransport(
-                    primaryTransport = vagTransport,
-                    obd2FallbackTransport = renaultPsaTransport,
-                )
-                AutoDetectEcuTransport(
-                    primaryTransport = promotingObd2Transport,
-                    obd2FallbackTransport = vagRenaultPsaTransport,
-                )
-            }
-            AppProtocol.MS_PROTOCOL -> SpeeduinoClient(
-                connection = connection,
-                onDataReceived = callbacks.onDataReceived,
-                onConnectionStateChanged = callbacks.onConnectionStateChanged,
-                onError = callbacks.onError,
-            )
-        }
+        return SpeeduinoClient(
+            connection = connection,
+            onDataReceived = callbacks.onDataReceived,
+            onConnectionStateChanged = callbacks.onConnectionStateChanged,
+            onError = callbacks.onError,
+        )
     }
 
     private fun transportCallbacks(): TransportCallbacks {
@@ -1618,14 +1554,12 @@ internal class DesktopSpeeduinoController(
 
     fun setBeforeAfterBeforeLogPath(path: String?) {
         _beforeAfterBeforeLogPath.value = path
-        beforeAfterSelectionStore.save(DesktopBeforeAfterSelection(beforeLogPath = path, afterLogPath = _beforeAfterAfterLogPath.value))
         _beforeAfterResult.value = null
         _beforeAfterError.value = null
     }
 
     fun setBeforeAfterAfterLogPath(path: String?) {
         _beforeAfterAfterLogPath.value = path
-        beforeAfterSelectionStore.save(DesktopBeforeAfterSelection(beforeLogPath = _beforeAfterBeforeLogPath.value, afterLogPath = path))
         _beforeAfterResult.value = null
         _beforeAfterError.value = null
     }

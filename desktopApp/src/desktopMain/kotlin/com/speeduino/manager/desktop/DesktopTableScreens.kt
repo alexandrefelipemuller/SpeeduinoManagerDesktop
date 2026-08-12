@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -18,11 +19,13 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.border
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,17 +72,11 @@ internal fun PlaceholderScreen(title: String, message: String) {
 @Composable
 internal fun VeTableScreenDesktop(controller: DesktopSpeeduinoController, mapIndex: Int) {
     val table by controller.veTableState(mapIndex).collectAsState()
+    val liveData by controller.liveData.collectAsState()
     val strings = LocalStrings.current
-    val description = buildString {
-        append(strings["label.mapVe"])
-        table?.let {
-            append(" Load axis: ")
-            append(if (it.loadType == VeTable.LoadType.TPS) "TPS %" else "MAP kPa")
-        }
-    }
     MapTableScreen(
         title = if (mapIndex == 1) strings["route.veTable"] else strings["route.veTable2"],
-        description = description,
+        description = strings["label.mapVe"],
         table = table,
         onLoad = { controller.loadVeTable(mapIndex) },
         onSave = { controller.saveVeTable(it, mapIndex) },
@@ -87,30 +84,26 @@ internal fun VeTableScreenDesktop(controller: DesktopSpeeduinoController, mapInd
         parseValue = { it.toIntOrNull() },
         valueRange = 0..255,
         cellColor = { VeTable.getColorForValue(it).toComposeColor() },
-        loadAxisLabel = { if (it.loadType == VeTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
+        axisTypeLabel = { if (it.loadType == VeTable.LoadType.TPS) strings["label.alphaNAxis"] else strings["label.speedDensityAxis"] },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },
         updateCell = { t, row, col, value -> t.setValue(row, col, value) },
         updateRpm = { t, index, value -> t.setRpmBin(index, value) },
-        updateLoad = { t, index, value -> t.setLoadBin(index, value) }
+        updateLoad = { t, index, value -> t.setLoadBin(index, value) },
+        liveRpm = liveData?.rpm,
+        liveLoad = { t -> if (t.loadType == VeTable.LoadType.TPS) liveData?.tps else liveData?.mapPressure }
     )
 }
 
 @Composable
 internal fun IgnitionTableScreenDesktop(controller: DesktopSpeeduinoController, mapIndex: Int) {
     val table by controller.ignitionTableState(mapIndex).collectAsState()
+    val liveData by controller.liveData.collectAsState()
     val strings = LocalStrings.current
-    val description = buildString {
-        append(strings["label.mapIgnition"])
-        table?.let {
-            append(" Load axis: ")
-            append(if (it.loadType == IgnitionTable.LoadType.TPS) "TPS %" else "MAP kPa")
-        }
-    }
     MapTableScreen(
         title = if (mapIndex == 1) strings["route.ignitionTable"] else strings["route.ignitionTable2"],
-        description = description,
+        description = strings["label.mapIgnition"],
         table = table,
         onLoad = { controller.loadIgnitionTable(mapIndex) },
         onSave = { controller.saveIgnitionTable(it, mapIndex) },
@@ -118,30 +111,26 @@ internal fun IgnitionTableScreenDesktop(controller: DesktopSpeeduinoController, 
         parseValue = { it.toIntOrNull() },
         valueRange = -40..70,
         cellColor = { IgnitionTable.getColorForValue(it).toComposeColor() },
-        loadAxisLabel = { if (it.loadType == IgnitionTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
+        axisTypeLabel = { if (it.loadType == IgnitionTable.LoadType.TPS) strings["label.alphaNAxis"] else strings["label.speedDensityAxis"] },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },
         updateCell = { t, row, col, value -> t.setValue(row, col, value) },
         updateRpm = { t, index, value -> t.setRpmBin(index, value) },
-        updateLoad = { t, index, value -> t.setLoadBin(index, value) }
+        updateLoad = { t, index, value -> t.setLoadBin(index, value) },
+        liveRpm = liveData?.rpm,
+        liveLoad = { t -> if (t.loadType == IgnitionTable.LoadType.TPS) liveData?.tps else liveData?.mapPressure }
     )
 }
 
 @Composable
 internal fun AfrTableScreenDesktop(controller: DesktopSpeeduinoController) {
     val table by controller.afrTable.collectAsState()
+    val liveData by controller.liveData.collectAsState()
     val strings = LocalStrings.current
-    val description = buildString {
-        append(strings["label.mapAfr"])
-        table?.let {
-            append(" Load axis: ")
-            append(if (it.loadType == AfrTable.LoadType.TPS) "TPS %" else "MAP kPa")
-        }
-    }
     MapTableScreen(
         title = strings["route.afrTable"],
-        description = description,
+        description = strings["label.mapAfr"],
         table = table,
         onLoad = controller::loadAfrTable,
         onSave = controller::saveAfrTable,
@@ -149,30 +138,26 @@ internal fun AfrTableScreenDesktop(controller: DesktopSpeeduinoController) {
         parseValue = { parseAfrValue(it) },
         valueRange = 100..200,
         cellColor = { AfrTable.getColorForValue(it).toComposeColor() },
-        loadAxisLabel = { if (it.loadType == AfrTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
+        axisTypeLabel = { if (it.loadType == AfrTable.LoadType.TPS) strings["label.alphaNAxis"] else strings["label.speedDensityAxis"] },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },
         updateCell = { t, row, col, value -> t.setValue(row, col, value) },
         updateRpm = { t, index, value -> t.setRpmBin(index, value) },
-        updateLoad = { t, index, value -> t.setLoadBin(index, value) }
+        updateLoad = { t, index, value -> t.setLoadBin(index, value) },
+        liveRpm = liveData?.rpm,
+        liveLoad = { t -> if (t.loadType == AfrTable.LoadType.TPS) liveData?.tps else liveData?.mapPressure }
     )
 }
 
 @Composable
 internal fun DwellTableScreenDesktop(controller: DesktopSpeeduinoController) {
     val table by controller.dwellTable.collectAsState()
+    val liveData by controller.liveData.collectAsState()
     val strings = LocalStrings.current
-    val description = buildString {
-        append("Ignition coil charge time table.")
-        table?.let {
-            append(" Load axis: ")
-            append(if (it.loadType == IgnitionTable.LoadType.TPS) "TPS %" else "MAP kPa")
-        }
-    }
     MapTableScreen(
         title = strings["route.dwellTable"],
-        description = description,
+        description = strings["label.dwellTableDescription"],
         table = table,
         onLoad = controller::loadDwellTable,
         onSave = controller::saveDwellTable,
@@ -180,13 +165,15 @@ internal fun DwellTableScreenDesktop(controller: DesktopSpeeduinoController) {
         parseValue = { it.toIntOrNull() },
         valueRange = 0..10,
         cellColor = { dwellColor(it) },
-        loadAxisLabel = { if (it.loadType == IgnitionTable.LoadType.TPS) "TPS % / RPM" else "MAP kPa / RPM" },
+        axisTypeLabel = { if (it.loadType == IgnitionTable.LoadType.TPS) strings["label.alphaNAxis"] else strings["label.speedDensityAxis"] },
         rpmBins = { it.rpmBins },
         loadBins = { it.loadBins },
         values = { it.values },
         updateCell = { t, row, col, value -> t.setValue(row, col, value) },
         updateRpm = { t, index, value -> t.setRpmBin(index, value) },
-        updateLoad = { t, index, value -> t.setLoadBin(index, value) }
+        updateLoad = { t, index, value -> t.setLoadBin(index, value) },
+        liveRpm = liveData?.rpm,
+        liveLoad = { t -> if (t.loadType == IgnitionTable.LoadType.TPS) liveData?.tps else liveData?.mapPressure }
     )
 }
 
@@ -211,13 +198,15 @@ private fun <T> MapTableScreen(
     parseValue: (String) -> Int?,
     valueRange: IntRange,
     cellColor: (Int) -> Color,
-    loadAxisLabel: (T) -> String,
+    axisTypeLabel: (T) -> String,
     rpmBins: (T) -> List<Int>,
     loadBins: (T) -> List<Int>,
     values: (T) -> List<List<Int>>,
     updateCell: (T, Int, Int, Int) -> T,
     updateRpm: (T, Int, Int) -> T,
-    updateLoad: (T, Int, Int) -> T
+    updateLoad: (T, Int, Int) -> T,
+    liveRpm: Int? = null,
+    liveLoad: (T) -> Int? = { null }
 ) {
     val strings = LocalStrings.current
     var workingTable by remember(table) { mutableStateOf(table) }
@@ -225,6 +214,8 @@ private fun <T> MapTableScreen(
     var editTarget by remember { mutableStateOf<TableEditTarget?>(null) }
     var editValue by remember { mutableStateOf("") }
     var invertYAxis by remember { mutableStateOf(true) }
+    var showInfo by remember { mutableStateOf(false) }
+    var liveCursorEnabled by remember { mutableStateOf(false) }
 
     LaunchedEffect(table) {
         workingTable = table
@@ -241,45 +232,77 @@ private fun <T> MapTableScreen(
     val load = workingTable?.let(loadBins).orEmpty()
     val grid = workingTable?.let(values).orEmpty()
 
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Surface(
+    val activeCurrentLoad = workingTable?.let(liveLoad)
+    val activeCell: Pair<Int, Int>? = if (liveCursorEnabled && liveRpm != null && activeCurrentLoad != null && rpm.isNotEmpty() && load.isNotEmpty()) {
+        nearestIndex(rpm, liveRpm) to nearestIndex(load, activeCurrentLoad)
+    } else null
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text(text = description, style = MaterialTheme.typography.bodyMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = onLoad, enabled = workingTable == null || hasChanges) { Text(strings["action.loadEcu"]) }
-                    FilledTonalButton(
-                        onClick = { workingTable?.let(onSave); hasChanges = false },
-                        enabled = workingTable != null && hasChanges
-                    ) { Text(strings["action.saveEcu"]) }
-                }
-            }
+            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text(
+                text = workingTable?.let(axisTypeLabel) ?: "",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = strings["label.tableInvert"],
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.clickable { showInfo = !showInfo }
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = if (showInfo) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        text = strings["label.info"],
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = strings["label.liveCursor"],
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Switch(checked = liveCursorEnabled, onCheckedChange = { liveCursorEnabled = it })
+            }
+            Spacer(modifier = Modifier.weight(1f))
             androidx.compose.material3.IconButton(onClick = { invertYAxis = !invertYAxis }) {
                 Text(
                     text = "⇅",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (invertYAxis) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (showInfo) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+            ) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
                 )
             }
         }
@@ -309,9 +332,9 @@ private fun <T> MapTableScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            HeaderCell(workingTable?.let(loadAxisLabel) ?: strings["label.loadRpm"])
+                            HeaderCell(strings["label.loadRpm"])
                             rpm.forEachIndexed { index, value ->
-                                HeaderCell(value.toString()) {
+                                HeaderCell(value.toString(), highlighted = activeCell?.first == index) {
                                     editTarget = TableEditTarget.Rpm(index)
                                     editValue = value.toString()
                                 }
@@ -321,7 +344,7 @@ private fun <T> MapTableScreen(
                         loadOrder.forEach { dataRowIndex ->
                             val loadValue = load.getOrNull(dataRowIndex) ?: return@forEach
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                HeaderCell(loadValue.toString()) {
+                                HeaderCell(loadValue.toString(), highlighted = activeCell?.second == dataRowIndex) {
                                     editTarget = TableEditTarget.Load(dataRowIndex)
                                     editValue = loadValue.toString()
                                 }
@@ -329,6 +352,7 @@ private fun <T> MapTableScreen(
                                     ValueCell(
                                         value = formatValue(cell),
                                         background = cellColor(cell),
+                                        isLiveCursor = activeCell == (colIndex to dataRowIndex),
                                         onClick = {
                                             editTarget = TableEditTarget.Cell(dataRowIndex, colIndex)
                                             editValue = formatValue(cell)
@@ -348,6 +372,22 @@ private fun <T> MapTableScreen(
                     )
                 }
             }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            FilledTonalButton(
+                onClick = onLoad,
+                enabled = workingTable == null || hasChanges,
+                modifier = Modifier.weight(1f)
+            ) { Text(strings["action.loadEcu"]) }
+            FilledTonalButton(
+                onClick = { workingTable?.let(onSave); hasChanges = false },
+                enabled = workingTable != null && hasChanges,
+                modifier = Modifier.weight(1f)
+            ) { Text(strings["action.saveEcu"]) }
         }
     }
 
@@ -401,12 +441,25 @@ private sealed class TableEditTarget {
     data class Load(val index: Int) : TableEditTarget()
 }
 
+private fun nearestIndex(bins: List<Int>, value: Int): Int {
+    var best = 0
+    var bestDelta = Int.MAX_VALUE
+    bins.forEachIndexed { index, bin ->
+        val delta = kotlin.math.abs(bin - value)
+        if (delta < bestDelta) {
+            bestDelta = delta
+            best = index
+        }
+    }
+    return best
+}
+
 @Composable
-private fun HeaderCell(text: String, onClick: (() -> Unit)? = null) {
+private fun HeaderCell(text: String, highlighted: Boolean = false, onClick: (() -> Unit)? = null) {
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        color = if (highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(if (highlighted) 2.dp else 1.dp, if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
     ) {
         val modifier = Modifier
             .width(68.dp)
@@ -416,18 +469,19 @@ private fun HeaderCell(text: String, onClick: (() -> Unit)? = null) {
             modifier = clickable,
             contentAlignment = Alignment.Center
         ) {
-            Text(text = text, style = MaterialTheme.typography.labelLarge)
+            Text(text = text, style = MaterialTheme.typography.labelLarge, fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Normal)
         }
     }
 }
 
 @Composable
-private fun ValueCell(value: String, background: Color, onClick: () -> Unit) {
+private fun ValueCell(value: String, background: Color, isLiveCursor: Boolean = false, onClick: () -> Unit) {
     val bg = background.copy(alpha = 0.78f)
     val contentColor = if (bg.luminance() < 0.45f) Color(0xFFF8F6F2) else Color(0xFF1C1B1A)
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = bg,
+        modifier = if (isLiveCursor) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
     ) {
         Box(

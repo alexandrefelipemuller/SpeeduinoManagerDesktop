@@ -28,7 +28,6 @@ import com.speeduino.manager.desktop.ConnectionType
 import com.speeduino.manager.desktop.DiagnosticLoggerMode
 import com.speeduino.manager.desktop.InitialScreen
 import com.speeduino.manager.desktop.DesktopDashboardMode
-import com.speeduino.manager.desktop.AppProtocol
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.IniSelectionMode
 import com.speeduino.manager.desktop.IniSelectionSource
@@ -114,19 +113,6 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                     val selected = languageOptions.firstOrNull { it.second == label }?.first
                         ?: AppLanguage.EN
                     LocalizationManager.setLanguage(selected)
-                }
-
-                DropdownField(
-                    label = strings["label.protocol"],
-                    value = when (draftSettings.protocol) {
-                        AppProtocol.MS_PROTOCOL -> strings["label.speeduinoMs"]
-                        AppProtocol.ELM327_OBD2 -> strings["label.elm327Obd2"]
-                    },
-                    options = listOf(strings["label.speeduinoMs"], strings["label.elm327Obd2"])
-                ) { label ->
-                    draftSettings = draftSettings.copy(
-                        protocol = if (label == strings["label.elm327Obd2"]) AppProtocol.ELM327_OBD2 else AppProtocol.MS_PROTOCOL
-                    )
                 }
 
                 DropdownField(

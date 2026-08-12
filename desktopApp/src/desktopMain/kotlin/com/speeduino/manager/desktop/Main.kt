@@ -12,9 +12,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.ecucore.connection.ConnectionTrace
@@ -69,6 +71,9 @@ private fun SpeeduinoDesktopTheme(content: @Composable () -> Unit) {
     )
 }
 
+private val KioskWidth = 800.dp
+private val KioskHeight = 480.dp
+
 fun main() = application {
     ConnectionTrace.enabled = true
     ConnectionTrace.sink = DesktopConnectionTraceSink
@@ -80,9 +85,20 @@ fun main() = application {
     Window(
         onCloseRequest = { kotlin.system.exitProcess(0) },
         title = strings["app.windowTitle"],
-        state = rememberWindowState(width = 1400.dp, height = 900.dp)
+        undecorated = true,
+        resizable = false,
+        state = rememberWindowState(
+            width = KioskWidth,
+            height = KioskHeight,
+            position = WindowPosition(0.dp, 0.dp)
+        )
     ) {
-        CompositionLocalProvider(LocalStrings provides strings) {
+        // Fixed 800x480 kiosk display: pin density to 1px = 1dp so layout matches the
+        // panel's native resolution instead of scaling by the host's reported DPI.
+        CompositionLocalProvider(
+            LocalStrings provides strings,
+            androidx.compose.ui.platform.LocalDensity provides Density(1f)
+        ) {
             SpeeduinoDesktopTheme {
                 DesktopAppShell()
             }
