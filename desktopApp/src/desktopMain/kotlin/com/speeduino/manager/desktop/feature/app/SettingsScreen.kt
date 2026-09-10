@@ -34,6 +34,8 @@ import com.speeduino.manager.desktop.IniSelectionSource
 import com.speeduino.manager.desktop.LocalizationManager
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.MANUAL_FIRMWARE_PROFILES
+import com.speeduino.manager.desktop.ThemeManager
+import com.speeduino.manager.desktop.ThemeMode
 import com.speeduino.manager.desktop.ui.chooseOpenFile
 import com.speeduino.manager.desktop.ui.chooseSaveFile
 import com.speeduino.manager.desktop.ui.NumberField
@@ -50,6 +52,7 @@ import java.util.Locale
 internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
     val strings = LocalStrings.current
     val language by LocalizationManager.language.collectAsState()
+    val themeMode by ThemeManager.themeMode.collectAsState()
     val configState by controller.configState.collectAsState()
     val desktopSettings by controller.desktopSettings.collectAsState()
     val availableIniDefinitions by controller.availableIniDefinitions.collectAsState()
@@ -113,6 +116,19 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                     val selected = languageOptions.firstOrNull { it.second == label }?.first
                         ?: AppLanguage.EN
                     LocalizationManager.setLanguage(selected)
+                }
+
+                DropdownField(
+                    label = strings["label.themeTitle"],
+                    value = when (themeMode) {
+                        ThemeMode.LIGHT -> strings["label.themeLight"]
+                        ThemeMode.DARK -> strings["label.themeDark"]
+                    },
+                    options = listOf(strings["label.themeLight"], strings["label.themeDark"])
+                ) { label ->
+                    ThemeManager.setThemeMode(
+                        if (label == strings["label.themeDark"]) ThemeMode.DARK else ThemeMode.LIGHT
+                    )
                 }
 
                 DropdownField(

@@ -589,6 +589,9 @@ object Translations {
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
         "label.info" to "Info",
+        "label.themeTitle" to "Theme",
+        "label.themeLight" to "Light",
+        "label.themeDark" to "Dark",
         "label.dwellTableDescription" to "Ignition coil charge time table.",
         "label.liveCursor" to "Live cursor",
         "label.speedDensityAxis" to "Speed Density (MAP kPa)",
@@ -1189,6 +1192,9 @@ object Translations {
         "label.recommendedRange" to "Faixa recomendada: %s..%s",
         "label.mapVe" to "Mapa de combustivel (VE).",
         "label.info" to "Info",
+        "label.themeTitle" to "Tema",
+        "label.themeLight" to "Claro",
+        "label.themeDark" to "Escuro",
         "label.dwellTableDescription" to "Tabela de tempo de carga da bobina de ignicao.",
         "label.liveCursor" to "Cursor ao vivo",
         "label.speedDensityAxis" to "Speed Density (MAP kPa)",
@@ -1624,6 +1630,9 @@ object Translations {
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
         "label.info" to "Info",
+        "label.themeTitle" to "Tema",
+        "label.themeLight" to "Claro",
+        "label.themeDark" to "Oscuro",
         "label.dwellTableDescription" to "Tabla de tiempo de carga de la bobina de encendido.",
         "label.liveCursor" to "Cursor en vivo",
         "label.speedDensityAxis" to "Speed Density (MAP kPa)",
@@ -2015,6 +2024,9 @@ object Translations {
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
         "label.info" to "Info",
+        "label.themeTitle" to "Theme",
+        "label.themeLight" to "Clair",
+        "label.themeDark" to "Sombre",
         "label.dwellTableDescription" to "Table du temps de charge de la bobine d'allumage.",
         "label.liveCursor" to "Curseur en direct",
         "label.speedDensityAxis" to "Speed Density (MAP kPa)",
@@ -2405,6 +2417,9 @@ object Translations {
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
         "label.info" to "Info",
+        "label.themeTitle" to "Tema",
+        "label.themeLight" to "Terang",
+        "label.themeDark" to "Gelap",
         "label.dwellTableDescription" to "Tabel waktu pengisian koil pengapian.",
         "label.liveCursor" to "Kursor langsung",
         "label.speedDensityAxis" to "Speed Density (MAP kPa)",
@@ -2792,6 +2807,9 @@ object Translations {
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
         "label.info" to "信息",
+        "label.themeTitle" to "主题",
+        "label.themeLight" to "浅色",
+        "label.themeDark" to "深色",
         "label.dwellTableDescription" to "点火线圈充电时间表。",
         "label.liveCursor" to "实时光标",
         "label.speedDensityAxis" to "Speed Density (MAP kPa)",
@@ -3012,5 +3030,15 @@ object LocalizationManager {
 
     fun currentStrings(): Strings {
         return Strings(Translations.forLanguage(language.value))
+    }
+}
+
+internal object ThemeManager {
+    val themeMode = MutableStateFlow(DesktopSettingsStore.loadThemeMode())
+
+    fun setThemeMode(themeMode: ThemeMode) {
+        if (this.themeMode.value == themeMode) return
+        this.themeMode.value = themeMode
+        DesktopSettingsStore.saveThemeMode(themeMode)
     }
 }

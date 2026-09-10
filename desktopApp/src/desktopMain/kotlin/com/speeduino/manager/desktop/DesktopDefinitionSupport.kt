@@ -67,6 +67,8 @@ internal enum class DesktopDashboardMode { DEFAULT, PETROL, FUTURE, APEX }
 
 internal enum class InitialScreen { HOME, DASHBOARD }
 
+internal enum class ThemeMode { LIGHT, DARK }
+
 internal data class DesktopSettingsState(
     val unitSystem: UnitSystem = UnitSystem.AUTO,
     val autoConnectOnStart: Boolean = false,
@@ -258,6 +260,7 @@ internal object DesktopSettingsStore {
     private const val SETTINGS_FILE = "settings.properties"
     private const val INI_CACHE_FILE = "ini_cache.properties"
     private const val KEY_LANGUAGE = "language"
+    private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_UNIT_SYSTEM = "unit_system"
     private const val KEY_AUTO_CONNECT_ON_START = "auto_connect_on_start"
     private const val KEY_SHIFT_LIGHT_RPM = "shift_light_rpm"
@@ -314,6 +317,17 @@ internal object DesktopSettingsStore {
     fun saveLanguage(language: AppLanguage) {
         val properties = loadProperties(settingsFile())
         properties.setProperty(KEY_LANGUAGE, language.code)
+        storeProperties(settingsFile(), properties)
+    }
+
+    fun loadThemeMode(): ThemeMode {
+        val value = loadProperties(settingsFile()).getProperty(KEY_THEME_MODE)
+        return runCatching { ThemeMode.valueOf(value ?: ThemeMode.LIGHT.name) }.getOrDefault(ThemeMode.LIGHT)
+    }
+
+    fun saveThemeMode(themeMode: ThemeMode) {
+        val properties = loadProperties(settingsFile())
+        properties.setProperty(KEY_THEME_MODE, themeMode.name)
         storeProperties(settingsFile(), properties)
     }
 

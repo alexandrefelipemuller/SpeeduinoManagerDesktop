@@ -1,7 +1,9 @@
 package com.speeduino.manager.desktop
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -26,7 +28,7 @@ import io.ecucore.shared.Logger
 import java.io.PrintWriter
 import java.io.StringWriter
 
-private val SpeeduinoColorScheme = lightColorScheme(
+private val SpeeduinoLightColorScheme = lightColorScheme(
     primary = Color(0xFF305C4F),
     onPrimary = Color(0xFFF8F6F2),
     secondary = Color(0xFFC37B2C),
@@ -38,6 +40,20 @@ private val SpeeduinoColorScheme = lightColorScheme(
     surfaceVariant = Color(0xFFF0E7D8),
     onSurfaceVariant = Color(0xFF3B342C),
     outline = Color(0xFFB8AFA2)
+)
+
+private val SpeeduinoDarkColorScheme = darkColorScheme(
+    primary = Color(0xFF6FA593),
+    onPrimary = Color(0xFF0A1512),
+    secondary = Color(0xFFE0A254),
+    onSecondary = Color(0xFF2A1A05),
+    background = Color(0xFF000000),
+    onBackground = Color(0xFFF2F2F2),
+    surface = Color(0xFF121212),
+    onSurface = Color(0xFFF2F2F2),
+    surfaceVariant = Color(0xFF232323),
+    onSurfaceVariant = Color(0xFFCFCFCF),
+    outline = Color(0xFF5A5A5A)
 )
 
 private val SpeeduinoTypography = Typography(
@@ -63,9 +79,10 @@ private val SpeeduinoTypography = Typography(
 )
 
 @Composable
-private fun SpeeduinoDesktopTheme(content: @Composable () -> Unit) {
+private fun SpeeduinoDesktopTheme(themeMode: ThemeMode, content: @Composable () -> Unit) {
+    val colorScheme: ColorScheme = if (themeMode == ThemeMode.DARK) SpeeduinoDarkColorScheme else SpeeduinoLightColorScheme
     MaterialTheme(
-        colorScheme = SpeeduinoColorScheme,
+        colorScheme = colorScheme,
         typography = SpeeduinoTypography,
         content = content
     )
@@ -81,6 +98,7 @@ fun main() = application {
 
     val language by LocalizationManager.language.collectAsState()
     val strings = remember(language) { Strings(Translations.forLanguage(language)) }
+    val themeMode by ThemeManager.themeMode.collectAsState()
 
     Window(
         onCloseRequest = { kotlin.system.exitProcess(0) },
@@ -99,7 +117,7 @@ fun main() = application {
             LocalStrings provides strings,
             androidx.compose.ui.platform.LocalDensity provides Density(1f)
         ) {
-            SpeeduinoDesktopTheme {
+            SpeeduinoDesktopTheme(themeMode) {
                 DesktopAppShell()
             }
         }

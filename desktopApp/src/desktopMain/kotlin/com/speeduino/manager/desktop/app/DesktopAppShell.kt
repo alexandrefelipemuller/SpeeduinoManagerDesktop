@@ -126,15 +126,28 @@ internal fun DesktopAppShell() {
         }
     }
 
-    val backgroundBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFF6F1E8),
-            Color(0xFFE7EEF0),
-            Color(0xFFF6F1E8)
-        ),
-        start = Offset.Zero,
-        end = Offset(0f, 1400f)
-    )
+    val themeMode by com.speeduino.manager.desktop.ThemeManager.themeMode.collectAsState()
+    val backgroundBrush = if (themeMode == com.speeduino.manager.desktop.ThemeMode.DARK) {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF000000),
+                Color(0xFF101312),
+                Color(0xFF000000)
+            ),
+            start = Offset.Zero,
+            end = Offset(0f, 1400f)
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFFF6F1E8),
+                Color(0xFFE7EEF0),
+                Color(0xFFF6F1E8)
+            ),
+            start = Offset.Zero,
+            end = Offset(0f, 1400f)
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(backgroundBrush)) {
         Row(

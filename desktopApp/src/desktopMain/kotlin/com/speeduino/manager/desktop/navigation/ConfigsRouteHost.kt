@@ -4,8 +4,10 @@ import androidx.compose.runtime.Composable
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.ConfigsTuningScreenDesktop
 import com.speeduino.manager.desktop.ClosedLoopCorrectionsScreenDesktop
+import com.speeduino.manager.desktop.DwellTableScreenDesktop
 import com.speeduino.manager.desktop.EngineOperationScreenDesktop
 import com.speeduino.manager.desktop.IgnitionScreenDesktop
+import com.speeduino.manager.desktop.IgnitionTableScreenDesktop
 import com.speeduino.manager.desktop.IdleControlScreenDesktop
 import com.speeduino.manager.desktop.SecondarySerialScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.EngineConstantsScreenDesktop
@@ -69,6 +71,9 @@ internal fun ConfigsRouteHost(
         DesktopRoute.EngineConstants -> EngineConstantsScreenDesktop(controller)
         DesktopRoute.TriggerSettings -> TriggerSettingsScreenDesktop(controller)
         DesktopRoute.IgnitionConfig -> IgnitionConfigScreenDesktop(controller)
+        DesktopRoute.IgnitionTable -> IgnitionTableScreenDesktop(controller, mapIndex = 1)
+        DesktopRoute.IgnitionTable2 -> IgnitionTableScreenDesktop(controller, mapIndex = 2)
+        DesktopRoute.DwellTable -> DwellTableScreenDesktop(controller)
         DesktopRoute.IdleControl -> IdleControlScreenDesktop(controller)
         DesktopRoute.ClosedLoopCorrections -> ClosedLoopCorrectionsScreenDesktop(controller)
         DesktopRoute.SensorsConfig -> SensorsCalibrationScreenDesktop(controller)

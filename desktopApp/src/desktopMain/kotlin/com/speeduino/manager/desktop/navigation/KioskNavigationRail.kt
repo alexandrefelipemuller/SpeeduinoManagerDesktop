@@ -50,7 +50,7 @@ internal fun KioskNavigationRail(
     ) {
         Column(
             modifier = Modifier.fillMaxHeight().padding(vertical = 8.dp, horizontal = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.SpaceEvenly
         ) {
             RailDestinations.forEach { route ->
                 RailButton(
