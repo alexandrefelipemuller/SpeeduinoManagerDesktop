@@ -299,6 +299,7 @@ object Translations {
         "label.toolsSubtitle" to "Real-time monitor, log viewer, log analyzer, virtual dyno and before/after compare.",
         "label.toolsConnectionDesc" to "Open the connection hub, profile settings and transport-specific entry points.",
         "label.toolsConnectionSettingsDesc" to "Review saved host, port and protocol shortcuts before connecting.",
+        "label.toolsAnalysisSection" to "Analysis",
         "label.logAnalyzerUtilityDesc" to "Analyze a CSV log and generate VE tuning suggestions.",
         "label.toolsConnectionDesc" to "Open the connection hub, profile settings and transport-specific entry points.",
         "label.realtimeUtilityDesc" to "Watch live data and capture it to CSV or MSL.",
@@ -588,6 +589,14 @@ object Translations {
         "label.stoich" to "Stoich: %.1f",
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
+        "label.info" to "Info",
+        "label.themeTitle" to "Theme",
+        "label.themeLight" to "Light",
+        "label.themeDark" to "Dark",
+        "label.dwellTableDescription" to "Ignition coil charge time table.",
+        "label.liveCursor" to "Live cursor",
+        "label.speedDensityAxis" to "Speed Density (MAP kPa)",
+        "label.alphaNAxis" to "Alpha-N (TPS %)",
         "label.mapIgnition" to "Ignition map (degrees BTDC).",
         "label.mapAfr" to "AFR target map (lambda).",
         "label.revLimiter" to "Rev Limiter",
@@ -1062,6 +1071,7 @@ object Translations {
         "label.toolsSubtitle" to "Monitor em tempo real, visualizador, analisador, dinamometro virtual e comparação antes/depois.",
         "label.toolsConnectionDesc" to "Abra o hub de conexão, ajustes de perfil e pontos de entrada específicos de transporte.",
         "label.toolsConnectionSettingsDesc" to "Revise host, porta e atalhos de protocolo salvos antes de conectar.",
+        "label.toolsAnalysisSection" to "Análise",
         "label.toolsRealTimeDesc" to "Veja dados ao vivo e capture em CSV ou MSL.",
         "label.toolsLogViewerDesc" to "Inspecione logs capturados ou abra manualmente um CSV antigo.",
         "label.toolsLogAnalyzerDesc" to "Analise um log CSV e gere sugestões de ajuste de VE.",
@@ -1183,6 +1193,14 @@ object Translations {
         "label.stoich" to "Stoich: %.1f",
         "label.recommendedRange" to "Faixa recomendada: %s..%s",
         "label.mapVe" to "Mapa de combustivel (VE).",
+        "label.info" to "Info",
+        "label.themeTitle" to "Tema",
+        "label.themeLight" to "Claro",
+        "label.themeDark" to "Escuro",
+        "label.dwellTableDescription" to "Tabela de tempo de carga da bobina de ignicao.",
+        "label.liveCursor" to "Cursor ao vivo",
+        "label.speedDensityAxis" to "Speed Density (MAP kPa)",
+        "label.alphaNAxis" to "Alpha-N (TPS %)",
         "label.mapIgnition" to "Mapa de ignicao (graus BTDC).",
         "label.mapAfr" to "Mapa de metas AFR (lambda).",
         "label.mapAndStoich" to "MAP e estequiometria",
@@ -1613,6 +1631,14 @@ object Translations {
         "label.stoich" to "Stoich: %.1f",
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
+        "label.info" to "Info",
+        "label.themeTitle" to "Tema",
+        "label.themeLight" to "Claro",
+        "label.themeDark" to "Oscuro",
+        "label.dwellTableDescription" to "Tabla de tiempo de carga de la bobina de encendido.",
+        "label.liveCursor" to "Cursor en vivo",
+        "label.speedDensityAxis" to "Speed Density (MAP kPa)",
+        "label.alphaNAxis" to "Alpha-N (TPS %)",
         "label.mapIgnition" to "Ignition map (degrees BTDC).",
         "label.mapAfr" to "AFR target map (lambda).",
         "label.mapAndStoich" to "MAP and stoichiometry",
@@ -1999,6 +2025,14 @@ object Translations {
         "label.stoich" to "Stoich: %.1f",
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
+        "label.info" to "Info",
+        "label.themeTitle" to "Theme",
+        "label.themeLight" to "Clair",
+        "label.themeDark" to "Sombre",
+        "label.dwellTableDescription" to "Table du temps de charge de la bobine d'allumage.",
+        "label.liveCursor" to "Curseur en direct",
+        "label.speedDensityAxis" to "Speed Density (MAP kPa)",
+        "label.alphaNAxis" to "Alpha-N (TPS %)",
         "label.mapIgnition" to "Ignition map (degrees BTDC).",
         "label.mapAfr" to "AFR target map (lambda).",
         "label.mapAndStoich" to "MAP and stoichiometry",
@@ -2384,6 +2418,14 @@ object Translations {
         "label.stoich" to "Stoich: %.1f",
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
+        "label.info" to "Info",
+        "label.themeTitle" to "Tema",
+        "label.themeLight" to "Terang",
+        "label.themeDark" to "Gelap",
+        "label.dwellTableDescription" to "Tabel waktu pengisian koil pengapian.",
+        "label.liveCursor" to "Kursor langsung",
+        "label.speedDensityAxis" to "Speed Density (MAP kPa)",
+        "label.alphaNAxis" to "Alpha-N (TPS %)",
         "label.mapIgnition" to "Ignition map (degrees BTDC).",
         "label.mapAfr" to "AFR target map (lambda).",
         "label.mapAndStoich" to "MAP and stoichiometry",
@@ -2766,6 +2808,14 @@ object Translations {
         "label.stoich" to "Stoich: %.1f",
         "label.recommendedRange" to "Recommended range: %s..%s",
         "label.mapVe" to "Fuel map (VE).",
+        "label.info" to "信息",
+        "label.themeTitle" to "主题",
+        "label.themeLight" to "浅色",
+        "label.themeDark" to "深色",
+        "label.dwellTableDescription" to "点火线圈充电时间表。",
+        "label.liveCursor" to "实时光标",
+        "label.speedDensityAxis" to "Speed Density (MAP kPa)",
+        "label.alphaNAxis" to "Alpha-N (TPS %)",
         "label.mapIgnition" to "Ignition map (degrees BTDC).",
         "label.mapAfr" to "AFR target map (lambda).",
         "label.mapAndStoich" to "MAP and stoichiometry",
@@ -2982,5 +3032,15 @@ object LocalizationManager {
 
     fun currentStrings(): Strings {
         return Strings(Translations.forLanguage(language.value))
+    }
+}
+
+internal object ThemeManager {
+    val themeMode = MutableStateFlow(DesktopSettingsStore.loadThemeMode())
+
+    fun setThemeMode(themeMode: ThemeMode) {
+        if (this.themeMode.value == themeMode) return
+        this.themeMode.value = themeMode
+        DesktopSettingsStore.saveThemeMode(themeMode)
     }
 }

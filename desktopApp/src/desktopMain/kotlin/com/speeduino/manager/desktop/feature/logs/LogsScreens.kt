@@ -822,6 +822,7 @@ private fun BeforeAfterHeatmap(
     }
 }
 
+
 @Composable
 private fun StrategyChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Surface(

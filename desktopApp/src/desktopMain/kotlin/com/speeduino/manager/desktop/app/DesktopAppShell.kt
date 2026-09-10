@@ -7,24 +7,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -46,12 +40,11 @@ import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.InitialScreen
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.navigation.DesktopRoute
-import com.speeduino.manager.desktop.navigation.NavigationSidebar
+import com.speeduino.manager.desktop.navigation.KioskNavigationRail
 import com.speeduino.manager.desktop.navigation.ScreenHost
 import com.speeduino.manager.desktop.navigation.parentRoute
 import com.speeduino.manager.desktop.ui.HeaderBar
 import com.speeduino.manager.desktop.ui.chooseSaveFile
-import kotlinx.coroutines.launch
 
 @Composable
 internal fun DesktopAppShell() {
@@ -72,7 +65,6 @@ internal fun DesktopAppShell() {
     val connectionState by controller.connectionState.collectAsState()
     val liveData by controller.liveData.collectAsState()
     val configState by controller.configState.collectAsState()
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
     val portIsValid by remember {
         derivedStateOf { appState.port.toIntOrNull()?.let { it in 1..65535 } == true }
@@ -134,63 +126,61 @@ internal fun DesktopAppShell() {
         }
     }
 
-    val backgroundBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFF6F1E8),
-            Color(0xFFE7EEF0),
-            Color(0xFFF6F1E8)
-        ),
-        start = Offset.Zero,
-        end = Offset(0f, 1400f)
-    )
+    val themeMode by com.speeduino.manager.desktop.ThemeManager.themeMode.collectAsState()
+    val backgroundBrush = if (themeMode == com.speeduino.manager.desktop.ThemeMode.DARK) {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF000000),
+                Color(0xFF101312),
+                Color(0xFF000000)
+            ),
+            start = Offset.Zero,
+            end = Offset(0f, 1400f)
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFFF6F1E8),
+                Color(0xFFE7EEF0),
+                Color(0xFFF6F1E8)
+            ),
+            start = Offset.Zero,
+            end = Offset(0f, 1400f)
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(backgroundBrush)) {
-        androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val isCompactSidebar = maxWidth in 900.dp..1199.dp
-            val useDrawer = maxWidth < 900.dp
-
-            val appContent: @Composable () -> Unit = {
-                Row(
-                    modifier = Modifier.fillMaxSize().padding(24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+        Row(
+            modifier = Modifier.fillMaxSize().padding(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            KioskNavigationRail(
+                currentRoute = appState.currentRoute,
+                onRouteSelected = onOpenRoute
+            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                val contentScroll = rememberScrollState()
+                val isDashboard = appState.currentRoute == DesktopRoute.Dashboard
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (!useDrawer) {
-                        NavigationSidebar(
-                            currentRoute = appState.currentRoute,
-                            onRouteSelected = onOpenRoute,
-                            compact = isCompactSidebar
-                        )
-                    }
-                    androidx.compose.material3.Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                        tonalElevation = 1.dp,
-                        shadowElevation = 0.dp
-                    ) {
-                        val contentScroll = rememberScrollState()
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(24.dp)
-                                    .verticalScroll(contentScroll),
-                                verticalArrangement = Arrangement.spacedBy(20.dp)
-                            ) {
-                                HeaderBar(
-                                    title = strings[appState.currentRoute.titleKey],
-                                    connectionState = connectionState,
-                                    onBackClick = parentRoute(appState.currentRoute)?.let { parent ->
-                                        { appState.currentRoute = parent }
-                                    },
-                                    onMenuClick = if (useDrawer) {
-                                        { scope.launch { drawerState.open() } }
-                                    } else {
-                                        null
-                                    }
-                                )
+                    HeaderBar(
+                        title = strings[appState.currentRoute.titleKey],
+                        connectionState = connectionState,
+                        onBackClick = parentRoute(appState.currentRoute)?.let { parent ->
+                            { appState.currentRoute = parent }
+                        }
+                    )
 
-                                ScreenHost(
+                    val screenContentModifier = if (isDashboard) {
+                        Modifier.weight(1f).fillMaxWidth()
+                    } else {
+                        Modifier.weight(1f).fillMaxWidth().verticalScroll(contentScroll)
+                    }
+
+                    Box(modifier = screenContentModifier) {
+                    ScreenHost(
                                     route = appState.currentRoute,
                                     controller = controller,
                                     connectionState = connectionState,
@@ -222,7 +212,6 @@ internal fun DesktopAppShell() {
                                     onOpenIgnitionTable2 = { appState.currentRoute = DesktopRoute.IgnitionTable2 },
                                     onOpenAfrTable = { appState.currentRoute = DesktopRoute.AfrTable },
                                     onOpenDwellTable = { appState.currentRoute = DesktopRoute.DwellTable },
-                                    onOpenBaseMapWizard = { appState.currentRoute = DesktopRoute.BaseMapWizard },
                                     onOpenEngineConstants = { appState.currentRoute = DesktopRoute.EngineConstants },
                                     onOpenTriggerSettings = { appState.currentRoute = DesktopRoute.TriggerSettings },
                                     onOpenIdleControl = { appState.currentRoute = DesktopRoute.IdleControl },
@@ -233,109 +222,78 @@ internal fun DesktopAppShell() {
                                     onOpenInjectorConfig = { appState.currentRoute = DesktopRoute.InjectorConfig },
                                     onOpenRevLimiterConfig = { appState.currentRoute = DesktopRoute.RevLimiterConfig },
                                     onOpenSecondarySerial = { appState.currentRoute = DesktopRoute.SecondarySerial },
-                                    onOpenTuningAssistant = { appState.currentRoute = DesktopRoute.TuningAssistant },
                                     onOpenLogsEcuTools = { appState.currentRoute = DesktopRoute.LogsEcuTools },
                                     onOpenLogViewer = { appState.currentRoute = DesktopRoute.LogViewer },
                                     onOpenRealTimeMonitor = { appState.currentRoute = DesktopRoute.RealTimeMonitor },
-                                    onOpenLogAnalyzer = { appState.currentRoute = DesktopRoute.LogAnalyzer },
-                                    onOpenBeforeAfter = { appState.currentRoute = DesktopRoute.BeforeAfter },
-                                    onOpenVirtualDyno = { appState.currentRoute = DesktopRoute.VirtualDyno },
                                     onOpenHistoricalLogViewer = { path ->
                                         controller.loadLogSnapshotFromCsv(path)
                                         appState.currentRoute = DesktopRoute.LogViewer
                                     }
                                 )
-                            }
-                            VerticalScrollbar(
-                                adapter = rememberScrollbarAdapter(contentScroll),
-                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
-                            )
-                            if (configState.isBusy) {
-                                Surface(
-                                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    tonalElevation = 3.dp,
-                                    shadowElevation = 8.dp,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(
-                                                text = strings.format("label.configProgress", configState.progressPercent),
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                            Text(
-                                                text = configState.message ?: strings["label.noData"],
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                        }
-                                    }
-                                }
+                    }
+                }
+                if (configState.isBusy) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        tonalElevation = 3.dp,
+                        shadowElevation = 8.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = strings.format("label.configProgress", configState.progressPercent),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    text = configState.message ?: strings["label.noData"],
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                             }
                         }
                     }
                 }
             }
+        }
 
-            if (showReportProblemDialog) {
-                AlertDialog(
-                    onDismissRequest = { showReportProblemDialog = false },
-                    title = { Text(strings["route.institutional"]) },
-                    text = { Text(reportProblemText) },
-                    confirmButton = {
-                        FilledTonalButton(onClick = { showReportProblemDialog = false }) {
-                            Text(strings["action.cancel"])
+        if (showReportProblemDialog) {
+            AlertDialog(
+                onDismissRequest = { showReportProblemDialog = false },
+                title = { Text(strings["route.institutional"]) },
+                text = { Text(reportProblemText) },
+                confirmButton = {
+                    FilledTonalButton(onClick = { showReportProblemDialog = false }) {
+                        Text(strings["action.cancel"])
+                    }
+                },
+                dismissButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = {
+                            copyReportToClipboard()
+                        }) {
+                            Text(strings["label.copy"])
                         }
-                    },
-                    dismissButton = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = {
-                                copyReportToClipboard()
-                            }) {
-                                Text(strings["label.copy"])
-                            }
-                            OutlinedButton(onClick = {
-                                exportReport()
-                            }) {
-                                Text(strings["label.export"])
-                            }
-                            FilledTonalButton(onClick = {
-                                openIssueTracker()
-                            }) {
-                                Text(strings["label.openIssue"])
-                            }
+                        OutlinedButton(onClick = {
+                            exportReport()
+                        }) {
+                            Text(strings["label.export"])
+                        }
+                        FilledTonalButton(onClick = {
+                            openIssueTracker()
+                        }) {
+                            Text(strings["label.openIssue"])
                         }
                     }
-                )
-            }
-
-            if (useDrawer) {
-                ModalNavigationDrawer(
-                    drawerState = drawerState,
-                    drawerContent = {
-                        ModalDrawerSheet {
-                            NavigationSidebar(
-                                currentRoute = appState.currentRoute,
-                                onRouteSelected = { route ->
-                                    appState.currentRoute = route
-                                    scope.launch { drawerState.close() }
-                                }
-                            )
-                        }
-                    }
-                ) {
-                    appContent()
                 }
-            } else {
-                appContent()
-            }
+            )
         }
     }
 

@@ -24,17 +24,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.speeduino.manager.desktop.AppLanguage
+import com.speeduino.manager.desktop.AppProtocol
 import com.speeduino.manager.desktop.ConnectionType
 import com.speeduino.manager.desktop.DiagnosticLoggerMode
 import com.speeduino.manager.desktop.InitialScreen
 import com.speeduino.manager.desktop.DesktopDashboardMode
-import com.speeduino.manager.desktop.AppProtocol
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.IniSelectionMode
 import com.speeduino.manager.desktop.IniSelectionSource
 import com.speeduino.manager.desktop.LocalizationManager
 import com.speeduino.manager.desktop.LocalStrings
 import com.speeduino.manager.desktop.MANUAL_FIRMWARE_PROFILES
+import com.speeduino.manager.desktop.ThemeManager
+import com.speeduino.manager.desktop.ThemeMode
 import com.speeduino.manager.desktop.ui.chooseOpenFile
 import com.speeduino.manager.desktop.ui.chooseSaveFile
 import com.speeduino.manager.desktop.ui.NumberField
@@ -51,6 +53,7 @@ import java.util.Locale
 internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
     val strings = LocalStrings.current
     val language by LocalizationManager.language.collectAsState()
+    val themeMode by ThemeManager.themeMode.collectAsState()
     val configState by controller.configState.collectAsState()
     val desktopSettings by controller.desktopSettings.collectAsState()
     val availableIniDefinitions by controller.availableIniDefinitions.collectAsState()
@@ -117,15 +120,15 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                 }
 
                 DropdownField(
-                    label = strings["label.protocol"],
-                    value = when (draftSettings.protocol) {
-                        AppProtocol.MS_PROTOCOL -> strings["label.speeduinoMs"]
-                        AppProtocol.ELM327_OBD2 -> strings["label.elm327Obd2"]
+                    label = strings["label.themeTitle"],
+                    value = when (themeMode) {
+                        ThemeMode.LIGHT -> strings["label.themeLight"]
+                        ThemeMode.DARK -> strings["label.themeDark"]
                     },
-                    options = listOf(strings["label.speeduinoMs"], strings["label.elm327Obd2"])
+                    options = listOf(strings["label.themeLight"], strings["label.themeDark"])
                 ) { label ->
-                    draftSettings = draftSettings.copy(
-                        protocol = if (label == strings["label.elm327Obd2"]) AppProtocol.ELM327_OBD2 else AppProtocol.MS_PROTOCOL
+                    ThemeManager.setThemeMode(
+                        if (label == strings["label.themeDark"]) ThemeMode.DARK else ThemeMode.LIGHT
                     )
                 }
 
@@ -191,6 +194,19 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                             diagnosticLoggerLabel(DiagnosticLoggerMode.COMPOSITE, strings) -> DiagnosticLoggerMode.COMPOSITE
                             else -> DiagnosticLoggerMode.OFF
                         }
+                    )
+                }
+
+                DropdownField(
+                    label = strings["label.protocol"],
+                    value = when (draftSettings.protocol) {
+                        AppProtocol.MS_PROTOCOL -> strings["label.speeduinoMs"]
+                        AppProtocol.ELM327_OBD2 -> strings["label.elm327Obd2"]
+                    },
+                    options = listOf(strings["label.speeduinoMs"], strings["label.elm327Obd2"])
+                ) { label ->
+                    draftSettings = draftSettings.copy(
+                        protocol = if (label == strings["label.elm327Obd2"]) AppProtocol.ELM327_OBD2 else AppProtocol.MS_PROTOCOL
                     )
                 }
 

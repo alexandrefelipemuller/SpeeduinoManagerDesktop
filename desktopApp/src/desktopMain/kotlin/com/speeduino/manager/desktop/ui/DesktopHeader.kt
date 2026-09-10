@@ -1,16 +1,13 @@
 package com.speeduino.manager.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.speeduino.manager.desktop.ConnectionState
 import com.speeduino.manager.desktop.LocalStrings
 
+/** Single compact row: back arrow (if any) + screen title + status pill. No app-name repetition. */
 @Composable
 internal fun HeaderBar(
     title: String,
@@ -33,44 +31,24 @@ internal fun HeaderBar(
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (onMenuClick != null) {
-                    FilledTonalButton(onClick = onMenuClick) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = strings["action.open"]
-                        )
-                    }
-                }
-                if (onBackClick != null) {
-                    FilledTonalButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = strings["action.back"]
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(strings["action.back"])
-                    }
-                }
-            }
-            Column {
-                Text(
-                    text = strings["app.headerTitle"],
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        if (onBackClick != null) {
+            IconButton(onClick = onBackClick, modifier = Modifier.size(30.dp)) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = strings["action.back"],
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
-        StatusPill(
-            connectionState = connectionState
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+            maxLines = 1
         )
+        StatusPill(connectionState = connectionState)
     }
 }

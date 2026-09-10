@@ -40,19 +40,19 @@ internal fun StatusPill(connectionState: ConnectionState) {
         border = androidx.compose.foundation.BorderStroke(1.dp, content.copy(alpha = 0.25f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .height(8.dp)
-                    .width(8.dp)
+                    .height(6.dp)
+                    .width(6.dp)
                     .background(content, shape = CircleShape)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(5.dp))
             Text(
                 text = message,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelSmall,
                 color = content
             )
         }

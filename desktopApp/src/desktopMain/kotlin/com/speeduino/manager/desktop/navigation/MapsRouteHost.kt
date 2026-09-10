@@ -4,9 +4,7 @@ import androidx.compose.runtime.Composable
 import com.speeduino.manager.desktop.AfrTableScreenDesktop
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
 import com.speeduino.manager.desktop.MapsTablesScreenDesktop
-import com.speeduino.manager.desktop.TuningAssistantScreenDesktop
 import com.speeduino.manager.desktop.VeTableScreenDesktop
-import com.speeduino.manager.desktop.feature.maps.BaseMapWizardScreenDesktop
 
 @Composable
 internal fun MapsRouteHost(
@@ -15,10 +13,7 @@ internal fun MapsRouteHost(
     onOpenVeTable: () -> Unit,
     onOpenVeTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
-    onOpenBaseMapWizard: () -> Unit,
-    onOpenTuningAssistant: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
-    onOpenBeforeAfter: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     when (route) {
@@ -27,20 +22,12 @@ internal fun MapsRouteHost(
             onOpenVeTable = onOpenVeTable,
             onOpenVeTable2 = onOpenVeTable2,
             onOpenAfrTable = onOpenAfrTable,
-            onOpenBaseMapWizard = onOpenBaseMapWizard,
-            onOpenTuningAssistant = onOpenTuningAssistant,
             onOpenInjectorConfig = onOpenInjectorConfig,
-            onOpenBeforeAfter = onOpenBeforeAfter,
             onOpenSettings = onOpenSettings
-        )
-        DesktopRoute.TuningAssistant -> TuningAssistantScreenDesktop(
-            controller = controller,
-            onOpenBeforeAfter = onOpenBeforeAfter
         )
         DesktopRoute.VeTable -> VeTableScreenDesktop(controller, mapIndex = 1)
         DesktopRoute.VeTable2 -> VeTableScreenDesktop(controller, mapIndex = 2)
         DesktopRoute.AfrTable -> AfrTableScreenDesktop(controller)
-        DesktopRoute.BaseMapWizard -> BaseMapWizardScreenDesktop(controller)
         else -> Unit
     }
 }
