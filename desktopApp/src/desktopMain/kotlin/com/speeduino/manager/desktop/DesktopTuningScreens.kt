@@ -30,6 +30,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -50,37 +53,63 @@ import com.speeduino.manager.desktop.LocalStrings
 import io.ecucore.tuning.TuningStrategy
 import com.speeduino.manager.desktop.ui.DropdownField
 import com.speeduino.manager.desktop.ui.InfoRow
+import com.speeduino.manager.desktop.ui.KioskFeatureCard
+import com.speeduino.manager.desktop.ui.KioskPanelCard
+import com.speeduino.manager.desktop.ui.KioskScreenScaffold
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
 import kotlin.math.abs
 
 @Composable
+internal fun EcuHubScreenDesktop(
+    onOpenFuel: () -> Unit,
+    onOpenIgnition: () -> Unit,
+    onOpenEngineSetup: () -> Unit,
+    onOpenEngineOperation: () -> Unit,
+) {
+    val strings = LocalStrings.current
+    KioskScreenScaffold(
+        title = strings["route.ecu"],
+    ) {
+        KioskFeatureCard(strings["route.fuel"], strings["label.mapsTablesSubtitle"], Icons.Default.TableChart, onOpenFuel)
+        KioskFeatureCard(strings["route.ignition"], strings["label.ignitionHubSubtitle"], Icons.Default.TableChart, onOpenIgnition)
+        KioskFeatureCard(strings["route.engineSetup"], strings["label.configsTuningSubtitle"], Icons.Default.Settings, onOpenEngineSetup)
+        KioskFeatureCard(strings["route.engineOperation"], strings["label.engineOperationSubtitle"], Icons.Default.Settings, onOpenEngineOperation)
+    }
+}
+
+@Composable
 internal fun MapsTablesScreenDesktop(
+    controller: DesktopSpeeduinoController,
     onOpenVeTable: () -> Unit,
     onOpenVeTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
-    onOpenBaseMapWizard: () -> Unit,
-    onOpenTuningAssistant: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
-    onOpenBeforeAfter: () -> Unit,
-    onOpenSettings: () -> Unit
 ) {
     val strings = LocalStrings.current
-    TuningSectionScreen(
+    val configState by controller.configState.collectAsState()
+    KioskScreenScaffold(
         title = strings["route.mapsTables"],
         subtitle = strings["label.mapsTablesSubtitle"],
     ) {
-        SectionPanel(strings["label.fuelSection"]) {
-            ActionCard(strings["label.injectorConfigTitle"], strings["label.injectorConfigSubtitle"]) { RowButtons(onOpenInjectorConfig, null, strings["action.open"], null) }
-            ActionCard(strings["route.veTable"], strings["label.veTableDesc"]) { RowButtons(onOpenVeTable, onOpenVeTable2, strings["label.veTable1"], strings["label.veTable2"]) }
-            ActionCard(strings["route.afrTable"], strings["label.afrTableDesc"]) { RowButtons(onOpenAfrTable, null, strings["action.open"], null) }
+        KioskPanelCard(strings["label.fuelSection"]) {
+            KioskFeatureCard(strings["label.injectorConfigTitle"], strings["label.injectorConfigSubtitle"], onClick = onOpenInjectorConfig)
+            KioskFeatureCard(strings["label.veTable1"], strings["label.veTableDesc"], onClick = onOpenVeTable)
+            KioskFeatureCard(strings["label.veTable2"], strings["label.veTableDesc"], onClick = onOpenVeTable2)
+            KioskFeatureCard(strings["route.afrTable"], strings["label.afrTableDesc"], onClick = onOpenAfrTable)
         }
-        SectionPanel(strings["label.workflowSection"]) {
-            ActionCard(strings["route.baseMapWizard"], strings["label.baseMapWizardDesc"]) { RowButtons(onOpenBaseMapWizard, null, strings["action.open"], null) }
-            ActionCard(strings["label.tuningAssistantTitle"], strings["label.tuningAssistantSubtitle"]) { RowButtons(onOpenTuningAssistant, null, strings["action.open"], null) }
-            ActionCard(strings["route.beforeAfter"], strings["label.beforeAfterSubtitle"]) { RowButtons(onOpenBeforeAfter, null, strings["action.open"], null) }
-            ActionCard(strings["home.openBackupSettings"], strings["maps_tables_backup_action_desc"]) { RowButtons(onOpenSettings, null, strings["action.open"], null) }
+        KioskPanelCard(strings["label.workflowSection"]) {
+            KioskFeatureCard(
+                strings["home.openBackupSettings"],
+                strings["maps_tables_backup_action_desc"],
+                onClick = {
+                    val source = chooseOpenFile(strings["label.backupOpenTitle"])
+                    if (source != null) {
+                        controller.importConfigAndRestore(source)
+                    }
+                },
+            )
         }
     }
 }
@@ -94,14 +123,15 @@ internal fun IgnitionScreenDesktop(
     onOpenTriggerSettings: () -> Unit
 ) {
     val strings = LocalStrings.current
-    TuningSectionScreen(
+    KioskScreenScaffold(
         title = strings["route.ignition"],
         subtitle = strings["label.ignitionHubSubtitle"],
     ) {
-        ActionCard(strings["label.ignitionConfigTitle"], strings["label.ignitionConfigSubtitle"]) { RowButtons(onOpenIgnitionConfig, null, strings["action.open"], null) }
-        ActionCard(strings["route.ignitionTable"], strings["label.ignitionTableDesc"]) { RowButtons(onOpenIgnitionTable, onOpenIgnitionTable2, strings["label.ignitionTable1"], strings["label.ignitionTable2"]) }
-        ActionCard(strings["route.dwellTable"], strings["label.dwellTableDesc"]) { RowButtons(onOpenDwellTable, null, strings["action.open"], null) }
-        ActionCard(strings["route.triggerSettings"], strings["label.triggerSettingsDesc"]) { RowButtons(onOpenTriggerSettings, null, strings["action.open"], null) }
+        KioskFeatureCard(strings["label.ignitionConfigTitle"], strings["label.ignitionConfigSubtitle"], onClick = onOpenIgnitionConfig)
+        KioskFeatureCard(strings["label.ignitionTable1"], strings["label.ignitionTableDesc"], onClick = onOpenIgnitionTable)
+        KioskFeatureCard(strings["label.ignitionTable2"], strings["label.ignitionTableDesc"], onClick = onOpenIgnitionTable2)
+        KioskFeatureCard(strings["route.dwellTable"], strings["label.dwellTableDesc"], onClick = onOpenDwellTable)
+        KioskFeatureCard(strings["route.triggerSettings"], strings["label.triggerSettingsDesc"], onClick = onOpenTriggerSettings)
     }
 }
 
@@ -115,19 +145,19 @@ internal fun ConfigsTuningScreenDesktop(
     onOpenIgnitionConfig: () -> Unit,
 ) {
     val strings = LocalStrings.current
-    TuningSectionScreen(
+    KioskScreenScaffold(
         title = strings["route.configsTuning"],
         subtitle = strings["label.configsTuningSubtitle"],
     ) {
-        SectionPanel(strings["label.coreSetupSection"]) {
-            ActionCard(strings["label.engineConstantsTitle"], strings["label.engineConstantsSubtitle"]) { RowButtons(onOpenEngineConstants, null, strings["action.open"], null) }
-            ActionCard(strings["label.injectorConfigTitle"], strings["label.injectorConfigSubtitle"]) { RowButtons(onOpenInjectorConfig, null, strings["action.open"], null) }
-            ActionCard(strings["label.ignitionConfigTitle"], strings["label.ignitionConfigSubtitle"]) { RowButtons(onOpenIgnitionConfig, null, strings["action.open"], null) }
+        KioskPanelCard(strings["label.coreSetupSection"]) {
+            KioskFeatureCard(strings["label.engineConstantsTitle"], strings["label.engineConstantsSubtitle"], onClick = onOpenEngineConstants)
+            KioskFeatureCard(strings["label.injectorConfigTitle"], strings["label.injectorConfigSubtitle"], onClick = onOpenInjectorConfig)
+            KioskFeatureCard(strings["label.ignitionConfigTitle"], strings["label.ignitionConfigSubtitle"], onClick = onOpenIgnitionConfig)
         }
-        SectionPanel(strings["label.hardwareSection"]) {
-            ActionCard(strings["label.inputOutputTitle"], strings["label.inputOutputDesc"]) { RowButtons(onOpenInputOutput, null, strings["action.open"], null) }
-            ActionCard(strings["route.sensorsConfig"], strings["label.sensorsCalibrationSubtitle"]) { RowButtons(onOpenSensorCalibration, null, strings["action.open"], null) }
-            ActionCard(strings["label.secondarySerialTitle"], strings["label.secondarySerialSubtitle"]) { RowButtons(onOpenSecondarySerial, null, strings["action.open"], null) }
+        KioskPanelCard(strings["label.hardwareSection"]) {
+            KioskFeatureCard(strings["label.inputOutputTitle"], strings["label.inputOutputDesc"], onClick = onOpenInputOutput)
+            KioskFeatureCard(strings["route.sensorsConfig"], strings["label.sensorsCalibrationSubtitle"], onClick = onOpenSensorCalibration)
+            KioskFeatureCard(strings["label.secondarySerialTitle"], strings["label.secondarySerialSubtitle"], onClick = onOpenSecondarySerial)
         }
     }
 }
@@ -137,28 +167,21 @@ internal fun EngineOperationScreenDesktop(
     onOpenIdleControl: () -> Unit,
     onOpenClosedLoopCorrections: () -> Unit,
     onOpenEngineProtection: () -> Unit,
-    onOpenRevLimiter: () -> Unit,
 ) {
     val strings = LocalStrings.current
-    TuningSectionScreen(
+    KioskScreenScaffold(
         title = strings["route.engineOperation"],
         subtitle = strings["label.engineOperationSubtitle"],
     ) {
-        ActionCard(strings["route.idleControl"], strings["label.idleControlSubtitle"]) { RowButtons(onOpenIdleControl, null, strings["action.open"], null) }
-        ActionCard(strings["route.closedLoopCorrections"], strings["label.closedLoopSubtitle"]) { RowButtons(onOpenClosedLoopCorrections, null, strings["action.open"], null) }
-        ActionCard(strings["route.engineProtection"], strings["label.engineProtectionSubtitle"]) { RowButtons(onOpenEngineProtection, null, strings["action.open"], null) }
-        ActionCard(strings["route.revLimiter"], strings["label.revLimiterSubtitle"]) { RowButtons(onOpenRevLimiter, null, strings["action.open"], null) }
+        KioskFeatureCard(strings["route.idleControl"], strings["label.idleControlSubtitle"], onClick = onOpenIdleControl)
+        KioskFeatureCard(strings["route.closedLoopCorrections"], strings["label.closedLoopSubtitle"], onClick = onOpenClosedLoopCorrections)
+        KioskFeatureCard(strings["route.engineProtection"], strings["label.engineProtectionSubtitle"], onClick = onOpenEngineProtection)
     }
 }
 
 @Composable
 internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController) {
     com.speeduino.manager.desktop.feature.configs.InjectorConfigScreenDesktop(controller)
-}
-
-@Composable
-internal fun RevLimiterConfigScreenDesktop() {
-    com.speeduino.manager.desktop.feature.configs.RevLimiterConfigScreenDesktop()
 }
 
 @Composable
@@ -169,7 +192,7 @@ internal fun InputOutputConfigScreenDesktop(
     val strings = LocalStrings.current
     val tuningState by controller.tuningConfigState.collectAsState()
     val snapshot = tuningState.rusefiSnapshot
-    TuningSectionScreen(
+    KioskScreenScaffold(
         title = strings["label.inputOutputTitle"],
         subtitle = strings["label.ioLoadInstructions"],
     ) {
@@ -204,7 +227,7 @@ internal fun SecondarySerialScreenDesktop(controller: DesktopSpeeduinoController
     var protocolRaw by remember(config) { mutableStateOf(config.protocolRaw.toString()) }
     var hasChanges by remember { mutableStateOf(false) }
 
-    TuningSectionScreen(
+    KioskScreenScaffold(
         title = strings["label.secondarySerialTitle"],
         subtitle = strings["label.secondarySerialTitle"],
     ) {
@@ -269,218 +292,6 @@ internal fun SecondarySerialScreenDesktop(controller: DesktopSpeeduinoController
                     ) { Text(strings["action.saveEcu"]) }
                 }
             }
-        }
-    }
-}
-
-@Composable
-internal fun TuningAssistantScreenDesktop(
-    controller: DesktopSpeeduinoController,
-    onOpenBeforeAfter: () -> Unit
-) {
-    val strings = LocalStrings.current
-    val logPath by controller.analyzerLogFile.collectAsState()
-    val lastSavedLogPath by controller.lastSavedLogPath.collectAsState()
-    val analyzerResult by controller.analyzerResult.collectAsState()
-    val analyzerBusy by controller.analyzerBusy.collectAsState()
-    val analyzerError by controller.analyzerError.collectAsState()
-    val analyzerUndoTable by controller.analyzerUndoAvailable.collectAsState()
-    val veTable by controller.veTable.collectAsState()
-    val afrTable by controller.afrTable.collectAsState()
-    val hasUndo = analyzerUndoTable != null
-
-    var strategy by remember { mutableStateOf(TuningStrategy.CONSERVATIVE) }
-    var showSavedLogsDialog by remember { mutableStateOf(false) }
-    val savedLogFiles = remember(lastSavedLogPath) { collectSavedLogFiles(lastSavedLogPath) }
-    var selectedClusterId by remember(analyzerResult) { mutableStateOf<String?>(null) }
-    var selectedCell by remember(analyzerResult) { mutableStateOf<CellRef?>(null) }
-    var includedClusterIds by remember(analyzerResult) {
-        mutableStateOf(analyzerResult?.clusters?.map { it.id }?.toSet().orEmpty())
-    }
-
-    LaunchedEffect(logPath, veTable, afrTable, strategy) {
-        if (!logPath.isNullOrBlank() && veTable != null && afrTable != null) {
-            controller.analyzeLogFile(strategy)
-        }
-    }
-
-    LaunchedEffect(analyzerResult) {
-        includedClusterIds = analyzerResult?.clusters?.map { it.id }?.toSet().orEmpty()
-        selectedClusterId = null
-        selectedCell = null
-    }
-
-    LaunchedEffect(savedLogFiles, logPath) {
-        if (logPath.isNullOrBlank()) {
-            savedLogFiles.firstOrNull()?.let { controller.selectAnalyzerLogFile(it.absolutePath) }
-        }
-    }
-
-    if (showSavedLogsDialog) {
-        SavedLogsDialogDesktop(
-            files = savedLogFiles,
-            onDismiss = { showSavedLogsDialog = false },
-            onSelect = { path ->
-                showSavedLogsDialog = false
-                controller.selectAnalyzerLogFile(path)
-            }
-        )
-    }
-
-    val currentResult = analyzerResult
-    val ready = currentResult?.signalStatus?.isReady == true
-    val highlightedCells = currentResult?.clusters
-        ?.firstOrNull { it.id == selectedClusterId }
-        ?.cells
-        ?.toSet()
-        ?: emptySet()
-    val loadLabel = currentResult?.summary?.loadLabel
-        ?: if (veTable?.loadType == io.ecucore.model.VeTable.LoadType.MAP) "kPa" else "%"
-
-    TuningSectionScreen(
-        title = strings["label.tuningAssistantTitle"],
-        subtitle = strings["label.tuningAssistantSubtitle"],
-    ) {
-        ActionCard(
-            title = strings["label.tuningAssistantTitle"],
-            description = strings["label.tuningAssistantSubtitle"]
-        ) {
-            val currentFile = logPath?.let { File(it).name } ?: strings["label.tuningAssistantNoLogSelected"]
-            InfoRow(strings["label.log"], currentFile)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(onClick = {
-                    chooseOpenFile(strings["label.tuningAssistantOpenLog"])?.let { file ->
-                        controller.selectAnalyzerLogFile(file.absolutePath)
-                    }
-                }) {
-                    Text(strings["label.tuningAssistantOpenLog"])
-                }
-                OutlinedButton(onClick = { showSavedLogsDialog = true }, enabled = savedLogFiles.isNotEmpty()) {
-                    Text(strings["label.logViewerSavedLogsTitle"])
-                }
-                FilledTonalButton(
-                    onClick = { controller.analyzeLogFile(strategy) },
-                    enabled = !analyzerBusy && !logPath.isNullOrBlank()
-                ) {
-                    Text(strings["label.tuningAssistantAnalyze"])
-                }
-                if (analyzerBusy) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(strings["label.tuningAssistantBusy"])
-                    }
-                }
-            }
-
-            analyzerError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-
-            currentResult?.summary?.let { summary ->
-                HorizontalDivider()
-                InfoRow(strings["label.samples"], "${summary.usedSamples}/${summary.totalSamples}")
-                InfoRow(strings["label.duration"], "%.1fs".format(summary.durationSeconds))
-                InfoRow(strings["label.rpmRange"], summary.rpmRange?.let { "${it.first} - ${it.last}" } ?: "--")
-                InfoRow(strings["label.loadRange"], summary.loadRange?.let { "${it.first} - ${it.last} $loadLabel" } ?: "--")
-            }
-        }
-
-        if (currentResult == null) {
-            PlaceholderScreen(
-                strings["label.tuningAssistantTitle"],
-                strings["label.tuningAssistantNoResult"]
-            )
-            return@TuningSectionScreen
-        }
-
-        if (!ready) {
-            PlaceholderScreen(
-                strings["label.tuningAssistantSignalsTitle"],
-                strings["label.tuningAssistantMissingSignals"]
-            )
-            SignalReadinessCard(currentResult.signalStatus, afrTable != null)
-            return@TuningSectionScreen
-        }
-
-        SignalReadinessCard(currentResult.signalStatus, afrTable != null)
-        HeatmapCard(
-            result = currentResult,
-            highlightedCells = highlightedCells,
-            selectedCell = selectedCell,
-            onCellSelected = { selectedCell = it }
-        )
-        ClusterSuggestionsCard(
-            clusters = currentResult.clusters,
-            includedClusterIds = includedClusterIds,
-            onToggleInclude = { clusterId ->
-                includedClusterIds = if (includedClusterIds.contains(clusterId)) {
-                    includedClusterIds - clusterId
-                } else {
-                    includedClusterIds + clusterId
-                }
-            },
-            onPreview = { clusterId ->
-                selectedClusterId = if (selectedClusterId == clusterId) null else clusterId
-            }
-        )
-        StrategyCard(
-            strategy = strategy,
-            onChange = { strategy = it }
-        )
-        ActionsCard(
-            hasUndo = hasUndo,
-            isBusy = analyzerBusy,
-            onApply = { controller.applyAnalyzerToVe(strategy, includedClusterIds) },
-            onUndo = { controller.undoLastAnalyzerApply() },
-            onReload = { controller.reloadAnalyzerVeTable() },
-            onCompare = onOpenBeforeAfter
-        )
-    }
-}
-
-@Composable
-private fun TuningSectionScreen(
-    title: String,
-    subtitle: String,
-    content: @Composable () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        content()
-    }
-}
-
-@Composable
-private fun SectionPanel(
-    title: String,
-    content: @Composable () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-            content()
         }
     }
 }

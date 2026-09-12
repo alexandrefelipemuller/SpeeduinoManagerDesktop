@@ -1,327 +1,405 @@
 package com.speeduino.manager.desktop.feature.app
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
-import io.ecucore.SpeeduinoLiveData
-import com.speeduino.manager.desktop.DesktopDashboardMode
+import androidx.compose.ui.unit.sp
+import com.speeduino.manager.desktop.ConnectionState
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
-import com.speeduino.manager.desktop.LocalStrings
-import com.speeduino.manager.desktop.Strings
-import java.util.Locale
+import io.ecucore.SpeeduinoLiveData
+import io.ecucore.shared.formatDecimal
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
+
+/**
+ * "Apex" dashboard theme, ported from the mobile apps (Android ApexDashboard / iOS
+ * IosApexDashboardScreen): flat motorsport layout with big kicker+value tiles, an analog
+ * tachometer with digital RPM hub, an AFR bar, shift LEDs and status chips. Rearranged into a
+ * fixed landscape split (gauge column + tile column) instead of the mobile single-column
+ * portrait stack, to fit the kiosk's 800x480 screen without scrolling.
+ */
+private val APEX_BG = Color(0xFFF3F2F2)
+private val APEX_PANEL_BG = Color(0xFFF7F6F5)
+private val APEX_TEXT_PRIMARY = Color(0xFF201E1D)
+private val APEX_TEXT_SECONDARY = Color(0xFF7D7979)
+private val APEX_NEUTRAL_200 = Color(0xFFEAE7E7)
+private val APEX_ACCENT = Color(0xFFEC3013)
+private val APEX_ACCENT_700 = Color(0xFFAE1800)
+private val APEX_RICH = Color(0xFF1F8A6E)
+private val APEX_WARN = Color(0xFFD1A52A)
+private val APEX_DARK_TOP = Color(0xFF2C2926)
+private val APEX_DARK_BOTTOM = Color(0xFF191715)
+private val APEX_GAUGE_BEZEL = Color(0xFF201E1D)
+private val APEX_GAUGE_FACE = Color(0xFFEFEDEB)
 
 @Composable
 internal fun DashboardScreen(
     controller: DesktopSpeeduinoController,
     liveData: SpeeduinoLiveData?,
+    connectionState: ConnectionState,
     onOpenSettings: () -> Unit
 ) {
-    val strings = LocalStrings.current
-    val availableSignals = remember(liveData, strings) { dashboardGaugeSignals(liveData, strings) }
-    val dashboardMode = controller.desktopSettings.collectAsState().value.dashboardMode
-    var selectedGaugeKeys by remember(dashboardMode) {
-        mutableStateOf(defaultGaugeKeys(dashboardMode))
-    }
+    val settings by controller.desktopSettings.collectAsState()
+    val shiftLightRpm = settings.shiftLightRpm
+    val maxRpm = (shiftLightRpm + 500).coerceAtLeast(7000)
 
-    LaunchedEffect(availableSignals.map { it.key }) {
-        selectedGaugeKeys = defaultGaugeKeys(dashboardMode).map { key ->
-            if (availableSignals.any { it.key == key }) key else availableSignals.first().key
-        }
-    }
+    val isConnected = connectionState.isConnected
+    val rpm = liveData?.rpm ?: 0
+    val speedKph = liveData?.candidateSpeedKph ?: 0
+    val gear = liveData?.candidateGear
+    val mapKpa = liveData?.mapPressure ?: 100
+    val tps = liveData?.tps ?: 0
+    val coolant = liveData?.coolantTemp ?: 0
+    val intake = liveData?.intakeTemp ?: 0
+    val battery = liveData?.batteryVoltage ?: 0.0
+    val afr = (liveData?.o2 ?: 147) / 10.0
 
-    val gauges = remember(availableSignals, selectedGaugeKeys) {
-        selectedGaugeKeys.mapIndexed { index, key ->
-            availableSignals.firstOrNull { it.key == key } ?: availableSignals[index % availableSignals.size]
-        }
-    }
+    val revLimit = rpm >= shiftLightRpm
+    val warmup = coolant in 1 until 80
+    val closedLoop = isConnected && !warmup && tps < 55
+    val boostRatio = (((mapKpa - 100).coerceAtLeast(0)) / 60f).coerceIn(0f, 1f)
 
-    val stats = remember(liveData, strings) {
-        listOf(
-            StatItem(
-                strings["label.battery"],
-                liveData?.batteryVoltage?.let { strings.format("label.voltageFormat", it) }
-                    ?: strings["label.noData"]
-            ),
-            StatItem(
-                strings["label.ignition"],
-                liveData?.advance?.let { strings.format("label.degFormat", it) }
-                    ?: strings["label.noData"]
-            )
-        )
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        AppSectionCard(onOpenSettings = onOpenSettings, dashboardMode = dashboardMode)
-        GaugeGrid(
-            dashboardMode = dashboardMode,
-            gauges = gauges,
-            availableSignals = availableSignals,
-            onChangeGauge = { index, signalKey ->
-                selectedGaugeKeys = selectedGaugeKeys.toMutableList().also { list ->
-                    list[index] = signalKey
-                }
-            }
-        )
-        StatRow(stats)
-    }
-}
-
-@Composable
-private fun AppSectionCard(onOpenSettings: () -> Unit, dashboardMode: DesktopDashboardMode) {
-    val strings = LocalStrings.current
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(APEX_BG)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxSize().padding(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = strings["app.sectionTitle"],
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = strings["app.settingsTitle"],
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(strings.format("label.dashboardMode", dashboardMode.name.lowercase().replaceFirstChar(Char::uppercaseChar)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                FilledTonalButton(onClick = onOpenSettings) {
-                    Text(strings["app.settingsLabel"])
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GaugeGrid(
-    dashboardMode: DesktopDashboardMode,
-    gauges: List<GaugeSpec>,
-    availableSignals: List<GaugeSpec>,
-    onChangeGauge: (Int, String) -> Unit
-) {
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val columns = when (dashboardMode) {
-            DesktopDashboardMode.APEX -> 3
-            DesktopDashboardMode.FUTURE -> if (maxWidth < 900.dp) 3 else 6
-            DesktopDashboardMode.PETROL -> 4
-            DesktopDashboardMode.DEFAULT -> if (maxWidth < 900.dp) 2 else 4
-        }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
-            contentPadding = PaddingValues(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth().height(280.dp)
-        ) {
-            items(gauges.size) { index ->
-                GaugeCard(
-                    spec = gauges[index],
-                    options = availableSignals,
-                    onChangeSignal = { key -> onChangeGauge(index, key) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun GaugeCard(
-    spec: GaugeSpec,
-    options: List<GaugeSpec>,
-    onChangeSignal: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Surface(
-        modifier = Modifier.fillMaxWidth().height(160.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Box {
-                Text(
-                    text = spec.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { expanded = true }
-                )
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    options.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option.label) },
-                            onClick = {
-                                onChangeSignal(option.key)
-                                expanded = false
-                            }
-                        )
-                    }
-                }
-            }
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                val sweep = ((spec.value - spec.min) / (spec.max - spec.min)).coerceIn(0f, 1f) * 240f
-                val trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                val fillColor = MaterialTheme.colorScheme.primary
-                Canvas(modifier = Modifier.size(110.dp)) {
-                    drawArc(
-                        color = trackColor,
-                        startAngle = 150f,
-                        sweepAngle = 240f,
-                        useCenter = false,
-                        style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                    drawArc(
-                        color = fillColor,
-                        startAngle = 150f,
-                        sweepAngle = sweep,
-                        useCenter = false,
-                        style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = spec.display,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = spec.unit,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatRow(items: List<StatItem>) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items.forEach { item ->
-            Surface(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = item.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                ApexTachometer(
+                    rpm = rpm,
+                    maxRpm = maxRpm,
+                    modifier = Modifier.weight(1f).fillMaxWidth().aspectRatio(1f)
+                )
+                ApexShiftLedRow(
+                    rpm = rpm,
+                    shiftLightRpm = shiftLightRpm,
+                    modifier = Modifier.fillMaxWidth().height(8.dp)
+                )
+                ApexAfrPanel(afr = afr)
+            }
+
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ApexFieldTile("SPEED", speedKph.toString(), "KM/H", modifier = Modifier.weight(1f))
+                    ApexGearTile(gear = gear, revLimit = revLimit, modifier = Modifier.weight(0.6f))
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ApexFieldTile(
+                        "BOOST",
+                        ((mapKpa - 100).coerceAtLeast(0)).toString(),
+                        "kPa",
+                        showProgressBar = true,
+                        progressRatio = boostRatio,
+                        modifier = Modifier.weight(1f)
                     )
+                    ApexFieldTile("TPS", tps.toString(), "%", modifier = Modifier.weight(1f))
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ApexMiniTempTile("COOLANT", "$coolant°C", modifier = Modifier.weight(1f))
+                    ApexMiniTempTile("INTAKE", "$intake°C", modifier = Modifier.weight(1f))
+                    ApexMiniTempTile("BATTERY", formatDecimal(battery, 1) + "V", modifier = Modifier.weight(1f))
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ApexStatusChip("WARMUP", on = warmup)
+                    ApexStatusChip("CLOSED LOOP", on = closedLoop)
+                    ApexStatusChip("REV LIMIT", on = revLimit, alarm = true)
+                }
+                if (!isConnected) {
                     Text(
-                        text = item.value,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        text = "Conecte-se a uma ECU para ver dados ao vivo.",
+                        color = APEX_TEXT_SECONDARY,
+                        fontSize = 9.sp
                     )
                 }
+            }
+        }
+
+        IconButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.TopEnd).size(26.dp)) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = null,
+                tint = APEX_TEXT_SECONDARY,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ApexFieldTile(
+    title: String,
+    value: String,
+    unit: String,
+    modifier: Modifier = Modifier,
+    showProgressBar: Boolean = false,
+    progressRatio: Float = 0f,
+) {
+    Column(
+        modifier = modifier.background(APEX_PANEL_BG).padding(top = 4.dp, bottom = 3.dp, start = 6.dp, end = 6.dp),
+    ) {
+        Text(text = title, color = APEX_ACCENT_700, fontWeight = FontWeight.Bold, fontSize = 8.sp, letterSpacing = 1.sp, maxLines = 1)
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 1.dp)) {
+            Text(text = value, color = APEX_TEXT_PRIMARY, fontWeight = FontWeight.Black, fontSize = 22.sp, maxLines = 1)
+            Spacer(Modifier.width(3.dp))
+            Text(text = unit, color = APEX_TEXT_SECONDARY, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
+        }
+        if (showProgressBar) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 3.dp).height(5.dp).clip(RoundedCornerShape(50)).background(APEX_NEUTRAL_200),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(progressRatio.coerceIn(0f, 1f)).fillMaxSize()
+                        .background(Brush.horizontalGradient(colors = listOf(APEX_ACCENT_700, APEX_ACCENT))),
+                )
             }
         }
     }
 }
 
-private data class GaugeSpec(
-    val key: String,
-    val label: String,
-    val value: Float,
-    val min: Float,
-    val max: Float,
-    val unit: String,
-    val display: String
-)
-
-private data class StatItem(
-    val label: String,
-    val value: String
-)
-
-private fun dashboardGaugeSignals(liveData: SpeeduinoLiveData?, strings: Strings): List<GaugeSpec> {
-    fun valueOrZero(value: Float?): Float = value ?: 0f
-    fun display0(value: Float?): String = if (value == null) strings["label.noData"] else value.toInt().toString()
-    fun display1(value: Float?): String = if (value == null) strings["label.noData"] else String.format(Locale.US, "%.1f", value)
-
-    val afrMeasured = liveData?.o2?.toFloat()
-    val afrTarget: Float? = null
-    return listOf(
-        GaugeSpec("rpm", strings["label.rpm"], valueOrZero(liveData?.rpm?.toFloat()), 0f, 7000f, strings["unit.rpm"], display0(liveData?.rpm?.toFloat())),
-        GaugeSpec("map", strings["label.map"], valueOrZero(liveData?.mapPressure?.toFloat()), 0f, 250f, strings["unit.kpa"], display0(liveData?.mapPressure?.toFloat())),
-        GaugeSpec("tps", strings["label.tps"], valueOrZero(liveData?.tps?.toFloat()), 0f, 100f, strings["unit.percent"], display0(liveData?.tps?.toFloat())),
-        GaugeSpec("coolant", strings["label.coolant"], valueOrZero(liveData?.coolantTemp?.toFloat()), -20f, 120f, strings["unit.celsius"], display0(liveData?.coolantTemp?.toFloat())),
-        GaugeSpec("iat", strings["label.iat"], valueOrZero(liveData?.intakeTemp?.toFloat()), -20f, 120f, strings["unit.celsius"], display0(liveData?.intakeTemp?.toFloat())),
-        GaugeSpec("battery", strings["label.battery"], valueOrZero(liveData?.batteryVoltage?.toFloat()), 8f, 16f, "V", display1(liveData?.batteryVoltage?.toFloat())),
-        GaugeSpec("advance", strings["label.advance"], valueOrZero(liveData?.advance?.toFloat()), -20f, 60f, "deg", display0(liveData?.advance?.toFloat())),
-        GaugeSpec("afr", strings["label.afr"], valueOrZero(afrMeasured), 8f, 22f, strings["label.afr"], display1(afrMeasured)),
-        GaugeSpec("afr_target", strings["label.afrTarget"], valueOrZero(afrTarget), 8f, 22f, strings["label.afr"], display1(afrTarget))
-    )
+@Composable
+private fun ApexGearTile(gear: Int?, revLimit: Boolean, modifier: Modifier = Modifier) {
+    val gearText = if (gear == null || gear == 0) "N" else gear.toString()
+    val gearColor = if (revLimit) APEX_ACCENT else APEX_TEXT_PRIMARY
+    Column(
+        modifier = modifier.background(APEX_PANEL_BG).padding(top = 3.dp, end = 4.dp),
+        horizontalAlignment = Alignment.End,
+    ) {
+        Text(text = "GEAR", color = APEX_TEXT_SECONDARY, fontWeight = FontWeight.Bold, fontSize = 8.sp, letterSpacing = 1.sp)
+        Text(text = gearText, color = gearColor, fontWeight = FontWeight.Black, fontSize = 34.sp, maxLines = 1)
+    }
 }
 
-private fun defaultGaugeKeys(mode: DesktopDashboardMode): List<String> = when (mode) {
-    DesktopDashboardMode.DEFAULT -> listOf("rpm", "map", "tps", "coolant")
-    DesktopDashboardMode.PETROL -> listOf("rpm", "map", "afr", "advance")
-    DesktopDashboardMode.FUTURE -> listOf("rpm", "map", "tps", "coolant", "iat", "battery")
-    DesktopDashboardMode.APEX -> listOf("rpm", "advance", "afr", "battery")
+@Composable
+private fun ApexShiftLedRow(rpm: Int, shiftLightRpm: Int, modifier: Modifier = Modifier) {
+    val revLimit = rpm >= shiftLightRpm
+    val ledCount = 14
+    val window = 2200
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally)) {
+        repeat(ledCount) { index ->
+            val color = when {
+                index < 6 -> APEX_RICH
+                index < 10 -> APEX_WARN
+                else -> APEX_ACCENT
+            }
+            val threshold = shiftLightRpm - window + (index + 1) * (window / ledCount)
+            val on = revLimit || rpm >= threshold
+            Box(
+                modifier = Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(2.dp))
+                    .background(if (on) color else APEX_NEUTRAL_200),
+            )
+        }
+    }
 }
+
+@Composable
+private fun ApexAfrPanel(afr: Double) {
+    val minAfr = 10f
+    val maxAfr = 20f
+    val ratio = (((afr.toFloat() - minAfr) / (maxAfr - minAfr))).coerceIn(0f, 1f)
+    Column(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(APEX_PANEL_BG).padding(horizontal = 8.dp, vertical = 5.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+            Text(text = "AFR", color = APEX_ACCENT_700, fontWeight = FontWeight.Bold, fontSize = 8.sp, letterSpacing = 1.sp)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(text = formatDecimal(afr, 1), color = APEX_TEXT_PRIMARY, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                Spacer(Modifier.width(4.dp))
+                Text(text = "λ " + formatDecimal(afr / 14.7, 2), color = APEX_TEXT_SECONDARY, fontWeight = FontWeight.SemiBold, fontSize = 8.sp)
+            }
+        }
+        Box(modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(7.dp).clip(RoundedCornerShape(50))) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        0.0f to APEX_RICH,
+                        0.30f to Color(0xFF4EA23E),
+                        0.58f to APEX_WARN,
+                        1.0f to APEX_ACCENT,
+                    ),
+                )
+                val stoichX = size.width * 0.4875f
+                drawLine(color = Color.White.copy(alpha = 0.85f), start = Offset(stoichX, 0f), end = Offset(stoichX, size.height), strokeWidth = 2f)
+                val markerX = size.width * ratio
+                drawLine(
+                    color = APEX_TEXT_PRIMARY,
+                    start = Offset(markerX, -size.height * 0.25f),
+                    end = Offset(markerX, size.height * 1.25f),
+                    strokeWidth = 3f,
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApexMiniTempTile(title: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.background(APEX_PANEL_BG).padding(top = 4.dp, end = 3.dp, start = 4.dp)) {
+        Text(text = title, color = APEX_TEXT_SECONDARY, fontWeight = FontWeight.Bold, fontSize = 7.sp, letterSpacing = 0.6.sp, maxLines = 1)
+        Text(text = value, color = APEX_TEXT_PRIMARY, fontWeight = FontWeight.Black, fontSize = 13.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun ApexStatusChip(label: String, on: Boolean, alarm: Boolean = false) {
+    val background = when {
+        !on -> Color.Transparent
+        alarm -> APEX_ACCENT
+        else -> APEX_TEXT_PRIMARY
+    }
+    val foreground = if (on) Color.White else APEX_TEXT_SECONDARY
+    Box(
+        modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(background).padding(horizontal = 6.dp, vertical = 3.dp),
+    ) {
+        Text(text = label, color = foreground, fontWeight = FontWeight.Bold, fontSize = 7.sp, letterSpacing = 0.6.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun ApexTachometer(rpm: Int, maxRpm: Int, modifier: Modifier = Modifier) {
+    val textMeasurer = rememberTextMeasurer()
+    Canvas(modifier = modifier) {
+        val center = Offset(size.width * 0.5f, size.height * 0.5f)
+        val radius = minOf(size.width, size.height) * 0.46f
+        val startAngle = 145f
+        val sweep = 250f
+        val rpmRatio = (rpm.toFloat() / maxRpm).coerceIn(0f, 1f)
+        val needleAngle = startAngle + sweep * rpmRatio
+        val faceRadius = radius * 0.96f
+        val redlineStartFraction = 0.786f
+        val redStartAngle = startAngle + sweep * redlineStartFraction
+        val redSweep = sweep * (1f - redlineStartFraction)
+
+        drawCircle(color = APEX_GAUGE_BEZEL, radius = radius, center = center)
+        drawCircle(color = APEX_GAUGE_FACE, radius = faceRadius, center = center)
+
+        val redRingOuter = faceRadius
+        val redRingInner = radius * 0.62f
+        val redRingWidth = redRingOuter - redRingInner
+        val redRingCenterRadius = (redRingOuter + redRingInner) / 2f
+        drawArc(
+            color = APEX_ACCENT,
+            startAngle = redStartAngle,
+            sweepAngle = redSweep,
+            useCenter = false,
+            topLeft = Offset(center.x - redRingCenterRadius, center.y - redRingCenterRadius),
+            size = Size(redRingCenterRadius * 2f, redRingCenterRadius * 2f),
+            style = Stroke(width = redRingWidth, cap = StrokeCap.Butt),
+        )
+
+        val majorTicks = 7
+        val minorPerStep = 5
+        val totalSteps = majorTicks * minorPerStep
+        repeat(totalSteps + 1) { idx ->
+            val angleDeg = startAngle + idx * (sweep / totalSteps)
+            val angleRad = angleDeg * PI / 180.0
+            val inRed = angleDeg >= redStartAngle
+            val isMajor = idx % minorPerStep == 0
+            val outer = faceRadius * 0.92f
+            val inner = if (isMajor) outer - radius * 0.10f else outer - radius * 0.05f
+            drawLine(
+                color = if (inRed) Color.White else APEX_TEXT_PRIMARY,
+                start = Offset(center.x + cos(angleRad).toFloat() * inner, center.y + sin(angleRad).toFloat() * inner),
+                end = Offset(center.x + cos(angleRad).toFloat() * outer, center.y + sin(angleRad).toFloat() * outer),
+                strokeWidth = if (isMajor) radius * 0.02f else radius * 0.01f,
+                cap = StrokeCap.Round,
+            )
+        }
+
+        (1..majorTicks).forEach { n ->
+            val angleDeg = startAngle + n * (sweep / majorTicks)
+            val angleRad = angleDeg * PI / 180.0
+            val labelRadius = faceRadius * 0.72f
+            val lx = center.x + cos(angleRad).toFloat() * labelRadius
+            val ly = center.y + sin(angleRad).toFloat() * labelRadius
+            val inRed = angleDeg >= redStartAngle
+            val measured = textMeasurer.measure(
+                text = n.toString(),
+                style = TextStyle(color = if (inRed) Color.White else APEX_TEXT_PRIMARY, fontSize = (radius.toSp() * 0.145f), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+            )
+            drawText(textLayoutResult = measured, topLeft = Offset(lx - measured.size.width / 2f, ly - measured.size.height / 2f))
+        }
+
+        val discRadius = radius * 0.48f
+        drawCircle(color = APEX_DARK_TOP, radius = discRadius, center = center)
+        drawCircle(color = APEX_DARK_BOTTOM.copy(alpha = 0.4f), radius = discRadius, center = center, style = Stroke(width = radius * 0.01f))
+
+        val rpmMeasured = textMeasurer.measure(
+            text = rpm.toString(),
+            style = TextStyle(color = Color.White, fontSize = (radius.toSp() * 0.22f), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+        )
+        drawText(textLayoutResult = rpmMeasured, topLeft = Offset(center.x - rpmMeasured.size.width / 2f, center.y - rpmMeasured.size.height / 2f + discRadius * 0.03f))
+        val rpmUnitMeasured = textMeasurer.measure(
+            text = "RPM",
+            style = TextStyle(color = Color(0xFFB9B4AE), fontSize = (radius.toSp() * 0.075f), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+        )
+        drawText(textLayoutResult = rpmUnitMeasured, topLeft = Offset(center.x - rpmUnitMeasured.size.width / 2f, center.y + discRadius * 0.32f))
+
+        val needleRad = needleAngle * PI / 180.0
+        val dirX = cos(needleRad).toFloat()
+        val dirY = sin(needleRad).toFloat()
+        val perpX = -dirY
+        val perpY = dirX
+        val tailBase = Offset(center.x + dirX * discRadius * 0.94f, center.y + dirY * discRadius * 0.94f)
+        val tip = Offset(center.x + dirX * faceRadius * 0.88f, center.y + dirY * faceRadius * 0.88f)
+        val tailHalf = radius * 0.028f
+        val tipHalf = radius * 0.008f
+        val needlePath = Path().apply {
+            moveTo(tailBase.x + perpX * tailHalf, tailBase.y + perpY * tailHalf)
+            lineTo(tip.x + perpX * tipHalf, tip.y + perpY * tipHalf)
+            lineTo(tip.x - perpX * tipHalf, tip.y - perpY * tipHalf)
+            lineTo(tailBase.x - perpX * tailHalf, tailBase.y - perpY * tailHalf)
+            close()
+        }
+        drawPath(path = needlePath, color = APEX_ACCENT)
+    }
+}
+
+private fun Float.toSp() = TextUnit(this, TextUnitType.Sp)

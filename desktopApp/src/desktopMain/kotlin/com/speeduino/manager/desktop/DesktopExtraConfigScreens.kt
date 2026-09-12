@@ -88,7 +88,8 @@ internal fun IdleControlScreenDesktop(controller: DesktopSpeeduinoController) {
                 DropdownField(
                     label = "Modo",
                     value = controlMode.displayLabel(),
-                    options = IdleControlMode.values().map { it.displayLabel() }
+                    options = IdleControlMode.values().map { it.displayLabel() },
+                    modifier = Modifier.weight(1f)
                 ) { label ->
                     controlMode = IdleControlMode.values().first { it.displayLabel() == label }
                     hasChanges = true
@@ -205,7 +206,8 @@ internal fun ClosedLoopCorrectionsScreenDesktop(controller: DesktopSpeeduinoCont
                 DropdownField(
                     label = "Sensor",
                     value = sensorType.displayLabel(),
-                    options = ClosedLoopSensorType.values().map { it.displayLabel() }
+                    options = ClosedLoopSensorType.values().map { it.displayLabel() },
+                    modifier = Modifier.weight(1f)
                 ) { label ->
                     sensorType = ClosedLoopSensorType.values().first { it.displayLabel() == label }
                     hasChanges = true
@@ -213,7 +215,8 @@ internal fun ClosedLoopCorrectionsScreenDesktop(controller: DesktopSpeeduinoCont
                 DropdownField(
                     label = "Estrategia",
                     value = strategy.displayLabel(),
-                    options = ClosedLoopStrategy.values().map { it.displayLabel() }
+                    options = ClosedLoopStrategy.values().map { it.displayLabel() },
+                    modifier = Modifier.weight(1f)
                 ) { label ->
                     strategy = ClosedLoopStrategy.values().first { it.displayLabel() == label }
                     hasChanges = true

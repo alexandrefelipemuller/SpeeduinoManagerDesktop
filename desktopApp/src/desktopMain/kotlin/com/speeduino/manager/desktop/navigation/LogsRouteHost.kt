@@ -22,6 +22,8 @@ internal fun LogsRouteHost(
     onOpenLogAnalyzer: () -> Unit,
     onOpenBeforeAfter: () -> Unit,
     onOpenVirtualDyno: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenInstitutional: () -> Unit,
     onOpenHistoricalLogViewer: (String) -> Unit
 ) {
     when (route) {
@@ -34,6 +36,8 @@ internal fun LogsRouteHost(
             onOpenLogAnalyzer = onOpenLogAnalyzer,
             onOpenBeforeAfter = onOpenBeforeAfter,
             onOpenVirtualDyno = onOpenVirtualDyno,
+            onOpenSettings = onOpenSettings,
+            onOpenInstitutional = onOpenInstitutional,
             onOpenHistoricalLogViewer = onOpenHistoricalLogViewer
         )
         DesktopRoute.RealTimeMonitor -> RealTimeMonitorScreenDesktop(controller, liveData)

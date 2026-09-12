@@ -225,12 +225,20 @@ internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoCon
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                DropdownField(strings["label.protectionCut"], protectionCut.name, ProtectionCut.values().filter { it != ProtectionCut.OFF }.map { it.name }) { value ->
-                    protectionCut = ProtectionCut.valueOf(value)
+                DropdownField(
+                    strings["label.protectionCut"],
+                    protectionCutLabel(strings, protectionCut),
+                    ProtectionCut.values().filter { it != ProtectionCut.OFF }.map { protectionCutLabel(strings, it) }
+                ) { label ->
+                    protectionCut = protectionCutFromLabel(strings, label)
                     hasChanges = true
                 }
-                DropdownField(strings["label.cutMethod"], cutMethod.name, CutMethod.values().map { it.name }) { value ->
-                    cutMethod = CutMethod.valueOf(value)
+                DropdownField(
+                    strings["label.cutMethod"],
+                    cutMethodLabel(strings, cutMethod),
+                    CutMethod.values().map { cutMethodLabel(strings, it) }
+                ) { label ->
+                    cutMethod = cutMethodFromLabel(strings, label)
                     hasChanges = true
                 }
                 NumberField(strings["label.minimumRpm"], rpmMin, { rpmMin = it; hasChanges = true })
@@ -243,4 +251,28 @@ internal fun EngineProtectionEditorScreenDesktop(controller: DesktopSpeeduinoCon
             }
         }
     }
+}
+
+private fun protectionCutLabel(strings: com.speeduino.manager.desktop.Strings, value: ProtectionCut): String {
+    return when (value) {
+        ProtectionCut.OFF -> strings["label.off"]
+        ProtectionCut.SPARK_ONLY -> strings["label.cutIgnition"]
+        ProtectionCut.FUEL_ONLY -> strings["label.cutFuel"]
+        ProtectionCut.BOTH -> strings["label.cutBoth"]
+    }
+}
+
+private fun protectionCutFromLabel(strings: com.speeduino.manager.desktop.Strings, label: String): ProtectionCut {
+    return ProtectionCut.values().firstOrNull { protectionCutLabel(strings, it) == label } ?: ProtectionCut.BOTH
+}
+
+private fun cutMethodLabel(strings: com.speeduino.manager.desktop.Strings, value: CutMethod): String {
+    return when (value) {
+        CutMethod.FULL -> strings["label.cutMethodFull"]
+        CutMethod.ROLLING -> strings["label.cutMethodRolling"]
+    }
+}
+
+private fun cutMethodFromLabel(strings: com.speeduino.manager.desktop.Strings, label: String): CutMethod {
+    return CutMethod.values().firstOrNull { cutMethodLabel(strings, it) == label } ?: CutMethod.FULL
 }

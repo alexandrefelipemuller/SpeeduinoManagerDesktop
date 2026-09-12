@@ -66,7 +66,7 @@ internal fun InputOutputEditorScreenDesktop(
         repo.save(updated)
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),

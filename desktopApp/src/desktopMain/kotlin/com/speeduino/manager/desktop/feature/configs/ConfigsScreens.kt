@@ -364,18 +364,18 @@ internal fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController
                 }
                 DropdownField(
                     strings["label.primarySpeed"],
-                    primarySpeed.name,
-                    TriggerSettings.TriggerSpeed.values().map { it.name }
+                    triggerSpeedLabel(strings, primarySpeed),
+                    TriggerSettings.TriggerSpeed.values().map { triggerSpeedLabel(strings, it) }
                 ) { label ->
-                    primarySpeed = TriggerSettings.TriggerSpeed.valueOf(label)
+                    primarySpeed = triggerSpeedFromLabel(strings, label)
                     hasChanges = true
                 }
                 DropdownField(
                     strings["label.triggerEdge"],
-                    triggerEdge.name,
-                    TriggerSettings.SignalEdge.values().map { it.name }
+                    signalEdgeLabel(strings, triggerEdge),
+                    TriggerSettings.SignalEdge.values().map { signalEdgeLabel(strings, it) }
                 ) { label ->
-                    triggerEdge = TriggerSettings.SignalEdge.valueOf(label)
+                    triggerEdge = signalEdgeFromLabel(strings, label)
                     hasChanges = true
                 }
                 TriggerVisualizationCardDesktop(
@@ -389,10 +389,10 @@ internal fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController
                 )
                 DropdownField(
                     strings["label.secondaryEdge"],
-                    secondaryEdge.name,
-                    TriggerSettings.SignalEdge.values().map { it.name }
+                    signalEdgeLabel(strings, secondaryEdge),
+                    TriggerSettings.SignalEdge.values().map { signalEdgeLabel(strings, it) }
                 ) { label ->
-                    secondaryEdge = TriggerSettings.SignalEdge.valueOf(label)
+                    secondaryEdge = signalEdgeFromLabel(strings, label)
                     hasChanges = true
                 }
                 DropdownField(
@@ -410,10 +410,10 @@ internal fun TriggerSettingsScreenDesktop(controller: DesktopSpeeduinoController
                     }, Modifier.weight(1f))
                     DropdownField(
                         strings["label.triggerFilter"],
-                        filter.name,
-                        TriggerSettings.TriggerFilter.values().map { it.name }
+                        triggerFilterLabel(strings, filter),
+                        TriggerSettings.TriggerFilter.values().map { triggerFilterLabel(strings, it) }
                     ) { label ->
-                        filter = TriggerSettings.TriggerFilter.valueOf(label)
+                        filter = triggerFilterFromLabel(strings, label)
                         hasChanges = true
                     }
                 }
@@ -884,4 +884,39 @@ private fun secondaryPatternLabel(strings: com.speeduino.manager.desktop.Strings
 private fun secondaryPatternFromLabel(strings: com.speeduino.manager.desktop.Strings, label: String): Int {
     val index = secondaryPatternOptions(strings).indexOf(label)
     return if (index >= 0) index else 0
+}
+
+private fun triggerSpeedLabel(strings: com.speeduino.manager.desktop.Strings, value: TriggerSettings.TriggerSpeed): String {
+    return when (value) {
+        TriggerSettings.TriggerSpeed.CRANK -> strings["label.speedCrank"]
+        TriggerSettings.TriggerSpeed.CAM -> strings["label.speedCam"]
+    }
+}
+
+private fun triggerSpeedFromLabel(strings: com.speeduino.manager.desktop.Strings, label: String): TriggerSettings.TriggerSpeed {
+    return TriggerSettings.TriggerSpeed.values().firstOrNull { triggerSpeedLabel(strings, it) == label } ?: TriggerSettings.TriggerSpeed.CRANK
+}
+
+private fun signalEdgeLabel(strings: com.speeduino.manager.desktop.Strings, value: TriggerSettings.SignalEdge): String {
+    return when (value) {
+        TriggerSettings.SignalEdge.RISING -> strings["label.edgeRising"]
+        TriggerSettings.SignalEdge.FALLING -> strings["label.edgeFalling"]
+    }
+}
+
+private fun signalEdgeFromLabel(strings: com.speeduino.manager.desktop.Strings, label: String): TriggerSettings.SignalEdge {
+    return TriggerSettings.SignalEdge.values().firstOrNull { signalEdgeLabel(strings, it) == label } ?: TriggerSettings.SignalEdge.RISING
+}
+
+private fun triggerFilterLabel(strings: com.speeduino.manager.desktop.Strings, value: TriggerSettings.TriggerFilter): String {
+    return when (value) {
+        TriggerSettings.TriggerFilter.OFF -> strings["label.off"]
+        TriggerSettings.TriggerFilter.WEAK -> strings["label.filterWeak"]
+        TriggerSettings.TriggerFilter.MEDIUM -> strings["label.filterMedium"]
+        TriggerSettings.TriggerFilter.AGGRESSIVE -> strings["label.filterAggressive"]
+    }
+}
+
+private fun triggerFilterFromLabel(strings: com.speeduino.manager.desktop.Strings, label: String): TriggerSettings.TriggerFilter {
+    return TriggerSettings.TriggerFilter.values().firstOrNull { triggerFilterLabel(strings, it) == label } ?: TriggerSettings.TriggerFilter.OFF
 }
