@@ -47,7 +47,6 @@ internal fun ScreenHost(
     onOpenEngineProtection: () -> Unit,
     onOpenClosedLoopCorrections: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
-    onOpenRevLimiterConfig: () -> Unit,
     onOpenSecondarySerial: () -> Unit,
     onOpenLogsEcuTools: () -> Unit,
     onOpenLogViewer: () -> Unit,
@@ -111,7 +110,6 @@ internal fun ScreenHost(
             onOpenVeTable2 = onOpenVeTable2,
             onOpenAfrTable = onOpenAfrTable,
             onOpenInjectorConfig = onOpenInjectorConfig,
-            onOpenSettings = onOpenSettings
         )
         DesktopRoute.Ignition,
         DesktopRoute.IgnitionConfig,
@@ -133,8 +131,7 @@ internal fun ScreenHost(
             onOpenTriggerSettings = onOpenTriggerSettings,
             onOpenIdleControl = onOpenIdleControl,
             onOpenEngineProtection = onOpenEngineProtection,
-            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
-            onOpenRevLimiterConfig = onOpenRevLimiterConfig
+            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections
         )
         DesktopRoute.EngineSetup,
         DesktopRoute.ConfigsTuning,
@@ -157,14 +154,12 @@ internal fun ScreenHost(
             onOpenTriggerSettings = onOpenTriggerSettings,
             onOpenIdleControl = onOpenIdleControl,
             onOpenEngineProtection = onOpenEngineProtection,
-            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
-            onOpenRevLimiterConfig = onOpenRevLimiterConfig
+            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections
         )
         DesktopRoute.EngineOperation,
         DesktopRoute.IdleControl,
         DesktopRoute.ClosedLoopCorrections,
-        DesktopRoute.EngineProtection,
-        DesktopRoute.RevLimiterConfig -> ConfigsRouteHost(
+        DesktopRoute.EngineProtection -> ConfigsRouteHost(
             route = route,
             controller = controller,
             onOpenEngineConstants = onOpenEngineConstants,
@@ -179,8 +174,7 @@ internal fun ScreenHost(
             onOpenTriggerSettings = onOpenTriggerSettings,
             onOpenIdleControl = onOpenIdleControl,
             onOpenEngineProtection = onOpenEngineProtection,
-            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
-            onOpenRevLimiterConfig = onOpenRevLimiterConfig
+            onOpenClosedLoopCorrections = onOpenClosedLoopCorrections
         )
         DesktopRoute.Tools,
         DesktopRoute.LogsEcuTools,

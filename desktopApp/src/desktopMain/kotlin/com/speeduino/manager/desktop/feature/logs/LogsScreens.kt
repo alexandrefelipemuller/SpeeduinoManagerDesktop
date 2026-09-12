@@ -496,13 +496,13 @@ internal fun LogAnalyzerScreenDesktop(controller: DesktopSpeeduinoController) {
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(strings["label.strategy"], style = MaterialTheme.typography.bodyMedium)
-                    StrategyChip("Conservative", strategy == TuningStrategy.CONSERVATIVE) {
+                    StrategyChip(strings["label.tuningAssistantConservative"], strategy == TuningStrategy.CONSERVATIVE) {
                         strategy = TuningStrategy.CONSERVATIVE
                     }
-                    StrategyChip("Standard", strategy == TuningStrategy.STANDARD) {
+                    StrategyChip(strings["label.tuningAssistantStandard"], strategy == TuningStrategy.STANDARD) {
                         strategy = TuningStrategy.STANDARD
                     }
-                    StrategyChip("Aggressive", strategy == TuningStrategy.AGGRESSIVE) {
+                    StrategyChip(strings["label.tuningAssistantAggressive"], strategy == TuningStrategy.AGGRESSIVE) {
                         strategy = TuningStrategy.AGGRESSIVE
                     }
                 }

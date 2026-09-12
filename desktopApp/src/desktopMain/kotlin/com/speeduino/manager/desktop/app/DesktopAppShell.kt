@@ -220,7 +220,6 @@ internal fun DesktopAppShell() {
                                     onOpenEngineProtection = { appState.currentRoute = DesktopRoute.EngineProtection },
                                     onOpenClosedLoopCorrections = { appState.currentRoute = DesktopRoute.ClosedLoopCorrections },
                                     onOpenInjectorConfig = { appState.currentRoute = DesktopRoute.InjectorConfig },
-                                    onOpenRevLimiterConfig = { appState.currentRoute = DesktopRoute.RevLimiterConfig },
                                     onOpenSecondarySerial = { appState.currentRoute = DesktopRoute.SecondarySerial },
                                     onOpenLogsEcuTools = { appState.currentRoute = DesktopRoute.LogsEcuTools },
                                     onOpenLogViewer = { appState.currentRoute = DesktopRoute.LogViewer },

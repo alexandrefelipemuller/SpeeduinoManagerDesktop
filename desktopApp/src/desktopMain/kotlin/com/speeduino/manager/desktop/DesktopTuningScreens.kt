@@ -81,13 +81,14 @@ internal fun EcuHubScreenDesktop(
 
 @Composable
 internal fun MapsTablesScreenDesktop(
+    controller: DesktopSpeeduinoController,
     onOpenVeTable: () -> Unit,
     onOpenVeTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
-    onOpenSettings: () -> Unit
 ) {
     val strings = LocalStrings.current
+    val configState by controller.configState.collectAsState()
     KioskScreenScaffold(
         title = strings["route.mapsTables"],
         subtitle = strings["label.mapsTablesSubtitle"],
@@ -99,7 +100,16 @@ internal fun MapsTablesScreenDesktop(
             KioskFeatureCard(strings["route.afrTable"], strings["label.afrTableDesc"], onClick = onOpenAfrTable)
         }
         KioskPanelCard(strings["label.workflowSection"]) {
-            KioskFeatureCard(strings["home.openBackupSettings"], strings["maps_tables_backup_action_desc"], onClick = onOpenSettings)
+            KioskFeatureCard(
+                strings["home.openBackupSettings"],
+                strings["maps_tables_backup_action_desc"],
+                onClick = {
+                    val source = chooseOpenFile(strings["label.backupOpenTitle"])
+                    if (source != null) {
+                        controller.importConfigAndRestore(source)
+                    }
+                },
+            )
         }
     }
 }
@@ -157,7 +167,6 @@ internal fun EngineOperationScreenDesktop(
     onOpenIdleControl: () -> Unit,
     onOpenClosedLoopCorrections: () -> Unit,
     onOpenEngineProtection: () -> Unit,
-    onOpenRevLimiter: () -> Unit,
 ) {
     val strings = LocalStrings.current
     KioskScreenScaffold(
@@ -167,18 +176,12 @@ internal fun EngineOperationScreenDesktop(
         KioskFeatureCard(strings["route.idleControl"], strings["label.idleControlSubtitle"], onClick = onOpenIdleControl)
         KioskFeatureCard(strings["route.closedLoopCorrections"], strings["label.closedLoopSubtitle"], onClick = onOpenClosedLoopCorrections)
         KioskFeatureCard(strings["route.engineProtection"], strings["label.engineProtectionSubtitle"], onClick = onOpenEngineProtection)
-        KioskFeatureCard(strings["route.revLimiter"], strings["label.revLimiterSubtitle"], onClick = onOpenRevLimiter)
     }
 }
 
 @Composable
 internal fun InjectorConfigScreenDesktop(controller: DesktopSpeeduinoController) {
     com.speeduino.manager.desktop.feature.configs.InjectorConfigScreenDesktop(controller)
-}
-
-@Composable
-internal fun RevLimiterConfigScreenDesktop() {
-    com.speeduino.manager.desktop.feature.configs.RevLimiterConfigScreenDesktop()
 }
 
 @Composable

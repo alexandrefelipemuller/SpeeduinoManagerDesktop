@@ -13,7 +13,6 @@ import com.speeduino.manager.desktop.SecondarySerialScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.EngineConstantsScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.InputOutputEditorScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.InjectorConfigScreenDesktop
-import com.speeduino.manager.desktop.feature.configs.RevLimiterConfigScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.EngineProtectionEditorScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.IgnitionConfigScreenDesktop
 import com.speeduino.manager.desktop.feature.configs.SensorsCalibrationScreenDesktop
@@ -35,8 +34,7 @@ internal fun ConfigsRouteHost(
     onOpenTriggerSettings: () -> Unit,
     onOpenIdleControl: () -> Unit,
     onOpenEngineProtection: () -> Unit,
-    onOpenClosedLoopCorrections: () -> Unit,
-    onOpenRevLimiterConfig: () -> Unit
+    onOpenClosedLoopCorrections: () -> Unit
 ) {
     when (route) {
         DesktopRoute.Ignition -> IgnitionScreenDesktop(
@@ -58,15 +56,13 @@ internal fun ConfigsRouteHost(
         DesktopRoute.EngineOperation -> EngineOperationScreenDesktop(
             onOpenIdleControl = onOpenIdleControl,
             onOpenClosedLoopCorrections = onOpenClosedLoopCorrections,
-            onOpenEngineProtection = onOpenEngineProtection,
-            onOpenRevLimiter = onOpenRevLimiterConfig
+            onOpenEngineProtection = onOpenEngineProtection
         )
         DesktopRoute.InjectorConfig -> InjectorConfigScreenDesktop(controller)
         DesktopRoute.InputOutputConfig -> InputOutputEditorScreenDesktop(
             controller = controller,
             onOpenSecondarySerial = onOpenSecondarySerial
         )
-        DesktopRoute.RevLimiterConfig -> RevLimiterConfigScreenDesktop()
         DesktopRoute.SecondarySerial -> SecondarySerialScreenDesktop(controller)
         DesktopRoute.EngineConstants -> EngineConstantsScreenDesktop(controller)
         DesktopRoute.TriggerSettings -> TriggerSettingsScreenDesktop(controller)

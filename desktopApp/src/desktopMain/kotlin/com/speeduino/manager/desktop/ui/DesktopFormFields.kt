@@ -39,11 +39,12 @@ internal fun DropdownField(
     label: String,
     value: String,
     options: List<String>,
+    modifier: Modifier = Modifier,
     onValueChange: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

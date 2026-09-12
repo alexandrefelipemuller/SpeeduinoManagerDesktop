@@ -14,16 +14,15 @@ internal fun MapsRouteHost(
     onOpenVeTable2: () -> Unit,
     onOpenAfrTable: () -> Unit,
     onOpenInjectorConfig: () -> Unit,
-    onOpenSettings: () -> Unit
 ) {
     when (route) {
         DesktopRoute.Fuel,
         DesktopRoute.MapsTables -> MapsTablesScreenDesktop(
+            controller = controller,
             onOpenVeTable = onOpenVeTable,
             onOpenVeTable2 = onOpenVeTable2,
             onOpenAfrTable = onOpenAfrTable,
             onOpenInjectorConfig = onOpenInjectorConfig,
-            onOpenSettings = onOpenSettings
         )
         DesktopRoute.VeTable -> VeTableScreenDesktop(controller, mapIndex = 1)
         DesktopRoute.VeTable2 -> VeTableScreenDesktop(controller, mapIndex = 2)

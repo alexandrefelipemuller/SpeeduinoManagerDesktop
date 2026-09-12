@@ -34,7 +34,6 @@ internal enum class DesktopRoute(
     ConfigsTuning("route.configsTuning", "route.configsTuning", Icons.Default.Settings),
     InjectorConfig("label.injectors", "label.injectors", Icons.Default.Settings),
     InputOutputConfig("label.inputOutputTitle", "label.inputOutputTitle", Icons.Default.Settings),
-    RevLimiterConfig("label.revLimiter", "label.revLimiter", Icons.Default.Settings),
     SecondarySerial("label.secondarySerialTitle", "label.secondarySerialTitle", Icons.Default.Settings),
     VeTable("route.veTable", "route.veTable", Icons.Default.TableChart),
     VeTable2("route.veTable2", "route.veTable2", Icons.Default.TableChart),
@@ -83,8 +82,7 @@ internal fun parentRoute(route: DesktopRoute): DesktopRoute? {
         DesktopRoute.SecondarySerial -> DesktopRoute.EngineSetup
         DesktopRoute.IdleControl,
         DesktopRoute.ClosedLoopCorrections,
-        DesktopRoute.EngineProtection,
-        DesktopRoute.RevLimiterConfig -> DesktopRoute.EngineOperation
+        DesktopRoute.EngineProtection -> DesktopRoute.EngineOperation
         DesktopRoute.Fuel,
         DesktopRoute.Ignition,
         DesktopRoute.EngineSetup,
