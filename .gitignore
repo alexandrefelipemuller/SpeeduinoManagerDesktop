@@ -27,6 +27,12 @@ render.experimental.xml
 *.jks
 *.keystore
 
+# Code-signing certificates (MSIX etc) - never commit private keys
+*.pfx
+*.p12
+*.cer
+certs/
+
 # Google Services (e.g. APIs or Firebase)
 google-services.json
 
