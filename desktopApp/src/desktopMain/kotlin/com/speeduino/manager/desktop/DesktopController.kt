@@ -777,6 +777,7 @@ internal class DesktopSpeeduinoController(
 
     fun loadVeTable(mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
+            _lastError.value = null
             try {
                 val table = withPausedLiveDataStream { it.readVeTable(mapIndex) }
                     ?: run {
@@ -819,6 +820,7 @@ internal class DesktopSpeeduinoController(
 
     fun loadIgnitionTable(mapIndex: Int = 1) {
         scope.launch(Dispatchers.IO) {
+            _lastError.value = null
             try {
                 val table = withPausedLiveDataStream { it.readIgnitionTable(mapIndex) }
                     ?: run {
@@ -848,6 +850,7 @@ internal class DesktopSpeeduinoController(
 
     fun loadAfrTable() {
         scope.launch(Dispatchers.IO) {
+            _lastError.value = null
             try {
                 _afrTable.value = withPausedLiveDataStream { it.readAfrTable() }
                     ?: run {
@@ -876,6 +879,7 @@ internal class DesktopSpeeduinoController(
 
     fun loadDwellTable() {
         scope.launch(Dispatchers.IO) {
+            _lastError.value = null
             try {
                 val table = withPausedLiveDataStream { it.readDwellTable() }
                     ?: DwellTable.createDefault()
@@ -1036,6 +1040,96 @@ internal class DesktopSpeeduinoController(
                 _configState.value = _configState.value.copy(
                     isBusy = false,
                     message = "Erro ao exportar: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun exportLatestConfigMsq(targetFile: File) {
+        scope.launch(Dispatchers.IO) {
+            val sessionDir = localSessionDir ?: configManager.latestSavedConfig()
+            if (sessionDir == null) {
+                _configState.value = _configState.value.copy(
+                    isBusy = false,
+                    message = "Nenhuma sessão salva para exportar."
+                )
+                return@launch
+            }
+            val definition = _activeIniDefinition.value
+            if (definition == null) {
+                _configState.value = _configState.value.copy(
+                    isBusy = false,
+                    message = "Nenhuma definição .ini ativa - conecte a ECU antes de exportar .msq."
+                )
+                return@launch
+            }
+            _configState.value = _configState.value.copy(
+                isBusy = true,
+                message = "Exportando .msq..."
+            )
+            try {
+                val pages = configManager.loadConfig(sessionDir).mapKeys { (page, _) -> page.toInt() and 0xFF }
+                val xml = configManager.exportSessionToMsq(definition, pages)
+                targetFile.writeText(xml, Charsets.UTF_8)
+                _configState.value = _configState.value.copy(
+                    isBusy = false,
+                    message = "Tune .msq exportado: ${targetFile.name}",
+                    lastSessionDir = sessionDir
+                )
+            } catch (e: Exception) {
+                _configState.value = _configState.value.copy(
+                    isBusy = false,
+                    message = "Erro ao exportar .msq: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun importConfigFromMsq(sourceFile: File) {
+        scope.launch(Dispatchers.IO) {
+            val definition = _activeIniDefinition.value
+            if (definition == null) {
+                _configState.value = _configState.value.copy(
+                    isBusy = false,
+                    message = "Nenhuma definição .ini ativa - conecte a ECU antes de importar .msq."
+                )
+                return@launch
+            }
+            val baseSessionDir = localSessionDir ?: configManager.latestSavedConfig()
+            if (baseSessionDir == null) {
+                _configState.value = _configState.value.copy(
+                    isBusy = false,
+                    message = "Baixe a configuração da ECU antes de importar um .msq."
+                )
+                return@launch
+            }
+            _configState.value = _configState.value.copy(
+                isBusy = true,
+                message = "Importando .msq..."
+            )
+            try {
+                val xmlText = sourceFile.readText(Charsets.UTF_8)
+                val doc = io.ecucore.definition.MsqCodec.decode(xmlText)
+                if (doc.signature.isNotBlank() && doc.signature != definition.signature) {
+                    _configState.value = _configState.value.copy(
+                        isBusy = false,
+                        message = "Assinatura do .msq (${doc.signature}) não corresponde à ECU conectada (${definition.signature})."
+                    )
+                    return@launch
+                }
+                val basePages = configManager.loadConfig(baseSessionDir).mapKeys { (page, _) -> page.toInt() and 0xFF }
+                val sessionDir = configManager.importSessionFromMsq(xmlText, definition, basePages)
+                localSessionDir = sessionDir
+                loadTablesFromSession(sessionDir)
+                _configState.value = _configState.value.copy(
+                    isBusy = false,
+                    message = "Tune .msq importado. Conecte e grave para aplicar na ECU.",
+                    lastSessionDir = sessionDir
+                )
+            } catch (e: Exception) {
+                _configState.value = _configState.value.copy(
+                    isBusy = false,
+                    message = "Erro ao importar .msq: ${e.message}"
                 )
             }
         }
