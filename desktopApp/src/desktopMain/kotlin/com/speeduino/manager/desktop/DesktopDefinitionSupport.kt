@@ -148,8 +148,8 @@ internal class DesktopDefinitionRepository(
             }
         }
 
-        val content = httpGet(entry.url)
-        target.writeText(content)
+        val content = httpGetBytes(entry.url)
+        target.writeBytes(content)
         val downloadedHash = sha256(target)
         require(downloadedHash.equals(entry.sha256, ignoreCase = true)) {
             "Hash invalido para ${entry.id}: esperado ${entry.sha256}, recebido $downloadedHash"
@@ -159,14 +159,14 @@ internal class DesktopDefinitionRepository(
 
     fun loadDefinition(entry: IniCatalogEntry, forceRefresh: Boolean = false): IniDefinition {
         val file = downloadDefinition(entry, forceRefresh)
-        return IniParser.parse(file.name, file.readText())
+        return IniParser.parse(file.name, file.readText(Charsets.ISO_8859_1))
     }
 
     fun importDefinition(source: File): IniDefinition {
         require(source.exists()) { "Arquivo nao encontrado: ${source.absolutePath}" }
         val target = definitionsDir.resolve(source.name)
         source.copyTo(target, overwrite = true)
-        return IniParser.parse(target.name, target.readText())
+        return IniParser.parse(target.name, target.readText(Charsets.ISO_8859_1))
     }
 
     fun listImportedDefinitions(): List<ImportedIniDefinition> {
@@ -175,7 +175,7 @@ internal class DesktopDefinitionRepository(
         }?.sortedBy { it.name.lowercase(Locale.US) }
             ?.mapNotNull { file ->
                 runCatching {
-                    val definition = IniParser.parse(file.name, file.readText())
+                    val definition = IniParser.parse(file.name, file.readText(Charsets.ISO_8859_1))
                     ImportedIniDefinition(
                         fileName = file.name,
                         signature = definition.signature,
@@ -189,13 +189,13 @@ internal class DesktopDefinitionRepository(
     fun loadImportedDefinition(fileName: String): IniDefinition {
         val target = definitionsDir.resolve(fileName)
         require(target.exists()) { "Arquivo .ini importado nao encontrado: $fileName" }
-        return IniParser.parse(target.name, target.readText())
+        return IniParser.parse(target.name, target.readText(Charsets.ISO_8859_1))
     }
 
     fun loadCachedDefinitionById(id: String): IniDefinition {
         val target = definitionsDir.resolve("$id.ini")
         require(target.exists()) { "Definicao .ini em cache nao encontrada: $id" }
-        return IniParser.parse(target.name, target.readText())
+        return IniParser.parse(target.name, target.readText(Charsets.ISO_8859_1))
     }
 
     fun hasCachedDefinitionById(id: String): Boolean = definitionsDir.resolve("$id.ini").exists()
@@ -230,7 +230,13 @@ internal class DesktopDefinitionRepository(
     }
 
     private fun matchesSignature(signature: String, pattern: String): Boolean {
-        val wildcardRegex = pattern.trim().split('*').joinToString(".*") { Regex.escape(it) }
+        // Espaços colados a um '*' (ex.: "MS/Extra format hr_10 **********") vêm de assinaturas
+        // brutas de ECU com sufixo de versão/checksum após um espaço. Nossa assinatura já
+        // normalizada (FirmwareHandshakeDomain.normalize) não inclui esse sufixo nem o espaço à
+        // frente dele, então exigir literalmente esse espaço faria o padrão nunca casar contra a
+        // forma normalizada - remover o espaço da fronteira do wildcard torna esse sufixo opcional.
+        val normalizedPattern = pattern.trim().replace(Regex("\\s*\\*\\s*"), "*")
+        val wildcardRegex = normalizedPattern.split('*').joinToString(".*") { Regex.escape(it) }
         return Regex("^$wildcardRegex$", RegexOption.IGNORE_CASE).matches(signature.trim())
     }
 
@@ -241,6 +247,21 @@ internal class DesktopDefinitionRepository(
         connection.readTimeout = 10_000
         connection.setRequestProperty("Accept", "application/json, text/plain, */*")
         return connection.inputStream.bufferedReader().use { it.readText() }
+    }
+
+    // Definition (.ini) downloads must round-trip byte-for-byte for the sha256 check in
+    // downloadDefinition() to ever pass: many legacy MegaSquirt .ini files are ISO-8859-1 (they
+    // use e.g. the degree sign in comments), not UTF-8. Decoding them as text and re-encoding
+    // (as httpGet()/writeText() do) silently mangles those bytes via the UTF-8 replacement
+    // character, changing the file's hash even though it "looks" identical - so definition
+    // downloads go through raw bytes instead of text.
+    private fun httpGetBytes(url: String): ByteArray {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 10_000
+        connection.setRequestProperty("Accept", "text/plain, */*")
+        return connection.inputStream.use { it.readBytes() }
     }
 
     private fun sha256(file: File): String {

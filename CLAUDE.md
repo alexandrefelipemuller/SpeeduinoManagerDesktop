@@ -33,6 +33,21 @@ sh iosApp/build-ios.sh
 
 There is no Android target wired into `shared`/`desktopApp` currently (an `androidMain` source set exists for shared expect/actuals but is not attached to a target in the Gradle config).
 
+### Raspberry Pi (arm64) packaging
+
+`packageReleaseDeb`/jpackage bundles a JRE for whatever machine runs the build — building on an x86_64 dev box produces an amd64 `.deb` that will not install on a Raspberry Pi. There's no arm64 dev machine in the loop yet, so cross-build with:
+
+```bash
+./scripts/build-arm64-deb.sh
+```
+
+This runs the full Gradle build inside a `linux/arm64` Debian container via Docker + QEMU user-mode emulation (`docker run --platform linux/arm64`), producing a real arm64 `.deb` under `desktopApp/build/compose/binaries/main-release/deb/`. Notes:
+- Needs `docker` with arm64 emulation registered (binfmt) — verify with `docker run --rm --platform linux/arm64 arm64v8/debian:trixie uname -m`.
+- Debian trixie (the container base) only ships OpenJDK 21/25, not 17; the script uses 21 (the project has no pinned toolchain, so this is fine).
+- The build forces IPv4 (`Acquire::ForceIPv4`, `-Djava.net.preferIPv4Stack=true`) — on some networks (VPNs especially) AAAA DNS records resolve but have no real IPv6 route, which silently hangs apt/Gradle downloads for a long time otherwise.
+- Expect ~1.5–2h under QEMU emulation on typical dev hardware (vs. minutes natively) — it's CPU-bound Kotlin/Compose compilation, not actually stuck.
+- The resulting `.deb` is a normal `dpkg`/`apt install ./foo.deb` target on the Pi.
+
 Local protocol testing without real hardware: run `python3 simulator/speeduino_tcp_simulator.py --host 0.0.0.0 --port 5555` (from the separate main SpeeduinoManager repo, not this one) and connect the desktop app to `127.0.0.1:5555`.
 
 ## Module layout

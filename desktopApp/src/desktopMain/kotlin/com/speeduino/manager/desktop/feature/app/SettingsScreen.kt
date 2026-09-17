@@ -450,6 +450,34 @@ internal fun SettingsScreen(controller: DesktopSpeeduinoController) {
                         Text(strings["action.importConfig"])
                     }
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilledTonalButton(
+                        onClick = {
+                            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                            val target = chooseSaveFile(
+                                title = strings["label.msqSaveTitle"],
+                                defaultName = "speeduino_tune_$timestamp.msq"
+                            )
+                            if (target != null) {
+                                controller.exportLatestConfigMsq(target)
+                            }
+                        },
+                        enabled = !configState.isBusy
+                    ) {
+                        Text(strings["action.exportConfigMsq"])
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            val source = chooseOpenFile(strings["label.msqOpenTitle"])
+                            if (source != null) {
+                                controller.importConfigFromMsq(source)
+                            }
+                        },
+                        enabled = !configState.isBusy
+                    ) {
+                        Text(strings["action.importConfigMsq"])
+                    }
+                }
                 if (configState.isBusy) {
                     Text(
                         text = strings.format("label.configProgress", configState.progressPercent),

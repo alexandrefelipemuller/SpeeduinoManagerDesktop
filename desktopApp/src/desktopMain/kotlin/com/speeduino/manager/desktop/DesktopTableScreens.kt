@@ -73,11 +73,13 @@ internal fun PlaceholderScreen(title: String, message: String) {
 internal fun VeTableScreenDesktop(controller: DesktopSpeeduinoController, mapIndex: Int) {
     val table by controller.veTableState(mapIndex).collectAsState()
     val liveData by controller.liveData.collectAsState()
+    val loadError by controller.lastError.collectAsState()
     val strings = LocalStrings.current
     MapTableScreen(
         title = if (mapIndex == 1) strings["route.veTable"] else strings["route.veTable2"],
         description = strings["label.mapVe"],
         table = table,
+        loadError = loadError,
         onLoad = { controller.loadVeTable(mapIndex) },
         onSave = { controller.saveVeTable(it, mapIndex) },
         formatValue = { it.toString() },
@@ -100,11 +102,13 @@ internal fun VeTableScreenDesktop(controller: DesktopSpeeduinoController, mapInd
 internal fun IgnitionTableScreenDesktop(controller: DesktopSpeeduinoController, mapIndex: Int) {
     val table by controller.ignitionTableState(mapIndex).collectAsState()
     val liveData by controller.liveData.collectAsState()
+    val loadError by controller.lastError.collectAsState()
     val strings = LocalStrings.current
     MapTableScreen(
         title = if (mapIndex == 1) strings["route.ignitionTable"] else strings["route.ignitionTable2"],
         description = strings["label.mapIgnition"],
         table = table,
+        loadError = loadError,
         onLoad = { controller.loadIgnitionTable(mapIndex) },
         onSave = { controller.saveIgnitionTable(it, mapIndex) },
         formatValue = { it.toString() },
@@ -127,11 +131,13 @@ internal fun IgnitionTableScreenDesktop(controller: DesktopSpeeduinoController, 
 internal fun AfrTableScreenDesktop(controller: DesktopSpeeduinoController) {
     val table by controller.afrTable.collectAsState()
     val liveData by controller.liveData.collectAsState()
+    val loadError by controller.lastError.collectAsState()
     val strings = LocalStrings.current
     MapTableScreen(
         title = strings["route.afrTable"],
         description = strings["label.mapAfr"],
         table = table,
+        loadError = loadError,
         onLoad = controller::loadAfrTable,
         onSave = controller::saveAfrTable,
         formatValue = { AfrTable.formatValue(it) },
@@ -154,11 +160,13 @@ internal fun AfrTableScreenDesktop(controller: DesktopSpeeduinoController) {
 internal fun DwellTableScreenDesktop(controller: DesktopSpeeduinoController) {
     val table by controller.dwellTable.collectAsState()
     val liveData by controller.liveData.collectAsState()
+    val loadError by controller.lastError.collectAsState()
     val strings = LocalStrings.current
     MapTableScreen(
         title = strings["route.dwellTable"],
         description = strings["label.dwellTableDescription"],
         table = table,
+        loadError = loadError,
         onLoad = controller::loadDwellTable,
         onSave = controller::saveDwellTable,
         formatValue = { it.toString() },
@@ -192,6 +200,7 @@ private fun <T> MapTableScreen(
     title: String,
     description: String,
     table: T?,
+    loadError: String? = null,
     onLoad: () -> Unit,
     onSave: (T) -> Unit,
     formatValue: (Int) -> String,
@@ -308,7 +317,10 @@ private fun <T> MapTableScreen(
         }
 
         if (workingTable == null) {
-            PlaceholderScreen(title, strings["label.noDataLoaded"])
+            PlaceholderScreen(
+                title,
+                loadError?.let { strings.format("label.loadFailed", it) } ?: strings["label.noDataLoaded"]
+            )
         } else {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
