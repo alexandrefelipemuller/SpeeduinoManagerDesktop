@@ -3,6 +3,7 @@ package com.speeduino.manager.desktop.navigation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,7 +51,7 @@ internal fun KioskNavigationRail(
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.fillMaxHeight().padding(vertical = 8.dp, horizontal = 4.dp),
+            modifier = Modifier.fillMaxHeight().padding(vertical = 8.dp, horizontal = 2.dp),
             verticalArrangement = Arrangement.SpaceEvenly
         ) {
             RailDestinations.forEach { route ->
@@ -80,7 +82,7 @@ private fun RailButton(
         color = background
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
@@ -88,11 +90,11 @@ private fun RailButton(
                 imageVector = route.icon,
                 contentDescription = label,
                 tint = contentColor,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f)
             )
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
                 color = contentColor,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
