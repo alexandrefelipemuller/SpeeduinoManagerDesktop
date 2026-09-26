@@ -13,6 +13,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.Cable
+import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -51,28 +62,30 @@ internal fun LogsEcuToolsScreenDesktop(
         subtitle = strings["label.toolsSubtitle"]
     ) {
         KioskPanelCard(strings["route.connection"]) {
-            KioskFeatureCard(strings["route.connection"], strings["label.toolsConnectionDesc"], onClick = onOpenConnection)
-            KioskFeatureCard(strings["label.wifiTcp"], strings["label.toolsConnectionSettingsDesc"], onClick = onOpenConnectionSettings)
+            KioskFeatureCard(strings["route.connection"], strings["label.toolsConnectionDesc"], icon = Icons.Default.Cable, large = true, onClick = onOpenConnection)
+            KioskFeatureCard(strings["label.wifiTcp"], strings["label.toolsConnectionSettingsDesc"], icon = Icons.Default.Wifi, large = true, onClick = onOpenConnectionSettings)
         }
         KioskPanelCard(strings["label.logsEcuToolsTitle"]) {
-            KioskFeatureCard(strings["route.realTimeMonitor"], strings["label.realtimeUtilityDesc"], onClick = onOpenRealTimeMonitor)
-            KioskFeatureCard(strings["route.logViewer"], strings["label.logViewerUtilitySummary"], onClick = onOpenLogViewer)
+            KioskFeatureCard(strings["route.realTimeMonitor"], strings["label.realtimeUtilityDesc"], icon = Icons.Default.MonitorHeart, large = true, onClick = onOpenRealTimeMonitor)
+            KioskFeatureCard(strings["route.logViewer"], strings["label.logViewerUtilitySummary"], icon = Icons.Default.Description, large = true, onClick = onOpenLogViewer)
             KioskFeatureCard(
                 strings["label.logViewerOpenCsvAction"],
                 strings["label.logViewerUtilityDesc"],
+                icon = Icons.Default.FolderOpen,
+                large = true,
                 onClick = {
                     chooseOpenFile(strings["label.logViewerOpenCsvTitle"])?.absolutePath?.let(onOpenHistoricalLogViewer)
                 }
             )
         }
         KioskPanelCard(strings["label.toolsAnalysisSection"]) {
-            KioskFeatureCard(strings["route.logAnalyzer"], strings["label.toolsLogAnalyzerDesc"], onClick = onOpenLogAnalyzer)
-            KioskFeatureCard(strings["route.beforeAfter"], strings["label.toolsBeforeAfterDesc"], onClick = onOpenBeforeAfter)
-            KioskFeatureCard(strings["route.virtualDyno"], strings["label.toolsVirtualDynoDesc"], onClick = onOpenVirtualDyno)
+            KioskFeatureCard(strings["route.logAnalyzer"], strings["label.toolsLogAnalyzerDesc"], icon = Icons.Default.Analytics, large = true, onClick = onOpenLogAnalyzer)
+            KioskFeatureCard(strings["route.beforeAfter"], strings["label.toolsBeforeAfterDesc"], icon = Icons.Default.CompareArrows, large = true, onClick = onOpenBeforeAfter)
+            KioskFeatureCard(strings["route.virtualDyno"], strings["label.toolsVirtualDynoDesc"], icon = Icons.Default.Speed, large = true, onClick = onOpenVirtualDyno)
         }
         KioskPanelCard(strings["nav.sectionMore"]) {
-            KioskFeatureCard(strings["app.settingsTitle"], onClick = onOpenSettings)
-            KioskFeatureCard(strings["label.institutionalTitle"], onClick = onOpenInstitutional)
+            KioskFeatureCard(strings["app.settingsTitle"], icon = Icons.Default.Settings, large = true, onClick = onOpenSettings)
+            KioskFeatureCard(strings["label.institutionalTitle"], icon = Icons.Default.Info, large = true, onClick = onOpenInstitutional)
         }
     }
 }

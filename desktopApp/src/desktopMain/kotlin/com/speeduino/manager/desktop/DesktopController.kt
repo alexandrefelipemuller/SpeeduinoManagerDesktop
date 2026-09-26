@@ -230,6 +230,8 @@ internal class DesktopSpeeduinoController(
     private val syncService = ConfigSyncService(configManager)
     private val definitionRepository = DesktopDefinitionRepository()
     private val ecuCommandMutex = Mutex()
+    private val serialTunnelService = SerialTunnelService(scope)
+    val serialTunnelState = serialTunnelService.state
 
     init {
         refreshIniDefinitions()
@@ -610,6 +612,17 @@ internal class DesktopSpeeduinoController(
         _serialPorts.value = ports.map { port ->
             SerialPortInfo(port, port)
         }
+    }
+
+    fun startSerialTunnel(serialPortDescriptor: String, baudRate: Int, tcpPort: Int) {
+        if (connectionState.value.isConnected) {
+            disconnect()
+        }
+        serialTunnelService.start(serialPortDescriptor, baudRate, tcpPort)
+    }
+
+    fun stopSerialTunnel() {
+        serialTunnelService.stop()
     }
 
     fun saveDesktopSettings(settings: DesktopSettingsState) {

@@ -4,12 +4,14 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -27,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,8 +39,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +52,7 @@ import io.ecucore.model.DwellTable
 import io.ecucore.model.Color as SharedColor
 import io.ecucore.model.IgnitionTable
 import io.ecucore.model.VeTable
+import kotlin.math.roundToInt
 
 @Composable
 internal fun PlaceholderScreen(title: String, message: String) {
@@ -225,10 +232,14 @@ private fun <T> MapTableScreen(
     var invertYAxis by remember { mutableStateOf(true) }
     var showInfo by remember { mutableStateOf(false) }
     var liveCursorEnabled by remember { mutableStateOf(false) }
+    var selection by remember { mutableStateOf<TableSelection?>(null) }
+    var pendingAction by remember { mutableStateOf<SelectionAction?>(null) }
+    var selectionInputValue by remember { mutableStateOf("") }
 
     LaunchedEffect(table) {
         workingTable = table
         hasChanges = false
+        selection = null
     }
 
     LaunchedEffect(Unit) {
@@ -245,6 +256,33 @@ private fun <T> MapTableScreen(
     val activeCell: Pair<Int, Int>? = if (liveCursorEnabled && liveRpm != null && activeCurrentLoad != null && rpm.isNotEmpty() && load.isNotEmpty()) {
         nearestIndex(rpm, liveRpm) to nearestIndex(load, activeCurrentLoad)
     } else null
+
+    val rowCount = grid.size
+    val colCount = rpm.size
+
+    fun applySelectionAction(action: SelectionAction, amount: Int?) {
+        val sel = selection ?: return
+        if (workingTable == null) return
+        val updatedGrid = when (action) {
+            SelectionAction.SET_VALUE -> applySetValue(grid, sel, amount ?: 0, valueRange)
+            SelectionAction.ADD_DELTA -> applyAddDelta(grid, sel, amount ?: 0, valueRange)
+            SelectionAction.INTERPOLATE -> applyInterpolate(grid, sel, valueRange)
+            SelectionAction.SMOOTH -> applySmooth(grid, sel, valueRange)
+        }
+        for (r in sel.minRow..sel.maxRow) {
+            for (c in sel.minCol..sel.maxCol) {
+                val newValue = updatedGrid.getOrNull(r)?.getOrNull(c)
+                val oldValue = grid.getOrNull(r)?.getOrNull(c)
+                if (newValue != null && newValue != oldValue) {
+                    workingTable = workingTable?.let { updateCell(it, r, c, newValue) }
+                }
+            }
+        }
+        hasChanges = true
+        selection = null
+        pendingAction = null
+        selectionInputValue = ""
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -322,6 +360,7 @@ private fun <T> MapTableScreen(
                 loadError?.let { strings.format("label.loadFailed", it) } ?: strings["label.noDataLoaded"]
             )
         } else {
+            Box(modifier = Modifier.fillMaxWidth()) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
@@ -365,9 +404,23 @@ private fun <T> MapTableScreen(
                                         value = formatValue(cell),
                                         background = cellColor(cell),
                                         isLiveCursor = activeCell == (colIndex to dataRowIndex),
+                                        isSelected = selection?.contains(dataRowIndex, colIndex) == true,
+                                        row = dataRowIndex,
+                                        col = colIndex,
+                                        rowCount = rowCount,
+                                        colCount = colCount,
+                                        invertRowDrag = invertYAxis,
                                         onClick = {
                                             editTarget = TableEditTarget.Cell(dataRowIndex, colIndex)
                                             editValue = formatValue(cell)
+                                        },
+                                        onDragStart = { r, c -> selection = TableSelection(r, c, r, c) },
+                                        onDragUpdate = { r, c -> selection = selection?.copy(endRow = r, endCol = c) },
+                                        onDragEnd = {
+                                            val sel = selection
+                                            if (sel != null && sel.minRow == sel.maxRow && sel.minCol == sel.maxCol) {
+                                                selection = null
+                                            }
                                         }
                                     )
                                 }
@@ -383,6 +436,48 @@ private fun <T> MapTableScreen(
                         modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
                     )
                 }
+            }
+
+            val activeSelection = selection
+            if (activeSelection != null && (activeSelection.minRow != activeSelection.maxRow || activeSelection.minCol != activeSelection.maxCol)) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                    shadowElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val cellCount = (activeSelection.maxRow - activeSelection.minRow + 1) * (activeSelection.maxCol - activeSelection.minCol + 1)
+                        Text(
+                            text = strings.format("label.selectionCount", cellCount.toString()),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                selectionInputValue = ""
+                                pendingAction = SelectionAction.SET_VALUE
+                            }) { Text(strings["action.selectionSetValue"]) }
+                            TextButton(onClick = {
+                                selectionInputValue = ""
+                                pendingAction = SelectionAction.ADD_DELTA
+                            }) { Text(strings["action.selectionAddDelta"]) }
+                            TextButton(onClick = { applySelectionAction(SelectionAction.INTERPOLATE, null) }) {
+                                Text(strings["action.selectionInterpolate"])
+                            }
+                            TextButton(onClick = { applySelectionAction(SelectionAction.SMOOTH, null) }) {
+                                Text(strings["action.selectionSmooth"])
+                            }
+                            TextButton(onClick = { selection = null }) { Text(strings["action.selectionCancel"]) }
+                        }
+                    }
+                }
+            }
             }
         }
 
@@ -401,6 +496,43 @@ private fun <T> MapTableScreen(
                 modifier = Modifier.weight(1f)
             ) { Text(strings["action.saveEcu"]) }
         }
+    }
+
+    if (pendingAction == SelectionAction.SET_VALUE || pendingAction == SelectionAction.ADD_DELTA) {
+        val action = pendingAction
+        AlertDialog(
+            onDismissRequest = { pendingAction = null },
+            title = {
+                Text(
+                    if (action == SelectionAction.SET_VALUE) strings["action.selectionSetValue"] else strings["action.selectionAddDelta"]
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings.format("label.recommendedRange", valueRange.first, valueRange.last))
+                    OutlinedTextField(
+                        value = selectionInputValue,
+                        onValueChange = { selectionInputValue = it },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                FilledTonalButton(
+                    onClick = {
+                        val parsed = parseValue(selectionInputValue)
+                        if (parsed != null && action != null) {
+                            applySelectionAction(action, parsed)
+                        } else {
+                            pendingAction = null
+                        }
+                    }
+                ) { Text(strings["action.apply"]) }
+            },
+            dismissButton = {
+                FilledTonalButton(onClick = { pendingAction = null }) { Text(strings["action.cancel"]) }
+            }
+        )
     }
 
     if (editTarget != null) {
@@ -486,21 +618,67 @@ private fun HeaderCell(text: String, highlighted: Boolean = false, onClick: (() 
     }
 }
 
+private val TABLE_CELL_WIDTH = 68.dp
+private val TABLE_CELL_HEIGHT = 36.dp
+private val TABLE_CELL_SPACING = 6.dp
+
 @Composable
-private fun ValueCell(value: String, background: Color, isLiveCursor: Boolean = false, onClick: () -> Unit) {
+private fun ValueCell(
+    value: String,
+    background: Color,
+    isLiveCursor: Boolean = false,
+    isSelected: Boolean = false,
+    row: Int = 0,
+    col: Int = 0,
+    rowCount: Int = 1,
+    colCount: Int = 1,
+    invertRowDrag: Boolean = false,
+    onClick: () -> Unit,
+    onDragStart: (Int, Int) -> Unit = { _, _ -> },
+    onDragUpdate: (Int, Int) -> Unit = { _, _ -> },
+    onDragEnd: () -> Unit = {}
+) {
     val bg = background.copy(alpha = 0.78f)
     val contentColor = if (bg.luminance() < 0.45f) Color(0xFFF8F6F2) else Color(0xFF1C1B1A)
+    val density = LocalDensity.current
+    val borderModifier = when {
+        isSelected -> Modifier.border(3.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(8.dp))
+        isLiveCursor -> Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+        else -> Modifier
+    }
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = bg,
-        modifier = if (isLiveCursor) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier,
+        modifier = borderModifier,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
     ) {
         Box(
             modifier = Modifier
-                .width(68.dp)
-                .padding(vertical = 6.dp, horizontal = 8.dp)
-                .clickable { onClick() },
+                .width(TABLE_CELL_WIDTH)
+                .height(TABLE_CELL_HEIGHT)
+                .clickable { onClick() }
+                .pointerInput(row, col, rowCount, colCount, invertRowDrag) {
+                    var dragOffset = Offset.Zero
+                    val cellWidthPx = with(density) { (TABLE_CELL_WIDTH + TABLE_CELL_SPACING).toPx() }
+                    val cellHeightPx = with(density) { (TABLE_CELL_HEIGHT + TABLE_CELL_SPACING).toPx() }
+                    val rowSign = if (invertRowDrag) -1 else 1
+                    detectDragGestures(
+                        onDragStart = {
+                            dragOffset = Offset.Zero
+                            onDragStart(row, col)
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            dragOffset += dragAmount
+                            val targetCol = (col + (dragOffset.x / cellWidthPx).roundToInt()).coerceIn(0, colCount - 1)
+                            val targetRow = (row + rowSign * (dragOffset.y / cellHeightPx).roundToInt()).coerceIn(0, rowCount - 1)
+                            onDragUpdate(targetRow, targetCol)
+                        },
+                        onDragEnd = onDragEnd,
+                        onDragCancel = onDragEnd
+                    )
+                }
+                .padding(vertical = 6.dp, horizontal = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -508,6 +686,69 @@ private fun ValueCell(value: String, background: Color, isLiveCursor: Boolean = 
                 style = MaterialTheme.typography.bodyMedium,
                 color = contentColor
             )
+        }
+    }
+}
+
+private data class TableSelection(val startRow: Int, val startCol: Int, val endRow: Int, val endCol: Int) {
+    val minRow get() = minOf(startRow, endRow)
+    val maxRow get() = maxOf(startRow, endRow)
+    val minCol get() = minOf(startCol, endCol)
+    val maxCol get() = maxOf(startCol, endCol)
+    fun contains(row: Int, col: Int) = row in minRow..maxRow && col in minCol..maxCol
+}
+
+private enum class SelectionAction { SET_VALUE, ADD_DELTA, INTERPOLATE, SMOOTH }
+
+private fun applySetValue(grid: List<List<Int>>, sel: TableSelection, value: Int, range: IntRange): List<List<Int>> {
+    val clamped = value.coerceIn(range)
+    return grid.mapIndexed { r, row ->
+        if (r < sel.minRow || r > sel.maxRow) row
+        else row.mapIndexed { c, v -> if (c in sel.minCol..sel.maxCol) clamped else v }
+    }
+}
+
+private fun applyAddDelta(grid: List<List<Int>>, sel: TableSelection, delta: Int, range: IntRange): List<List<Int>> {
+    return grid.mapIndexed { r, row ->
+        if (r < sel.minRow || r > sel.maxRow) row
+        else row.mapIndexed { c, v -> if (c in sel.minCol..sel.maxCol) (v + delta).coerceIn(range) else v }
+    }
+}
+
+private fun applyInterpolate(grid: List<List<Int>>, sel: TableSelection, range: IntRange): List<List<Int>> {
+    val startValue = grid.getOrNull(sel.minRow)?.getOrNull(sel.minCol) ?: return grid
+    val endValue = grid.getOrNull(sel.maxRow)?.getOrNull(sel.maxCol) ?: return grid
+    val rowSpan = (sel.maxRow - sel.minRow).coerceAtLeast(1)
+    val colSpan = (sel.maxCol - sel.minCol).coerceAtLeast(1)
+    return grid.mapIndexed { r, row ->
+        if (r < sel.minRow || r > sel.maxRow) row
+        else row.mapIndexed { c, v ->
+            if (c !in sel.minCol..sel.maxCol) v
+            else {
+                val rowProgress = (r - sel.minRow).toFloat() / rowSpan
+                val colProgress = (c - sel.minCol).toFloat() / colSpan
+                val t = (rowProgress + colProgress) / 2f
+                (startValue + (endValue - startValue) * t).roundToInt().coerceIn(range)
+            }
+        }
+    }
+}
+
+private fun applySmooth(grid: List<List<Int>>, sel: TableSelection, range: IntRange): List<List<Int>> {
+    val rows = grid.size
+    val cols = grid.firstOrNull()?.size ?: 0
+    return grid.mapIndexed { r, row ->
+        row.mapIndexed { c, v ->
+            if (r < sel.minRow || r > sel.maxRow || c < sel.minCol || c > sel.maxCol) v
+            else {
+                var sum = v
+                var count = 1
+                if (r > 0) { sum += grid[r - 1][c]; count++ }
+                if (r < rows - 1) { sum += grid[r + 1][c]; count++ }
+                if (c > 0) { sum += grid[r][c - 1]; count++ }
+                if (c < cols - 1) { sum += grid[r][c + 1]; count++ }
+                (sum.toFloat() / count).roundToInt().coerceIn(range)
+            }
         }
     }
 }

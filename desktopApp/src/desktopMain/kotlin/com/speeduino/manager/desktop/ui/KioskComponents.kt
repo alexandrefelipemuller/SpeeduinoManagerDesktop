@@ -82,23 +82,28 @@ internal fun KioskFeatureCard(
     title: String,
     subtitle: String? = null,
     icon: ImageVector? = null,
+    large: Boolean = false,
     onClick: () -> Unit
 ) {
+    val iconBadgeSize = if (large) 44.dp else 26.dp
+    val iconSize = if (large) 24.dp else 15.dp
+    val horizontalPadding = if (large) 16.dp else 10.dp
+    val verticalPadding = if (large) 14.dp else 6.dp
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(if (large) 14.dp else 10.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = verticalPadding),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (large) 14.dp else 8.dp)
         ) {
             if (icon != null) {
                 Surface(
-                    modifier = Modifier.size(26.dp),
-                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.size(iconBadgeSize),
+                    shape = RoundedCornerShape(if (large) 12.dp else 8.dp),
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -106,15 +111,15 @@ internal fun KioskFeatureCard(
                             imageVector = icon,
                             contentDescription = title,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(iconSize)
                         )
                     }
                 }
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (large) 3.dp else 0.dp)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = if (large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )
@@ -123,7 +128,7 @@ internal fun KioskFeatureCard(
                         text = subtitle,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
+                        maxLines = if (large) 2 else 1
                     )
                 }
             }

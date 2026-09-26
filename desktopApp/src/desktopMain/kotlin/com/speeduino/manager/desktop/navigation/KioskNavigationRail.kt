@@ -44,7 +44,7 @@ internal fun KioskNavigationRail(
     val selectedTopLevelRoute = selectedNavRoute(currentRoute)
 
     Surface(
-        modifier = Modifier.width(58.dp).fillMaxHeight(),
+        modifier = Modifier.width(66.dp).fillMaxHeight(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         tonalElevation = 1.dp,
@@ -94,10 +94,10 @@ private fun RailButton(
             )
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold, lineHeight = 10.sp),
                 color = contentColor,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }

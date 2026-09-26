@@ -32,6 +32,7 @@ internal fun ScreenHost(
     onOpenConnection: () -> Unit,
     onOpenBluetoothConnection: () -> Unit,
     onOpenUsbSerialConnection: () -> Unit,
+    onOpenSerialTunnel: () -> Unit,
     onOpenVeTable: () -> Unit,
     onOpenVeTable2: () -> Unit,
     onOpenIgnitionConfig: () -> Unit,
@@ -71,7 +72,8 @@ internal fun ScreenHost(
         DesktopRoute.Connection,
         DesktopRoute.ConnectionSettings,
         DesktopRoute.BluetoothConnection,
-        DesktopRoute.UsbSerialConnection -> ConnectionRouteHost(
+        DesktopRoute.UsbSerialConnection,
+        DesktopRoute.SerialTunnel -> ConnectionRouteHost(
             route = route,
             controller = controller,
             connectionState = connectionState,
@@ -90,6 +92,7 @@ internal fun ScreenHost(
             onOpenConnectionSettings = onOpenConnectionSettings,
             onOpenBluetoothConnection = onOpenBluetoothConnection,
             onOpenUsbSerialConnection = onOpenUsbSerialConnection,
+            onOpenSerialTunnel = onOpenSerialTunnel,
             onOpenLogsEcuTools = onOpenLogsEcuTools,
             onOpenInstitutional = onOpenInstitutional
         )

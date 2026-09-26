@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,7 +30,8 @@ import com.speeduino.manager.desktop.ui.InfoRow
 internal fun ConnectionSettingsScreenDesktop(
     controller: DesktopSpeeduinoController,
     onOpenBluetoothConnection: () -> Unit,
-    onOpenUsbSerialConnection: () -> Unit
+    onOpenUsbSerialConnection: () -> Unit,
+    onOpenSerialTunnel: () -> Unit
 ) {
     val strings = LocalStrings.current
     val settings by controller.desktopSettings.collectAsState()
@@ -97,6 +99,9 @@ internal fun ConnectionSettingsScreenDesktop(
                 }
                 FilledTonalButton(onClick = onOpenUsbSerialConnection) {
                     Text(strings["label.usbSerial"])
+                }
+                FilledTonalButton(onClick = onOpenSerialTunnel) {
+                    Text(strings["label.serialTunnel"])
                 }
             }
         }
@@ -304,6 +309,183 @@ private fun ConnectionSettingsSummary(settings: DesktopSettingsState) {
             )
             InfoRow(strings["label.unitSystem"], settings.unitSystem.storageValue)
             InfoRow(strings["label.shiftLightRpm"], settings.shiftLightRpm.toString())
+        }
+    }
+}
+
+@Composable
+internal fun SerialTunnelScreenDesktop(controller: DesktopSpeeduinoController) {
+    val strings = LocalStrings.current
+    val serialPorts by controller.serialPorts.collectAsState()
+    val settings by controller.desktopSettings.collectAsState()
+    val tunnelState by controller.serialTunnelState.collectAsState()
+    val connectionState by controller.connectionState.collectAsState()
+
+    var selectedPort by remember(settings.lastSerialPort, serialPorts) {
+        mutableStateOf(settings.lastSerialPort.orEmpty())
+    }
+    var manualPort by remember(settings.lastSerialPort) { mutableStateOf(settings.lastSerialPort.orEmpty()) }
+    var baudRate by remember(settings.lastSerialBaudRate) { mutableStateOf(settings.lastSerialBaudRate?.toString() ?: "115200") }
+    var tcpPort by remember { mutableStateOf("5555") }
+
+    LaunchedEffect(Unit) {
+        controller.refreshSerialPorts()
+    }
+
+    val isRunning = tunnelState.status != SerialTunnelStatus.IDLE
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = strings["label.serialTunnelTitle"],
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = strings["label.serialTunnelSubtitle"],
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (connectionState.isConnected && !isRunning) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+            ) {
+                Text(
+                    text = strings["label.serialTunnelDisconnectWarning"],
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+
+        ConnectionProfileCard(
+            title = strings["label.usbSerialPort"],
+            subtitle = strings["label.usbSerialPortHelp"]
+        ) {
+            if (serialPorts.isNotEmpty() && !isRunning) {
+                DropdownField(
+                    label = strings["label.discoveredPorts"],
+                    value = serialPorts.firstOrNull { it.systemPortName == selectedPort }?.displayName
+                        ?: selectedPort.ifBlank { strings["label.noSelection"] },
+                    options = serialPorts.map { it.displayName }
+                ) { label ->
+                    selectedPort = serialPorts.firstOrNull { it.displayName == label }?.systemPortName.orEmpty()
+                    manualPort = selectedPort
+                }
+            }
+            OutlinedTextField(
+                value = manualPort,
+                onValueChange = {
+                    manualPort = it
+                    selectedPort = it
+                },
+                label = { Text(strings["label.portPathDevice"]) },
+                singleLine = true,
+                enabled = !isRunning,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = baudRate,
+                onValueChange = { baudRate = it.filter(Char::isDigit) },
+                label = { Text(strings["label.baudRateLabel"]) },
+                singleLine = true,
+                enabled = !isRunning,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = tcpPort,
+                onValueChange = { tcpPort = it.filter(Char::isDigit) },
+                label = { Text(strings["label.serialTunnelTcpPort"]) },
+                singleLine = true,
+                enabled = !isRunning,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (!isRunning) {
+                    FilledTonalButton(onClick = { controller.refreshSerialPorts() }) {
+                        Text(strings["label.refreshPorts"])
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            val parsedBaudRate = baudRate.toIntOrNull() ?: 115200
+                            val parsedTcpPort = tcpPort.toIntOrNull() ?: 5555
+                            if (selectedPort.isNotBlank()) {
+                                controller.startSerialTunnel(selectedPort, parsedBaudRate, parsedTcpPort)
+                            }
+                        }
+                    ) {
+                        Text(strings["label.serialTunnelStart"])
+                    }
+                } else {
+                    OutlinedButton(onClick = { controller.stopSerialTunnel() }) {
+                        Text(strings["label.serialTunnelStop"])
+                    }
+                }
+            }
+        }
+
+        if (isRunning) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = when (tunnelState.status) {
+                            SerialTunnelStatus.LISTENING -> strings["label.serialTunnelListening"]
+                            SerialTunnelStatus.CLIENT_CONNECTED -> strings.format(
+                                "label.serialTunnelClientConnected",
+                                tunnelState.clientAddress ?: "-"
+                            )
+                            SerialTunnelStatus.ERROR -> strings.format(
+                                "label.serialTunnelError",
+                                tunnelState.errorMessage ?: "-"
+                            )
+                            SerialTunnelStatus.IDLE -> ""
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (tunnelState.localAddresses.isNotEmpty()) {
+                        Text(
+                            text = strings["label.serialTunnelConnectHint"],
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        tunnelState.localAddresses.forEach { address ->
+                            Text(
+                                text = "$address:${tunnelState.tcpPort}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                    if (tunnelState.status == SerialTunnelStatus.CLIENT_CONNECTED) {
+                        InfoRow(strings["label.serialTunnelBytesIn"], tunnelState.bytesFromClient.toString())
+                        InfoRow(strings["label.serialTunnelBytesOut"], tunnelState.bytesFromSerial.toString())
+                    }
+                }
+            }
         }
     }
 }

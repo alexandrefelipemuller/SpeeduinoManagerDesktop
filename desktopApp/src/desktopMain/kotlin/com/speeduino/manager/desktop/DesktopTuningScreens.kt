@@ -72,10 +72,38 @@ internal fun EcuHubScreenDesktop(
     KioskScreenScaffold(
         title = strings["route.ecu"],
     ) {
-        KioskFeatureCard(strings["route.fuel"], strings["label.mapsTablesSubtitle"], Icons.Default.TableChart, onOpenFuel)
-        KioskFeatureCard(strings["route.ignition"], strings["label.ignitionHubSubtitle"], Icons.Default.TableChart, onOpenIgnition)
-        KioskFeatureCard(strings["route.engineSetup"], strings["label.configsTuningSubtitle"], Icons.Default.Settings, onOpenEngineSetup)
-        KioskFeatureCard(strings["route.engineOperation"], strings["label.engineOperationSubtitle"], Icons.Default.Settings, onOpenEngineOperation)
+        KioskPanelCard(strings["label.fuelIgnitionSection"]) {
+            KioskFeatureCard(
+                strings["route.fuel"],
+                strings["label.mapsTablesSubtitle"],
+                icon = Icons.Default.TableChart,
+                large = true,
+                onClick = onOpenFuel
+            )
+            KioskFeatureCard(
+                strings["route.ignition"],
+                strings["label.ignitionHubSubtitle"],
+                icon = Icons.Default.TableChart,
+                large = true,
+                onClick = onOpenIgnition
+            )
+        }
+        KioskPanelCard(strings["label.engineSetupSection"]) {
+            KioskFeatureCard(
+                strings["route.engineSetup"],
+                strings["label.configsTuningSubtitle"],
+                icon = Icons.Default.Settings,
+                large = true,
+                onClick = onOpenEngineSetup
+            )
+            KioskFeatureCard(
+                strings["route.engineOperation"],
+                strings["label.engineOperationSubtitle"],
+                icon = Icons.Default.Settings,
+                large = true,
+                onClick = onOpenEngineOperation
+            )
+        }
     }
 }
 

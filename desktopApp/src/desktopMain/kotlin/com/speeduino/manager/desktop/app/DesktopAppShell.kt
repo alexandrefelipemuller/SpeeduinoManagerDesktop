@@ -43,6 +43,7 @@ import com.speeduino.manager.desktop.navigation.DesktopRoute
 import com.speeduino.manager.desktop.navigation.KioskNavigationRail
 import com.speeduino.manager.desktop.navigation.ScreenHost
 import com.speeduino.manager.desktop.navigation.parentRoute
+import com.speeduino.manager.desktop.ui.DisconnectedBanner
 import com.speeduino.manager.desktop.ui.HeaderBar
 import com.speeduino.manager.desktop.ui.chooseSaveFile
 
@@ -65,6 +66,8 @@ internal fun DesktopAppShell() {
     val connectionState by controller.connectionState.collectAsState()
     val liveData by controller.liveData.collectAsState()
     val configState by controller.configState.collectAsState()
+    val serialTunnelState by controller.serialTunnelState.collectAsState()
+    val isTunnelActive = serialTunnelState.status != com.speeduino.manager.desktop.SerialTunnelStatus.IDLE
 
     val portIsValid by remember {
         derivedStateOf { appState.port.toIntOrNull()?.let { it in 1..65535 } == true }
@@ -88,7 +91,9 @@ internal fun DesktopAppShell() {
         }
     }
     val onOpenRoute: (DesktopRoute) -> Unit = { route ->
-        appState.currentRoute = route
+        if (!isTunnelActive) {
+            appState.currentRoute = route
+        }
     }
     val onReportProblem = {
         reportProblemText = buildString {
@@ -150,13 +155,15 @@ internal fun DesktopAppShell() {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(backgroundBrush)) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            DisconnectedBanner(connectionState)
+            Row(
+                modifier = Modifier.weight(1f).padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
             KioskNavigationRail(
                 currentRoute = appState.currentRoute,
-                onRouteSelected = onOpenRoute
+                onRouteSelected = if (isTunnelActive) ({}) else onOpenRoute
             )
             Box(modifier = Modifier.fillMaxSize()) {
                 val contentScroll = rememberScrollState()
@@ -168,8 +175,12 @@ internal fun DesktopAppShell() {
                     HeaderBar(
                         title = strings[appState.currentRoute.titleKey],
                         connectionState = connectionState,
-                        onBackClick = parentRoute(appState.currentRoute)?.let { parent ->
-                            { appState.currentRoute = parent }
+                        onBackClick = if (isTunnelActive) {
+                            null
+                        } else {
+                            parentRoute(appState.currentRoute)?.let { parent ->
+                                { appState.currentRoute = parent }
+                            }
                         }
                     )
 
@@ -205,6 +216,7 @@ internal fun DesktopAppShell() {
                                     onOpenConnection = { appState.currentRoute = DesktopRoute.Connection },
                                     onOpenBluetoothConnection = { appState.currentRoute = DesktopRoute.BluetoothConnection },
                                     onOpenUsbSerialConnection = { appState.currentRoute = DesktopRoute.UsbSerialConnection },
+                                    onOpenSerialTunnel = { appState.currentRoute = DesktopRoute.SerialTunnel },
                                     onOpenVeTable = { appState.currentRoute = DesktopRoute.VeTable },
                                     onOpenVeTable2 = { appState.currentRoute = DesktopRoute.VeTable2 },
                                     onOpenIgnitionConfig = { appState.currentRoute = DesktopRoute.IgnitionConfig },
@@ -260,6 +272,7 @@ internal fun DesktopAppShell() {
                         }
                     }
                 }
+            }
             }
         }
 

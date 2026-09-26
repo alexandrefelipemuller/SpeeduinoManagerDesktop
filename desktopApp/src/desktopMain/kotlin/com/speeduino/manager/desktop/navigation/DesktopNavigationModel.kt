@@ -30,6 +30,7 @@ internal enum class DesktopRoute(
     ConnectionSettings("label.wifiTcp", "label.wifiTcp", Icons.Default.Cable),
     BluetoothConnection("label.bluetooth", "label.bluetooth", Icons.Default.Cable),
     UsbSerialConnection("label.usbSerial", "label.usbSerial", Icons.Default.Cable),
+    SerialTunnel("label.serialTunnel", "label.serialTunnel", Icons.Default.Cable),
     MapsTables("route.mapsTables", "route.mapsTables", Icons.Default.TableChart),
     ConfigsTuning("route.configsTuning", "route.configsTuning", Icons.Default.Settings),
     InjectorConfig("label.injectors", "label.injectors", Icons.Default.Settings),
@@ -66,7 +67,8 @@ internal fun parentRoute(route: DesktopRoute): DesktopRoute? {
     return when (route) {
         DesktopRoute.ConnectionSettings,
         DesktopRoute.BluetoothConnection,
-        DesktopRoute.UsbSerialConnection -> DesktopRoute.Connection
+        DesktopRoute.UsbSerialConnection,
+        DesktopRoute.SerialTunnel -> DesktopRoute.Connection
         DesktopRoute.VeTable,
         DesktopRoute.VeTable2,
         DesktopRoute.AfrTable -> DesktopRoute.Fuel

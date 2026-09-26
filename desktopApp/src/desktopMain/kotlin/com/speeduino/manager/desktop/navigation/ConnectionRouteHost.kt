@@ -6,6 +6,7 @@ import com.speeduino.manager.desktop.ConnectionState
 import com.speeduino.manager.desktop.ConnectionType
 import com.speeduino.manager.desktop.ConnectionSettingsScreenDesktop
 import com.speeduino.manager.desktop.DesktopSpeeduinoController
+import com.speeduino.manager.desktop.SerialTunnelScreenDesktop
 import com.speeduino.manager.desktop.UsbSerialConnectionScreenDesktop
 import com.speeduino.manager.desktop.feature.connection.DiagnosticScreen
 
@@ -29,6 +30,7 @@ internal fun ConnectionRouteHost(
     onOpenConnectionSettings: () -> Unit,
     onOpenBluetoothConnection: () -> Unit,
     onOpenUsbSerialConnection: () -> Unit,
+    onOpenSerialTunnel: () -> Unit,
     onOpenLogsEcuTools: () -> Unit,
     onOpenInstitutional: () -> Unit
 ) {
@@ -57,10 +59,12 @@ internal fun ConnectionRouteHost(
         DesktopRoute.ConnectionSettings -> ConnectionSettingsScreenDesktop(
             controller = controller,
             onOpenBluetoothConnection = onOpenBluetoothConnection,
-            onOpenUsbSerialConnection = onOpenUsbSerialConnection
+            onOpenUsbSerialConnection = onOpenUsbSerialConnection,
+            onOpenSerialTunnel = onOpenSerialTunnel
         )
         DesktopRoute.BluetoothConnection -> BluetoothConnectionScreenDesktop(controller)
         DesktopRoute.UsbSerialConnection -> UsbSerialConnectionScreenDesktop(controller)
+        DesktopRoute.SerialTunnel -> SerialTunnelScreenDesktop(controller)
         else -> Unit
     }
 }
