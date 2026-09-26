@@ -1,7 +1,29 @@
+import java.util.Properties
+
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.compose")
     id("org.jetbrains.compose")
+}
+
+// Sentry DSN is injected at build time so it never lives in this (public) repo.
+// Set SENTRY_DSN in the environment, or sentry.dsn=... in the gitignored local.properties.
+val sentryDsn: String = System.getenv("SENTRY_DSN")
+    ?: rootProject.file("local.properties").takeIf { it.exists() }?.let { file ->
+        Properties().apply { file.inputStream().use { load(it) } }.getProperty("sentry.dsn")
+    }
+    ?: ""
+
+val generateSentryConfig by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/sentry/resources")
+    inputs.property("sentryDsn", sentryDsn)
+    outputs.dir(outputDir)
+    doLast {
+        outputDir.get().file("sentry-dsn.txt").asFile.apply {
+            parentFile.mkdirs()
+            writeText(sentryDsn)
+        }
+    }
 }
 
 kotlin {
@@ -15,6 +37,7 @@ kotlin {
 
     sourceSets {
         val desktopMain by getting {
+            resources.srcDir(generateSentryConfig)
             dependencies {
                 implementation("io.ecucore:core-runtime")
                 implementation("io.ecucore:core-tuning")
@@ -23,6 +46,7 @@ kotlin {
                 implementation(compose.materialIconsExtended)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation("org.json:json:20240303")
+                implementation("io.sentry:sentry:8.58.0")
             }
         }
         val desktopTest by getting {

@@ -86,7 +86,12 @@ private fun SpeeduinoDesktopTheme(themeMode: ThemeMode, content: @Composable () 
     )
 }
 
-fun main() = application {
+fun main() {
+    CrashReporting.init()
+    runApp()
+}
+
+private fun runApp() = application {
     ConnectionTrace.enabled = true
     ConnectionTrace.sink = DesktopConnectionTraceSink
     Logger.i("DesktopMain", "Desktop app started with ConnectionTrace enabled")
