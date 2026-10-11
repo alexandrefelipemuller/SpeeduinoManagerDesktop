@@ -71,7 +71,8 @@ compose.desktop {
                     org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg
                 )
                 currentOs.isWindows -> targetFormats(
-                    org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe
+                    org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
+                    org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi
                 )
                 else -> targetFormats(
                     org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
